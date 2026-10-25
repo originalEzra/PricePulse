@@ -1,0 +1,14 @@
+# An explicit bootstrap profile: health UP means the application, not middleware.
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration
+
+price-pulse:
+  security:
+    jwt:
+      secret: price-pulse-standalone-jwt-secret-at-least-32-bytes

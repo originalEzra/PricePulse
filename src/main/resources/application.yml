@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: price-pulse
+  profiles:
+    default: standalone
+  jackson:
+    time-zone: UTC
+  threads:
+    virtual:
+      enabled: false
+  data:
+    redis:
+      repositories:
+        enabled: false
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:18080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+price-pulse:
+  market:
+    live-max-age: PT2M
+    max-future-skew: PT30S
+  security:
+    jwt:
+      issuer: price-pulse
+      access-token-ttl: PT2H
+      secret: ${JWT_SECRET}

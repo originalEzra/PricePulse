@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ezra.pricepulse.market.QuoteEventMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="event.id">
+        INSERT INTO quote_events (
+            event_key, stock_id, price, event_time, source, sequence_no, processing_status
+        ) VALUES (
+            #{event.eventKey}, #{event.stockId}, #{event.price}, #{event.eventTime},
+            #{event.source}, #{event.sequenceNo}, 'RECEIVED'
+        )
+    </insert>
+
+    <select id="findByEventKey" resultType="com.ezra.pricepulse.market.QuoteEvent">
+        SELECT id, event_key, stock_id, price, event_time, received_at, source,
+               sequence_no, processing_status, discard_reason
+        FROM quote_events
+        WHERE event_key = #{eventKey}
+    </select>
+
+    <update id="markProcessed">
+        UPDATE quote_events
+        SET processing_status = 'PROCESSED', discard_reason = NULL
+        WHERE id = #{eventId} AND processing_status = 'RECEIVED'
+    </update>
+
+    <update id="markDiscarded">
+        UPDATE quote_events
+        SET processing_status = 'DISCARDED', discard_reason = #{reason}
+        WHERE id = #{eventId} AND processing_status = 'RECEIVED'
+    </update>
+
+    <select id="listByStock" resultType="com.ezra.pricepulse.market.QuoteEvent">
+        SELECT id, event_key, stock_id, price, event_time, received_at, source,
+               sequence_no, processing_status, discard_reason
+        FROM quote_events
+        WHERE stock_id = #{stockId}
+        ORDER BY event_time DESC, id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

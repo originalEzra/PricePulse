@@ -1,0 +1,27 @@
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/local
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:13306/price_pulse?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:pricepulse}
+    password: ${DB_PASSWORD:pricepulse_local}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 5000
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:16379}
+      connect-timeout: 2s
+      timeout: 2s
+
+price-pulse:
+  security:
+    jwt:
+      secret: price-pulse-local-jwt-secret-must-be-at-least-32-bytes
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESERVER:127.0.0.1:19876}
+  producer:
+    group: price-pulse-phase0-producer
+    send-message-timeout: 5000

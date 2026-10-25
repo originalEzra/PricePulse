@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ezra.pricepulse.alert.AlertRuleMapper">
+    <resultMap id="alertRuleMap" type="com.ezra.pricepulse.alert.AlertRule">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="stockId" column="stock_id"/>
+        <result property="stockSymbol" column="stock_symbol"/>
+        <result property="stockName" column="stock_name"/>
+        <result property="name" column="name"/>
+        <result property="note" column="note"/>
+        <result property="direction" column="direction"/>
+        <result property="thresholdPrice" column="threshold_price"/>
+        <result property="triggerMode" column="trigger_mode"/>
+        <result property="rearmPrice" column="rearm_price"/>
+        <result property="status" column="status"/>
+        <result property="lastTriggeredAt" column="last_triggered_at"/>
+        <result property="version" column="version"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="selectRule">
+        SELECT r.id, r.user_id, r.stock_id, s.symbol AS stock_symbol, s.name AS stock_name,
+               r.name, r.note, r.direction, r.threshold_price, r.trigger_mode, r.rearm_price,
+               r.status, r.last_triggered_at, r.version, r.created_at, r.updated_at
+        FROM alert_rules r
+        JOIN stocks s ON s.id = r.stock_id
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="rule.id">
+        INSERT INTO alert_rules (
+            user_id, stock_id, name, note, direction, threshold_price,
+            trigger_mode, rearm_price, status, version
+        ) VALUES (
+            #{rule.userId}, #{rule.stockId}, #{rule.name}, #{rule.note}, #{rule.direction},
+            #{rule.thresholdPrice}, #{rule.triggerMode}, #{rule.rearmPrice}, 'ACTIVE', 0
+        )
+    </insert>
+
+    <select id="findOwned" resultMap="alertRuleMap">
+        <include refid="selectRule"/>
+        WHERE r.id = #{ruleId}
+          AND r.user_id = #{userId}
+          AND r.status != 'DELETED'
+    </select>
+
+    <select id="listOwned" resultMap="alertRuleMap">
+        <include refid="selectRule"/>
+        WHERE r.user_id = #{userId}
+          AND r.status != 'DELETED'
+        <if test="stockId != null">
+          AND r.stock_id = #{stockId}
+        </if>
+        <if test="status != null">
+          AND r.status = #{status}
+        </if>
+        ORDER BY r.updated_at DESC, r.id DESC
+        LIMIT #{limit}
+    </select>
+
+    <update id="updateDetails">
+        UPDATE alert_rules
+        SET stock_id = #{rule.stockId},
+            name = #{rule.name},
+            note = #{rule.note},
+            direction = #{rule.direction},
+            threshold_price = #{rule.thresholdPrice},
+            trigger_mode = #{rule.triggerMode},
+            rearm_price = #{rule.rearmPrice},
+            last_triggered_at = NULL,
+            version = version + 1
+        WHERE id = #{rule.id}
+          AND user_id = #{rule.userId}
+          AND version = #{expectedVersion}
+          AND status IN
+          <foreach collection="allowedStatuses" item="status" open="(" separator="," close=")">
+            #{status}
+          </foreach>
+    </update>
+
+    <update id="updateStatus">
+        UPDATE alert_rules
+        SET status = #{targetStatus}, version = version + 1
+        WHERE id = #{ruleId}
+          AND user_id = #{userId}
+          AND version = #{expectedVersion}
+          AND status IN
+          <foreach collection="allowedStatuses" item="status" open="(" separator="," close=")">
+            #{status}
+          </foreach>
+    </update>
+
+    <update id="softDelete">
+        UPDATE alert_rules
+        SET status = 'DELETED', version = version + 1
+        WHERE id = #{ruleId}
+          AND user_id = #{userId}
+          AND version = #{expectedVersion}
+          AND status != 'DELETED'
+    </update>
+
+    <select id="listIndexable" resultMap="alertRuleMap">
+        <include refid="selectRule"/>
+        WHERE r.stock_id = #{stockId} AND r.status IN ('ACTIVE', 'COOLDOWN')
+        ORDER BY r.id
+    </select>
+
+    <select id="findCandidates" resultMap="alertRuleMap">
+        <include refid="selectRule"/>
+        WHERE r.stock_id = #{stockId} AND r.status IN ('ACTIVE', 'COOLDOWN')
+          AND r.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        ORDER BY r.id
+    </select>
+
+    <update id="transitionByMatcher">
+        UPDATE alert_rules
+        SET status = #{targetStatus}, version = version + 1
+        <if test="triggeredAt != null">, last_triggered_at = #{triggeredAt}</if>
+        WHERE id = #{ruleId} AND version = #{expectedVersion} AND status = #{expectedStatus}
+    </update>
+</mapper>
