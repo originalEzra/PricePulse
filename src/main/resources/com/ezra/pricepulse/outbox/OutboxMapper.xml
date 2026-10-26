@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ezra.pricepulse.outbox.OutboxMapper">
+    <resultMap id="outboxEventMap" type="com.ezra.pricepulse.outbox.OutboxEvent">
+        <id property="id" column="id"/>
+        <result property="aggregateType" column="aggregate_type"/>
+        <result property="aggregateId" column="aggregate_id"/>
+        <result property="eventType" column="event_type"/>
+        <result property="payload" column="payload"/>
+        <result property="status" column="status"/>
+        <result property="attempts" column="attempts"/>
+        <result property="nextRetryAt" column="next_retry_at"/>
+        <result property="lastError" column="last_error"/>
+        <result property="lockedAt" column="locked_at"/>
+        <result property="lockedBy" column="locked_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="publishedAt" column="published_at"/>
+    </resultMap>
+
+    <select id="selectClaimable" resultMap="outboxEventMap">
+        SELECT id, aggregate_type, aggregate_id, event_type, payload, status, attempts,
+               next_retry_at, last_error, locked_at, locked_by, created_at, published_at
+        FROM outbox_events
+        WHERE attempts &lt; #{maxAttempts}
+          AND (
+            (status IN ('PENDING', 'FAILED') AND next_retry_at &lt;= #{now})
+            OR (status = 'SENDING' AND locked_at &lt;= #{leaseCutoff})
+          )
+        ORDER BY id
+        LIMIT #{limit}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="claim">
+        UPDATE outbox_events
+        SET status = 'SENDING', attempts = attempts + 1,
+            locked_at = #{now}, locked_by = #{workerId}, last_error = NULL
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </update>
+
+    <update id="markPublished">
+        UPDATE outbox_events
+        SET status = 'SENT', published_at = #{publishedAt},
+            locked_at = NULL, locked_by = NULL, last_error = NULL
+        WHERE id = #{id} AND status = 'SENDING' AND locked_by = #{workerId}
+    </update>
+
+    <update id="markFailed">
+        UPDATE outbox_events
+        SET status = 'FAILED', next_retry_at = #{nextRetryAt}, last_error = #{lastError},
+            locked_at = NULL, locked_by = NULL
+        WHERE id = #{id} AND status = 'SENDING' AND locked_by = #{workerId}
+    </update>
+
+    <update id="failExpiredExhaustedLeases">
+        UPDATE outbox_events
+        SET status = 'FAILED', next_retry_at = #{now},
+            last_error = 'Publisher lease expired after the maximum number of attempts',
+            locked_at = NULL, locked_by = NULL
+        WHERE status = 'SENDING' AND locked_at &lt;= #{leaseCutoff} AND attempts &gt;= #{maxAttempts}
+    </update>
+</mapper>

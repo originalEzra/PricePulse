@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ezra.pricepulse.notification.NotificationMapper">
+    <resultMap id="deliveryMap" type="com.ezra.pricepulse.notification.AlertTriggerDelivery">
+        <id property="triggerId" column="trigger_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="ruleId" column="rule_id"/>
+        <result property="stockId" column="stock_id"/>
+        <result property="stockSymbol" column="stock_symbol"/>
+        <result property="stockName" column="stock_name"/>
+        <result property="triggerPrice" column="trigger_price"/>
+        <result property="eventTime" column="event_time"/>
+        <result property="ruleSnapshot" column="rule_snapshot"/>
+    </resultMap>
+
+    <resultMap id="notificationMap" type="com.ezra.pricepulse.notification.Notification">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="triggerId" column="trigger_id"/>
+        <result property="ruleId" column="rule_id"/>
+        <result property="stockId" column="stock_id"/>
+        <result property="stockSymbol" column="stock_symbol"/>
+        <result property="stockName" column="stock_name"/>
+        <result property="triggerPrice" column="trigger_price"/>
+        <result property="eventTime" column="event_time"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="readAt" column="read_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="selectNotification">
+        SELECT n.id, n.user_id, n.trigger_id, t.rule_id,
+               CAST(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockId')) AS UNSIGNED) AS stock_id,
+               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')) AS stock_symbol,
+               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')) AS stock_name,
+               t.trigger_price, t.event_time, n.title, n.content,
+               n.status, n.read_at, n.created_at, n.updated_at
+        FROM notifications n
+        JOIN alert_triggers t ON t.id = n.trigger_id
+        JOIN alert_rules r ON r.id = t.rule_id
+    </sql>
+
+    <select id="findDelivery" resultMap="deliveryMap">
+        SELECT t.id AS trigger_id, r.user_id, r.id AS rule_id,
+               CAST(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockId')) AS UNSIGNED) AS stock_id,
+               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')) AS stock_symbol,
+               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')) AS stock_name,
+               t.trigger_price, t.event_time, t.rule_snapshot
+        FROM alert_triggers t
+        JOIN alert_rules r ON r.id = t.rule_id
+        WHERE t.id = #{triggerId}
+    </select>
+
+    <insert id="insertIfAbsent">
+        INSERT INTO notifications (user_id, trigger_id, title, content)
+        VALUES (#{userId}, #{triggerId}, #{title}, #{content})
+        ON DUPLICATE KEY UPDATE trigger_id = notifications.trigger_id
+    </insert>
+
+    <select id="findOwned" resultMap="notificationMap">
+        <include refid="selectNotification"/>
+        WHERE n.user_id = #{userId} AND n.id = #{notificationId}
+    </select>
+
+    <select id="listOwned" resultMap="notificationMap">
+        <include refid="selectNotification"/>
+        WHERE n.user_id = #{userId}
+        <if test="status != null">AND n.status = #{status}</if>
+        ORDER BY n.id DESC
+        LIMIT #{limit}
+    </select>
+
+    <update id="markRead">
+        UPDATE notifications
+        SET status = 'READ', read_at = COALESCE(read_at, #{readAt})
+        WHERE id = #{notificationId} AND user_id = #{userId}
+    </update>
+</mapper>

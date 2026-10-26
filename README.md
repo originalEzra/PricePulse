@@ -8,7 +8,7 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 ## 当前进度
 
-**Phase 4：Redis 规则索引、价格穿越匹配与规则状态机已完成。** 下一阶段接上 Outbox 发布器、RocketMQ 消费和站内通知。
+**Phase 5：Outbox 可靠发布、RocketMQ 消费幂等与站内通知已完成。** 下一阶段实现 AI 规则草稿和 Vue 3 基础页面。
 
 - [x] Java 21 + Spring Boot 最小工程
 - [x] MySQL、Redis、RocketMQ 本地环境
@@ -24,11 +24,11 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 - [x] 模拟行情、回放和异常行情处理
 - [x] Redis ZSet 规则索引、增量同步与自动重建
 - [x] 穿越匹配、重复提醒状态机、触发历史与 PENDING Outbox
-- [ ] Outbox 发布、RocketMQ 消费与站内通知
+- [x] Outbox 发布、RocketMQ 消费幂等与站内通知
 - [ ] Vue 3 Web 页面
 - [ ] 压力测试、故障实验与结果报告
 
-> 下文标注“计划实现”的部分属于后续阶段；当前可以注册登录、管理提醒规则、接入或模拟行情、触发规则并查询历史。通知任务已持久化，MQ 发布与用户通知将在 Phase 5 接入。
+> 下文标注“计划实现”的部分属于后续阶段；当前可以注册登录、管理提醒规则、接入或模拟行情、触发规则，并通过 RocketMQ 异步生成和查询站内通知。
 
 ## 用户能够做什么
 
@@ -114,14 +114,16 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 市场剧烈波动时，可能有大量规则在短时间内同时触发。规则匹配线程不应同步等待每条通知处理完成。
 
-**计划实现：**
+**当前实现：**
 
 1. 已实现：在同一个 MySQL 事务中更新规则状态、写入触发记录并写入 PENDING Outbox。
-2. Outbox 发布器将待发送记录投递到 RocketMQ。
-3. RocketMQ 缓冲集中产生的通知任务。
-4. 消费者根据业务唯一键进行幂等处理，然后写入站内通知。
-5. 可恢复错误进行有限重试；超过重试次数的消息进入异常处理流程。
-6. 发布器和消费者重启后继续处理未完成任务。
+2. 发布器通过数据库行锁和租约领取任务，把普通消息发送到 RocketMQ。
+3. 发送失败指数退避；发布器崩溃留下的过期租约会被后续扫描回收。
+4. RocketMQ 缓冲集中产生的通知任务，消费失败最多重投 3 次，之后进入死信队列。
+5. 消费者核对持久化触发事实，并根据触发快照生成通知。
+6. `notifications.trigger_id` 唯一约束吸收重复投递，保证一个触发只产生一条通知。
+
+发布器最多自动领取同一任务 8 次。达到上限后保留 `FAILED` 记录供排查；当前未实现 DLQ 管理页和人工重放接口。
 
 这里选择 RocketMQ 不是因为普通通知必须使用 MQ，而是为了验证“触发洪峰、任务缓冲、失败重试、重复消费和服务恢复”这一组工程问题。
 
@@ -135,11 +137,13 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 - 通知状态和已读状态
 - 已结束、已暂停或仍在运行的规则
 
-**已实现触发历史；用户通知计划实现：**
+**当前实现：**
 
 - MySQL 已保存触发记录和当时的规则快照，可通过 `/api/alert-rules/{id}/triggers` 查询自己的历史，包括已删除规则的历史。
-- 通知记录与已读状态将在 Phase 5 接入。
-- MyBatis 实现按用户、股票、状态和时间的分页查询。
+- 用户可以通过 `/api/notifications` 查询自己的最新通知，并按 `UNREAD / READ` 筛选。
+- `POST /api/notifications/{id}/read` 幂等标记已读；其他用户看不到也不能修改这条通知。
+- 通知展示触发时保存的规则快照，不会被规则后续修改或移股污染。
+- MyBatis 实现按用户和状态查询，并使用 `limit` 限制单次返回数量。
 - REST API 返回稳定的 DTO，不直接暴露数据库实体。
 - 后续前端使用 Vue 3 展示通知中心和历史筛选。
 
@@ -304,7 +308,8 @@ docker compose -f compose.yaml down
 | --- | --- | --- |
 | `./mvnw test` | 应用启动与离线结构化转换 | 否 |
 | `./mvnw -Pintegration verify` | 真实 MySQL、Redis 与 Flyway | Docker，由 Testcontainers 管理 |
-| `./mvnw -Pmq-it verify` | RocketMQ 发送与消费闭环 | 是，需启动 Compose |
+| `./mvnw -Pmq-it verify` | RocketMQ 基础发送与消费闭环 | 是，需启动 Compose |
+| `./mvnw -Pmq-pipeline-it verify` | Outbox 到站内通知的完整真实 MQ 链路 | 是，需启动 Compose |
 | `./mvnw -Pai-live verify` | 云端模型与结构化输出闭环 | 是，需要供应商 API Key |
 
 真实 AI 测试推荐使用 Groq 免费层：
@@ -331,7 +336,7 @@ unset PRICEPULSE_AI_API_KEY
 | Phase 2（已完成） | 认证、股票、用户隔离和提醒规则生命周期 |
 | Phase 3（已完成） | 模拟行情、历史回放、重复/过期/未来/乱序策略 |
 | Phase 4（已完成） | Redis ZSet 索引、区间匹配、规则状态机与触发持久化 |
-| Phase 5 | Outbox、RocketMQ、消费幂等和站内通知 |
+| Phase 5（已完成） | Outbox、RocketMQ、消费幂等和站内通知 |
 | Phase 6 | AI 规则草稿与 Vue 3 三个基础页面 |
 | Phase 7 | 压力测试、故障实验、性能报告和最终项目文档 |
 
@@ -342,3 +347,4 @@ unset PRICEPULSE_AI_API_KEY
 - [`docs/phase-2.md`](docs/phase-2.md)：认证边界、规则 API、用户隔离与乐观锁。
 - [`docs/phase-3.md`](docs/phase-3.md)：行情水位、异常策略、回放、确定性模拟与验收结果。
 - [`docs/phase-4.md`](docs/phase-4.md)：价格穿越、冷却重新激活、索引同步重建与故障回滚。
+- [`docs/phase-5.md`](docs/phase-5.md)：发布租约、失败退避、真实 MQ 链路、消费幂等与通知 API。

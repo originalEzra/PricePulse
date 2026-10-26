@@ -20,7 +20,7 @@ public class SystemController {
     @GetMapping("/info")
     public ApiResponse<SystemInfo> info() {
         String[] active = environment.getActiveProfiles();
-        var info = new SystemInfo("PricePulse", "phase-4", "21",
+        var info = new SystemInfo("PricePulse", "phase-5", "21",
                 Arrays.asList(active.length == 0 ? environment.getDefaultProfiles() : active));
         return ApiResponse.success(info);
     }

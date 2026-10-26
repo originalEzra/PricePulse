@@ -16,6 +16,8 @@ spring:
       timeout: 2s
 
 price-pulse:
+  messaging:
+    enabled: true
   security:
     jwt:
       secret: price-pulse-local-jwt-secret-must-be-at-least-32-bytes
@@ -23,5 +25,5 @@ price-pulse:
 rocketmq:
   name-server: ${ROCKETMQ_NAMESERVER:127.0.0.1:19876}
   producer:
-    group: price-pulse-phase0-producer
+    group: price-pulse-outbox-producer
     send-message-timeout: 5000

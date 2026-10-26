@@ -166,6 +166,15 @@
             </plugin></plugins></build>
         </profile>
         <profile>
+            <id>mq-pipeline-it</id>
+            <properties><integration.includes>**/NotificationPipelineIT.java</integration.includes></properties>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
             <id>ai-live</id>
             <properties><integration.includes>**/AiLiveIT.java</integration.includes></properties>
             <build><plugins><plugin>

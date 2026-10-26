@@ -12,6 +12,9 @@ import com.ezra.pricepulse.phase0.persistence.ProbeMapper;
 import com.ezra.pricepulse.market.MarketService;
 import com.ezra.pricepulse.market.QuoteInputRequest;
 import com.ezra.pricepulse.market.ReplayRequest;
+import com.ezra.pricepulse.notification.NotificationService;
+import com.ezra.pricepulse.outbox.OutboxDispatchService;
+import com.ezra.pricepulse.outbox.OutboxEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -83,6 +86,8 @@ class InfrastructureIT {
     @Autowired JwtEncoder jwtEncoder;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MarketService marketService;
+    @Autowired NotificationService notificationService;
+    @Autowired OutboxDispatchService outboxDispatchService;
 
     @Test
     void flywayAndMybatisRoundTripAgainstRealMysql() {
@@ -770,6 +775,140 @@ class InfrastructureIT {
                 """, Integer.class, ruleId)).isEqualTo(1);
         assertThat(redis.opsForZSet().rangeByScore(ruleIndexKey(stockId), -1, -1))
                 .doesNotContainAnyElementsOf(rolledBackCacheMarker);
+    }
+
+    @Test
+    void outboxClaimsRetryAndLeaseRecoveryPreserveAtLeastOnceDelivery() throws Exception {
+        jdbc.update("UPDATE outbox_events SET status = 'SENT', published_at = NOW(6) WHERE status != 'SENT'");
+        String suffix = testSuffix();
+        String token = matchingToken(suffix);
+        long stockId = insertStock("X" + suffix);
+        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
+        replayQuote(token, stockId, suffix, 1, "95");
+        replayQuote(token, stockId, suffix, 2, "100");
+        long outboxId = jdbc.queryForObject("""
+                SELECT o.id FROM outbox_events o
+                JOIN alert_triggers t ON t.id = o.aggregate_id
+                WHERE t.rule_id = ?
+                """, Long.class, ruleId);
+
+        List<OutboxEvent> firstClaim = outboxDispatchService.claimBatch();
+        OutboxEvent event = firstClaim.stream()
+                .filter(candidate -> candidate.getId() == outboxId)
+                .findFirst().orElseThrow();
+        assertThat(event.getAttempts()).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM outbox_events WHERE id = ?", String.class, outboxId))
+                .isEqualTo("SENDING");
+
+        assertThat(outboxDispatchService.markFailed(event, new IllegalStateException("broker unavailable")))
+                .isTrue();
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM outbox_events WHERE id = ?", String.class, outboxId))
+                .isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject(
+                "SELECT last_error FROM outbox_events WHERE id = ?", String.class, outboxId))
+                .contains("broker unavailable");
+
+        jdbc.update("UPDATE outbox_events SET next_retry_at = DATE_SUB(NOW(6), INTERVAL 1 SECOND) WHERE id = ?",
+                outboxId);
+        OutboxEvent secondClaim = outboxDispatchService.claimBatch().stream()
+                .filter(candidate -> candidate.getId() == outboxId)
+                .findFirst().orElseThrow();
+        assertThat(secondClaim.getAttempts()).isEqualTo(2);
+
+        // A crash after claiming leaves SENDING behind. Once the lease expires another run can recover it.
+        jdbc.update("""
+                UPDATE outbox_events
+                SET locked_at = DATE_SUB(NOW(6), INTERVAL 1 MINUTE), locked_by = 'dead-worker'
+                WHERE id = ?
+                """, outboxId);
+        OutboxEvent recovered = outboxDispatchService.claimBatch().stream()
+                .filter(candidate -> candidate.getId() == outboxId)
+                .findFirst().orElseThrow();
+        assertThat(recovered.getAttempts()).isEqualTo(3);
+        assertThat(outboxDispatchService.markPublished(outboxId)).isTrue();
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM outbox_events WHERE id = ?", String.class, outboxId))
+                .isEqualTo("SENT");
+
+        jdbc.update("""
+                INSERT INTO outbox_events
+                    (aggregate_type, aggregate_id, event_type, payload, status, attempts, locked_at, locked_by)
+                VALUES ('ALERT_TRIGGER', ?, 'ALERT_TRIGGERED', '{}', 'SENDING', 8,
+                        DATE_SUB(NOW(6), INTERVAL 1 MINUTE), 'crashed-final-worker')
+                """, jdbc.queryForObject(
+                "SELECT id FROM alert_triggers WHERE rule_id = ?", Long.class, ruleId));
+        long exhaustedId = jdbc.queryForObject(
+                "SELECT MAX(id) FROM outbox_events WHERE aggregate_id = (SELECT id FROM alert_triggers WHERE rule_id = ?)",
+                Long.class, ruleId);
+        assertThat(outboxDispatchService.claimBatch()).noneMatch(candidate -> candidate.getId() == exhaustedId);
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM outbox_events WHERE id = ?", String.class, exhaustedId))
+                .isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject(
+                "SELECT locked_by FROM outbox_events WHERE id = ?", String.class, exhaustedId))
+                .isNull();
+    }
+
+    @Test
+    void duplicateAlertMessagesCreateOneOwnedNotificationThatCanBeMarkedRead() throws Exception {
+        String suffix = testSuffix();
+        String token = matchingToken(suffix);
+        String outsider = matchingToken(testSuffix());
+        long stockId = insertStock("D" + suffix);
+        long ruleId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
+        replayQuote(token, stockId, suffix, 1, "100");
+        replayQuote(token, stockId, suffix, 2, "90");
+        long triggerId = jdbc.queryForObject(
+                "SELECT id FROM alert_triggers WHERE rule_id = ?", Long.class, ruleId);
+        String payload = jdbc.queryForObject(
+                "SELECT payload FROM outbox_events WHERE aggregate_id = ?", String.class, triggerId);
+
+        // Delivery is delayed. Even if the mutable rule is moved meanwhile, the event uses its trigger snapshot.
+        long laterStockId = insertStock("E" + suffix);
+        jdbc.update("UPDATE alert_rules SET stock_id = ? WHERE id = ?", laterStockId, ruleId);
+
+        notificationService.consume(payload);
+        notificationService.consume(payload);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM notifications WHERE trigger_id = ?", Integer.class, triggerId))
+                .isEqualTo(1);
+        long notificationId = jdbc.queryForObject(
+                "SELECT id FROM notifications WHERE trigger_id = ?", Long.class, triggerId);
+
+        mvc.perform(get("/api/notifications")
+                        .header("Authorization", "Bearer " + token)
+                        .param("status", "unread"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(notificationId))
+                .andExpect(jsonPath("$.data[0].triggerId").value(triggerId))
+                .andExpect(jsonPath("$.data[0].ruleId").value(ruleId))
+                .andExpect(jsonPath("$.data[0].stockId").value(stockId))
+                .andExpect(jsonPath("$.data[0].status").value("UNREAD"))
+                .andExpect(jsonPath("$.data[0].title").value(org.hamcrest.Matchers.containsString("下破")));
+        mvc.perform(get("/api/notifications")
+                        .header("Authorization", "Bearer " + outsider))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+        mvc.perform(post("/api/notifications/{id}/read", notificationId)
+                        .header("Authorization", "Bearer " + outsider))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/notifications/{id}/read", notificationId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("READ"))
+                .andExpect(jsonPath("$.data.readAt").isNotEmpty());
+        // Marking read is deliberately idempotent and keeps the original read time.
+        mvc.perform(post("/api/notifications/{id}/read", notificationId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("READ"));
+        mvc.perform(get("/api/notifications")
+                        .header("Authorization", "Bearer " + token)
+                        .param("status", "unknown"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("BUSINESS_RULE_VIOLATION"));
     }
 
     @Test

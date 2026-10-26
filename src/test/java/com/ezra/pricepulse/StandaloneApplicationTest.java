@@ -32,7 +32,7 @@ class StandaloneApplicationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.name").value("PricePulse"))
-                .andExpect(jsonPath("$.data.phase").value("phase-4"))
+                .andExpect(jsonPath("$.data.phase").value("phase-5"))
                 .andExpect(jsonPath("$.data.profiles[0]").value("standalone"))
                 .andExpect(jsonPath("$.error").doesNotExist());
         mvc.perform(get("/actuator/health"))

@@ -34,6 +34,18 @@ mybatis:
     map-underscore-to-camel-case: true
 
 price-pulse:
+  messaging:
+    enabled: false
+    topic: price-pulse-alert-triggered
+    consumer-group: price-pulse-notification-consumer
+    batch-size: 50
+    max-batches-per-run: 4
+    max-attempts: 8
+    lease-duration: PT30S
+    initial-backoff: PT2S
+    max-backoff: PT2M
+    publisher-initial-delay-ms: 1000
+    publisher-fixed-delay-ms: 1000
   market:
     live-max-age: PT2M
     max-future-skew: PT30S
