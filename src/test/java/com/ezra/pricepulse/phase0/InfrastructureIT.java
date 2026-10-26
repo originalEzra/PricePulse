@@ -15,6 +15,7 @@ import com.ezra.pricepulse.market.ReplayRequest;
 import com.ezra.pricepulse.notification.NotificationService;
 import com.ezra.pricepulse.outbox.OutboxDispatchService;
 import com.ezra.pricepulse.outbox.OutboxEvent;
+import com.ezra.pricepulse.stock.StockMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -88,6 +89,44 @@ class InfrastructureIT {
     @Autowired MarketService marketService;
     @Autowired NotificationService notificationService;
     @Autowired OutboxDispatchService outboxDispatchService;
+    @Autowired StockMapper stockMapper;
+
+    @Test
+    void assistantRequiresAuthenticationAndIsExplicitlyUnavailableWhenDisabled() throws Exception {
+        mvc.perform(post("/api/assistant/alert-drafts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("text", "DEMO001 上破 100 提醒一次"))))
+                .andExpect(status().isUnauthorized());
+
+        String token = matchingToken(testSuffix());
+        mvc.perform(post("/api/assistant/alert-drafts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("text", "DEMO001 上破 100 提醒一次"))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error.code").value("SERVICE_UNAVAILABLE"));
+
+        mvc.perform(post("/api/assistant/alert-drafts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("text", "  "))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void assistantStockLookupHandlesDuplicateSymbolsAcrossMarkets() {
+        String symbol = "AI" + testSuffix();
+        long stockId = insertStock(symbol);
+        jdbc.update("""
+                INSERT INTO stocks (symbol, name, market, currency, status)
+                VALUES (?, 'Other market stock', 'TEST', 'USD', 'ACTIVE')
+                """, symbol);
+
+        assertThat(stockMapper.findActiveBySymbol(symbol, null)).hasSize(2);
+        assertThat(stockMapper.findActiveBySymbol(symbol, "SIM"))
+                .singleElement().satisfies(stock -> assertThat(stock.id()).isEqualTo(stockId));
+        assertThat(stockMapper.findActiveBySymbol(symbol, "UNKNOWN")).isEmpty();
+    }
 
     @Test
     void flywayAndMybatisRoundTripAgainstRealMysql() {

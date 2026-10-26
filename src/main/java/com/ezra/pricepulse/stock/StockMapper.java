@@ -33,6 +33,19 @@ public interface StockMapper {
     Stock findActiveById(long stockId);
 
     @Select("""
+            <script>
+            SELECT id, symbol, name, market, currency, latest_price, latest_quote_at,
+                   status, created_at, updated_at, rule_index_token
+            FROM stocks
+            WHERE symbol = #{symbol} AND status = 'ACTIVE'
+            <if test='market != null'>AND market = #{market}</if>
+            ORDER BY market, id
+            LIMIT 2
+            </script>
+            """)
+    List<Stock> findActiveBySymbol(@Param("symbol") String symbol, @Param("market") String market);
+
+    @Select("""
             SELECT id, symbol, name, market, currency, latest_price, latest_quote_at,
                    status, created_at, updated_at, rule_index_token
             FROM stocks

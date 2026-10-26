@@ -8,7 +8,7 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 ## 当前进度
 
-**Phase 6A：Vue 3 Web 基础页面与真实业务联调已完成。** 下一步实现 AI 自然语言规则草稿，然后进入压测与故障实验。
+**Phase 6B：AI 自然语言规则草稿与用户确认流程已完成。** 下一步进入压测与故障实验。
 
 - [x] Java 21 + Spring Boot 最小工程
 - [x] MySQL、Redis、RocketMQ 本地环境
@@ -26,7 +26,7 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 - [x] 穿越匹配、重复提醒状态机、触发历史与 PENDING Outbox
 - [x] Outbox 发布、RocketMQ 消费幂等与站内通知
 - [x] Vue 3 Web 页面与真实后端联调
-- [ ] AI 自然语言规则草稿
+- [x] AI 自然语言规则草稿与用户确认
 - [ ] 压力测试、故障实验与结果报告
 
 > 下文标注“计划实现”的部分属于后续阶段；当前可以注册登录、管理提醒规则、接入或模拟行情、触发规则，并通过 RocketMQ 异步生成和查询站内通知。
@@ -156,16 +156,17 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 模型只负责把文字转换成结构化草稿。用户确认前不会真正创建规则。
 
-**计划实现：**
+**当前实现：**
 
-- Spring AI 连接 OpenAI 兼容接口。
-- 开发阶段使用 Groq 免费 API。
-- JSON Schema 约束模型输出结构。
-- 后端再次执行字段校验、股票校验和业务校验。
-- 有歧义、缺少字段、模型超时或调用失败时返回可解释错误，让用户手动补充。
-- 用户确认后仍调用普通规则创建服务，AI 不绕过业务规则和权限检查。
+- Spring AI 连接 OpenAI 兼容接口，开发阶段可使用 Groq 免费层。
+- JSON Schema 约束模型输出结构，价格使用字符串承载后再由 Java 精确解析。
+- 后端按股票代码查询真实股票，并再次执行金额精度、方向、重复提醒重新激活价等业务校验。
+- 有歧义或缺少字段时返回一个澄清问题；模型超时、输出损坏或供应商异常统一返回可解释的 503。
+- Vue 页面先展示结构化草稿，再填入原有规则表单供用户检查和修改。
+- 用户最后仍通过普通规则创建接口保存；AI 接口没有写数据库的能力，不绕过权限和业务规则。
+- AI 默认关闭且不影响项目启动；只有显式启用时才要求 API Key。
 
-真实 API 验证已经通过：模型能够返回 `symbol=DEMO001`、`direction=ABOVE`、`threshold=100` 的结构化对象，并通过 Java DTO 转换和 Bean Validation。
+Phase 0 已通过真实供应商的结构化输出连通性验证。Phase 6B 通过离线模型接口测试和本地模拟模型的浏览器联调验证业务链路；本阶段没有重新调用云端模型，当前草稿 Schema 的真实模型效果仍需配置 API Key 后实测。
 
 ### 8. 模拟、压测和故障验证
 
@@ -309,6 +310,21 @@ npm run dev
 
 浏览器访问 <http://127.0.0.1:5173>。Vite 把 `/api` 代理到 Spring Boot `18080`，本地开发不需要扩大后端 CORS 配置。
 
+如需启用自然语言规则草稿，在启动后端前设置：
+
+```bash
+export PRICEPULSE_AI_ENABLED=true
+read -s "PRICEPULSE_AI_API_KEY?请输入 Groq API Key: "
+echo
+export PRICEPULSE_AI_API_KEY
+export PRICEPULSE_AI_BASE_URL="https://api.groq.com/openai"
+export PRICEPULSE_AI_MODEL="openai/gpt-oss-20b"
+
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+未设置 `PRICEPULSE_AI_ENABLED=true` 时，普通业务完整可用；AI 草稿接口会明确返回 503，不会在运行中悄悄尝试外部调用。
+
 前端生产构建与类型检查：
 
 ```bash
@@ -329,7 +345,7 @@ docker compose -f compose.yaml down
 
 | 命令 | 验证内容 | 是否依赖外部服务 |
 | --- | --- | --- |
-| `./mvnw test` | 应用启动与离线结构化转换 | 否 |
+| `./mvnw test` | 应用启动、AI 草稿校验、模型接口与超时处理 | 否 |
 | `./mvnw -Pintegration verify` | 真实 MySQL、Redis 与 Flyway | Docker，由 Testcontainers 管理 |
 | `./mvnw -Pmq-it verify` | RocketMQ 基础发送与消费闭环 | 是，需启动 Compose |
 | `./mvnw -Pmq-pipeline-it verify` | Outbox 到站内通知的完整真实 MQ 链路 | 是，需启动 Compose |
@@ -361,7 +377,7 @@ unset PRICEPULSE_AI_API_KEY
 | Phase 4（已完成） | Redis ZSet 索引、区间匹配、规则状态机与触发持久化 |
 | Phase 5（已完成） | Outbox、RocketMQ、消费幂等和站内通知 |
 | Phase 6A（已完成） | Vue 3 四个基础页面与真实业务联调 |
-| Phase 6B | AI 自然语言规则草稿与用户确认流程 |
+| Phase 6B（已完成） | AI 自然语言规则草稿、澄清与用户确认流程 |
 | Phase 7 | 压力测试、故障实验、性能报告和最终项目文档 |
 
 详细记录：
@@ -372,3 +388,5 @@ unset PRICEPULSE_AI_API_KEY
 - [`docs/phase-3.md`](docs/phase-3.md)：行情水位、异常策略、回放、确定性模拟与验收结果。
 - [`docs/phase-4.md`](docs/phase-4.md)：价格穿越、冷却重新激活、索引同步重建与故障回滚。
 - [`docs/phase-5.md`](docs/phase-5.md)：发布租约、失败退避、真实 MQ 链路、消费幂等与通知 API。
+- [`docs/phase-6a.md`](docs/phase-6a.md)：Vue 页面、技术取舍与真实业务闭环。
+- [`docs/phase-6b.md`](docs/phase-6b.md)：AI 草稿边界、校验、澄清与失败策略。

@@ -47,6 +47,18 @@ export interface SaveAlertRule {
   rearmPrice?: number | null
 }
 
+export interface AlertRuleDraft extends Omit<SaveAlertRule, 'note'> {
+  stockSymbol: string
+  stockName: string
+  note: string | null
+}
+
+export interface AlertDraftResult {
+  ready: boolean
+  clarificationQuestion: string | null
+  draft: AlertRuleDraft | null
+}
+
 export interface AlertRule extends SaveAlertRule {
   id: number
   stockSymbol: string

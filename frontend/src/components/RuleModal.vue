@@ -4,7 +4,12 @@ import { errorMessage } from '../api/client'
 import { ruleApi } from '../api'
 import type { AlertRule, SaveAlertRule, Stock } from '../api/types'
 
-const props = defineProps<{ open: boolean; stock: Stock | null; rule?: AlertRule | null }>()
+const props = defineProps<{
+  open: boolean
+  stock: Stock | null
+  rule?: AlertRule | null
+  initialDraft?: SaveAlertRule | null
+}>()
 const emit = defineEmits<{ close: []; saved: [rule: AlertRule] }>()
 const submitting = ref(false)
 const error = ref('')
@@ -19,17 +24,18 @@ const form = reactive<SaveAlertRule>({
 })
 
 watch(
-  () => [props.open, props.stock, props.rule] as const,
+  () => [props.open, props.stock, props.rule, props.initialDraft] as const,
   () => {
     if (!props.open || !props.stock) return
+    const source = props.rule ?? props.initialDraft
     Object.assign(form, {
       stockId: props.stock.id,
-      name: props.rule?.name ?? `${props.stock.symbol} 价格提醒`,
-      note: props.rule?.note ?? '',
-      direction: props.rule?.direction ?? 'ABOVE',
-      thresholdPrice: props.rule?.thresholdPrice ?? props.stock.latestPrice ?? 100,
-      triggerMode: props.rule?.triggerMode ?? 'ONCE',
-      rearmPrice: props.rule?.rearmPrice ?? null,
+      name: source?.name ?? `${props.stock.symbol} 价格提醒`,
+      note: source?.note ?? '',
+      direction: source?.direction ?? 'ABOVE',
+      thresholdPrice: source?.thresholdPrice ?? props.stock.latestPrice ?? 100,
+      triggerMode: source?.triggerMode ?? 'ONCE',
+      rearmPrice: source?.rearmPrice ?? null,
     })
     error.value = ''
   },

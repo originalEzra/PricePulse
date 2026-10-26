@@ -1,6 +1,7 @@
 import { api } from './client'
 import type {
   AlertRule,
+  AlertDraftResult,
   AuthPayload,
   NotificationItem,
   QuoteHistory,
@@ -23,6 +24,7 @@ export const authApi = {
 
 export const stockApi = {
   list: (query = '') => api<Stock[]>(`/api/stocks?query=${encodeURIComponent(query)}&limit=50`),
+  get: (id: number) => api<Stock>(`/api/stocks/${id}`),
 }
 
 export const ruleApi = {
@@ -61,4 +63,13 @@ export const notificationApi = {
   list: (status?: 'UNREAD' | 'READ') =>
     api<NotificationItem[]>(`/api/notifications?limit=100${status ? `&status=${status}` : ''}`),
   read: (id: number) => api<NotificationItem>(`/api/notifications/${id}/read`, { method: 'POST' }),
+}
+
+export const assistantApi = {
+  draftAlert: (text: string, signal?: AbortSignal) =>
+    api<AlertDraftResult>('/api/assistant/alert-drafts', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      signal,
+    }),
 }

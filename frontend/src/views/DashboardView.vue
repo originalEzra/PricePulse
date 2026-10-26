@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { stockApi, marketApi, ruleApi } from '../api'
 import { errorMessage } from '../api/client'
-import type { AlertRule, QuoteHistory, Stock } from '../api/types'
+import type { AlertRule, AlertRuleDraft, QuoteHistory, SaveAlertRule, Stock } from '../api/types'
+import AiDraftModal from '../components/AiDraftModal.vue'
 import PriceSparkline from '../components/PriceSparkline.vue'
 import RuleModal from '../components/RuleModal.vue'
 
@@ -15,6 +16,8 @@ const loading = ref(true)
 const error = ref('')
 const modalOpen = ref(false)
 const editingRule = ref<AlertRule | null>(null)
+const initialDraft = ref<SaveAlertRule | null>(null)
+const aiModalOpen = ref(false)
 
 const filteredStocks = computed(() => {
   const needle = search.value.trim().toLowerCase()
@@ -59,8 +62,33 @@ async function loadQuotes() {
   try { quotes.value = await marketApi.history(selectedId.value) } catch { quotes.value = [] }
 }
 
-function openCreate() { editingRule.value = null; modalOpen.value = true }
-function openEdit(rule: AlertRule) { editingRule.value = rule; modalOpen.value = true }
+function openCreate() { editingRule.value = null; initialDraft.value = null; modalOpen.value = true }
+function openEdit(rule: AlertRule) { editingRule.value = rule; initialDraft.value = null; modalOpen.value = true }
+async function useAiDraft(draft: AlertRuleDraft) {
+  if (!stocks.value.some((stock) => stock.id === draft.stockId)) {
+    try {
+      stocks.value.push(await stockApi.get(draft.stockId))
+    } catch (cause) {
+      aiModalOpen.value = false
+      error.value = errorMessage(cause)
+      return
+    }
+  }
+  selectedId.value = draft.stockId
+  editingRule.value = null
+  initialDraft.value = {
+    stockId: draft.stockId,
+    name: draft.name,
+    note: draft.note ?? undefined,
+    direction: draft.direction,
+    thresholdPrice: draft.thresholdPrice,
+    triggerMode: draft.triggerMode,
+    rearmPrice: draft.rearmPrice,
+  }
+  aiModalOpen.value = false
+  modalOpen.value = true
+  loadQuotes()
+}
 function replaceRule(updated: AlertRule) {
   const index = rules.value.findIndex((r) => r.id === updated.id)
   if (index >= 0) rules.value[index] = updated
@@ -94,7 +122,10 @@ onMounted(load)
   <div class="page-wrap">
     <header class="page-head">
       <div><p class="eyebrow">MARKET OVERVIEW</p><h1>行情与提醒</h1><p class="muted">追踪价格边界，而不是持续盯盘。</p></div>
-      <button class="button primary" :disabled="!selectedStock" @click="openCreate">＋ 创建提醒</button>
+      <div class="head-actions">
+        <button class="button ai-button" @click="aiModalOpen = true">✦ AI 文本生成</button>
+        <button class="button primary" :disabled="!selectedStock" @click="openCreate">＋ 创建提醒</button>
+      </div>
     </header>
     <p v-if="error" class="page-error">{{ error }} <button @click="load">重试</button></p>
     <section class="stat-grid">
@@ -132,6 +163,7 @@ onMounted(load)
         <div v-else class="empty-state roomy"><strong>还没有提醒规则</strong><span>选择上破或下破价格，系统会在真正穿越阈值时触发。</span><button class="button secondary" @click="openCreate">创建第一条规则</button></div>
       </section>
     </div>
-    <RuleModal :open="modalOpen" :stock="selectedStock" :rule="editingRule" @close="modalOpen = false" @saved="replaceRule" />
+    <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />
+    <RuleModal :open="modalOpen" :stock="selectedStock" :rule="editingRule" :initial-draft="initialDraft" @close="modalOpen = false" @saved="replaceRule" />
   </div>
 </template>

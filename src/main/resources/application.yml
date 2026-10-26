@@ -34,6 +34,13 @@ mybatis:
     map-underscore-to-camel-case: true
 
 price-pulse:
+  assistant:
+    enabled: ${PRICEPULSE_AI_ENABLED:false}
+    base-url: ${PRICEPULSE_AI_BASE_URL:https://api.groq.com/openai}
+    api-key: ${PRICEPULSE_AI_API_KEY:}
+    model: ${PRICEPULSE_AI_MODEL:openai/gpt-oss-20b}
+    connect-timeout: PT10S
+    read-timeout: PT45S
   messaging:
     enabled: false
     topic: price-pulse-alert-triggered
