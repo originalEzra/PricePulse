@@ -8,7 +8,7 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 ## 当前进度
 
-**Phase 5：Outbox 可靠发布、RocketMQ 消费幂等与站内通知已完成。** 下一阶段实现 AI 规则草稿和 Vue 3 基础页面。
+**Phase 6A：Vue 3 Web 基础页面与真实业务联调已完成。** 下一步实现 AI 自然语言规则草稿，然后进入压测与故障实验。
 
 - [x] Java 21 + Spring Boot 最小工程
 - [x] MySQL、Redis、RocketMQ 本地环境
@@ -25,7 +25,8 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 - [x] Redis ZSet 规则索引、增量同步与自动重建
 - [x] 穿越匹配、重复提醒状态机、触发历史与 PENDING Outbox
 - [x] Outbox 发布、RocketMQ 消费幂等与站内通知
-- [ ] Vue 3 Web 页面
+- [x] Vue 3 Web 页面与真实后端联调
+- [ ] AI 自然语言规则草稿
 - [ ] 压力测试、故障实验与结果报告
 
 > 下文标注“计划实现”的部分属于后续阶段；当前可以注册登录、管理提醒规则、接入或模拟行情、触发规则，并通过 RocketMQ 异步生成和查询站内通知。
@@ -214,9 +215,9 @@ MySQL 保存提醒规则 ─────→ Redis ZSet 建立可重建索引
 | Bean Validation | API 参数及 AI 草稿校验 | 不信任客户端或模型输出 |
 | Testcontainers | MySQL、Redis 真实集成测试 | 避免只用 Mock 得出错误兼容性结论 |
 | Actuator | 健康状态和基础运行信息 | 为后续监控和故障判断提供入口 |
-| Vue 3 + TypeScript | 三个基础 Web 页面（尚未开始） | 适合快速构建行情、规则和通知管理页面 |
-| Pinia / Vue Router | 前端状态与页面路由（尚未开始） | 使用 Vue 官方常用配套，减少额外选型 |
-| ECharts | 简单行情图和测试结果图（计划） | 满足演示需要，不自行实现图表引擎 |
+| Vue 3 + TypeScript | 登录、行情与规则、通知中心、行情模拟页面 | 适合快速构建类型明确的管理界面 |
+| Pinia / Vue Router | JWT 会话状态、路由与登录守卫 | 使用 Vue 官方常用配套，减少额外选型 |
+| 原生 SVG | 轻量展示近期价格走势 | 当前图表简单，不为一个折线图引入大型依赖 |
 
 ## 数据边界
 
@@ -227,13 +228,14 @@ MySQL 保存提醒规则 ─────→ Redis ZSet 建立可重建索引
 
 当前数据库仍是 7 张业务表。V3 为股票表补充索引 UUID 版本字段，总字段数由 Phase 1 的 71 增为 72；迁移增量执行，不改写已有迁移。
 
-## 计划中的页面
+## Web 页面
 
-前端计划使用 Vue 3 + TypeScript + Vite，只实现三个演示所需页面：
+前端使用 Vue 3 + TypeScript + Vite，页面只读取真实后端 API：
 
-1. **行情与提醒管理**：股票价格、简单走势图、规则增删改停。
-2. **通知中心**：触发价格、触发原因、时间和已读状态。
-3. **模拟行情管理**：选择行情模式、启动或停止模拟、查看基础指标。
+1. **登录与注册**：JWT 会话、路由守卫和 401 自动清理。
+2. **行情与提醒管理**：股票价格、轻量 SVG 走势图、规则增删改停。
+3. **通知中心**：触发价格、触发原因、时间、筛选和已读状态。
+4. **模拟行情管理**：选择行情模式、运行可复现实验、查看基础指标。
 
 ## 工程结构
 
@@ -244,6 +246,7 @@ price-pulse/
 ├── compose.yaml                 # MySQL、Redis、RocketMQ 本地环境
 ├── deploy/                      # RocketMQ 等组件配置
 ├── docs/                        # 各阶段决策、实现语义与验收结果
+├── frontend/                    # Vue 3 + TypeScript Web 页面
 ├── src/main/java/               # Spring Boot 应用代码
 ├── src/main/resources/
 │   ├── application.yml          # 公共配置
@@ -296,6 +299,26 @@ docker compose -f compose.yaml ps
 | RocketMQ NameServer | `19876` |
 | RocketMQ Broker | `10911` / `10909` |
 
+另开一个终端启动前端：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+浏览器访问 <http://127.0.0.1:5173>。Vite 把 `/api` 代理到 Spring Boot `18080`，本地开发不需要扩大后端 CORS 配置。
+
+前端生产构建与类型检查：
+
+```bash
+cd frontend
+npm run type-check
+npm run build
+```
+
+前端将 JWT 会话保存在 `localStorage`。这是本地演示项目的明确取舍；真实互联网产品仍需结合威胁模型评估 HttpOnly Cookie、CSRF 和刷新机制。
+
 停止容器并保留数据：
 
 ```bash
@@ -337,7 +360,8 @@ unset PRICEPULSE_AI_API_KEY
 | Phase 3（已完成） | 模拟行情、历史回放、重复/过期/未来/乱序策略 |
 | Phase 4（已完成） | Redis ZSet 索引、区间匹配、规则状态机与触发持久化 |
 | Phase 5（已完成） | Outbox、RocketMQ、消费幂等和站内通知 |
-| Phase 6 | AI 规则草稿与 Vue 3 三个基础页面 |
+| Phase 6A（已完成） | Vue 3 四个基础页面与真实业务联调 |
+| Phase 6B | AI 自然语言规则草稿与用户确认流程 |
 | Phase 7 | 压力测试、故障实验、性能报告和最终项目文档 |
 
 详细记录：
