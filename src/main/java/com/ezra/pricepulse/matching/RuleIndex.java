@@ -9,6 +9,9 @@ import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
 import com.ezra.pricepulse.stock.Stock;
 import com.ezra.pricepulse.stock.StockMapper;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,14 +65,36 @@ public class RuleIndex {
     private final StringRedisTemplate redis;
     private final AlertRuleMapper rules;
     private final StockMapper stocks;
+    private final Timer lookupTimer;
+    private final Timer rebuildTimer;
+    private final DistributionSummary candidateCounts;
 
-    public RuleIndex(StringRedisTemplate redis, AlertRuleMapper rules, StockMapper stocks) {
+    public RuleIndex(StringRedisTemplate redis, AlertRuleMapper rules, StockMapper stocks, MeterRegistry metrics) {
         this.redis = redis;
         this.rules = rules;
         this.stocks = stocks;
+        this.lookupTimer = Timer.builder("pricepulse.rules.lookup")
+                .description("Candidate lookup, including rebuilds when needed; excludes stock lock acquisition")
+                .publishPercentiles(0.95, 0.99).register(metrics);
+        this.rebuildTimer = Timer.builder("pricepulse.rules.rebuild")
+                .description("Full per-stock rule index rebuild").register(metrics);
+        this.candidateCounts = DistributionSummary.builder("pricepulse.rules.candidates")
+                .description("Candidates per successful lookup, not committed business triggers")
+                .register(metrics);
     }
 
     public List<Long> candidates(Stock stock, BigDecimal previous, BigDecimal current) {
+        Timer.Sample sample = Timer.start();
+        try {
+            List<Long> candidates = queryCandidates(stock, previous, current);
+            candidateCounts.record(candidates.size());
+            return candidates;
+        } finally {
+            sample.stop(lookupTimer);
+        }
+    }
+
+    private List<Long> queryCandidates(Stock stock, BigDecimal previous, BigDecimal current) {
         List<String> args = new ArrayList<>();
         args.add(stock.ruleIndexToken());
         if (previous != null && current.compareTo(previous) != 0) {
@@ -119,6 +144,15 @@ public class RuleIndex {
     }
 
     private void rebuild(Stock stock) {
+        Timer.Sample sample = Timer.start();
+        try {
+            rebuildFromDatabase(stock);
+        } finally {
+            sample.stop(rebuildTimer);
+        }
+    }
+
+    private void rebuildFromDatabase(Stock stock) {
         List<String> args = new ArrayList<>();
         args.add(stock.ruleIndexToken());
         for (AlertRule rule : rules.listIndexable(stock.id())) {

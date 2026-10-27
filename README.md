@@ -8,7 +8,7 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 
 ## 当前进度
 
-**Phase 6B：AI 自然语言规则草稿与用户确认流程已完成。** 下一步进入压测与故障实验。
+**Phase 7：可重复的性能对比、通知积压与故障恢复实验已完成。** 核心开发阶段已交付；测试条件、真实结果和保留问题见下方报告。
 
 - [x] Java 21 + Spring Boot 最小工程
 - [x] MySQL、Redis、RocketMQ 本地环境
@@ -27,9 +27,10 @@ PricePulse 允许用户为股票设置“上破某价格”或“下破某价格
 - [x] Outbox 发布、RocketMQ 消费幂等与站内通知
 - [x] Vue 3 Web 页面与真实后端联调
 - [x] AI 自然语言规则草稿与用户确认
-- [ ] 压力测试、故障实验与结果报告
+- [x] 规则索引规模对比、HTTP 负载、真实 MQ 通知积压与故障实验
+- [x] 性能报告、原始延迟样本与复现脚本
 
-> 下文标注“计划实现”的部分属于后续阶段；当前可以注册登录、管理提醒规则、接入或模拟行情、触发规则，并通过 RocketMQ 异步生成和查询站内通知。
+> 当前可以注册登录、管理提醒规则、模拟与回放行情，并通过 RocketMQ 异步生成站内通知。AI 草稿默认关闭，真实模型效果仍需配置 API Key 后单独验证。
 
 ## 用户能够做什么
 
@@ -172,14 +173,18 @@ Phase 0 已通过真实供应商的结构化输出连通性验证。Phase 6B 通
 
 项目不仅展示功能，还要能够证明设计是否有效。
 
-**计划实现：**
+**当前实现：**
 
 - JUnit：状态机、边界和异常场景单元测试。
 - Testcontainers：使用真实 MySQL 和 Redis 验证迁移及访问行为。
 - RocketMQ 集成测试：验证真实 Broker 的消息收发。
-- k6 或 JMeter：批量生成行情和并发请求。
+- JDK HTTP Client：对真实 HTTP 接口施加带 JWT 的并发行情负载，无须额外安装压测工具。
 - 固定随机种子和测试配置，使实验可以重复。
 - 记录吞吐量、候选匹配 P95/P99、积压峰值、消化时间、重复触发数和故障恢复结果。
+
+本机完整实验中，5 万条规则的 ZSet 候选查询 P95 为 2.066 ms，全量读取并由 Java 筛选的基线为 259.928 ms；两者候选集合一致。500 条集中提醒在恢复消费后约 1.69 秒清空，额外重投 10 条消息没有生成重复业务通知。候选查询不等于完整接口耗时，以上数据也不是生产容量承诺。
+
+详见 [实验结果](docs/performance/2026-10-27.md)、[原始数据](docs/performance/2026-10-27-full.json)和[复现说明](docs/phase-7.md)。
 
 ## 一条完整业务链路
 
@@ -215,7 +220,7 @@ MySQL 保存提醒规则 ─────→ Redis ZSet 建立可重建索引
 | Spring AI | 自然语言到提醒草稿的结构化转换 | 降低规则填写成本，同时与核心业务隔离 |
 | Bean Validation | API 参数及 AI 草稿校验 | 不信任客户端或模型输出 |
 | Testcontainers | MySQL、Redis 真实集成测试 | 避免只用 Mock 得出错误兼容性结论 |
-| Actuator | 健康状态和基础运行信息 | 为后续监控和故障判断提供入口 |
+| Actuator / Micrometer | 健康状态、候选查询与重建耗时、候选数和消费尝试计数 | 观察运行情况；唯一触发和通知数量仍以数据库对账为准 |
 | Vue 3 + TypeScript | 登录、行情与规则、通知中心、行情模拟页面 | 适合快速构建类型明确的管理界面 |
 | Pinia / Vue Router | JWT 会话状态、路由与登录守卫 | 使用 Vue 官方常用配套，减少额外选型 |
 | 原生 SVG | 轻量展示近期价格走势 | 当前图表简单，不为一个折线图引入大型依赖 |
@@ -248,6 +253,7 @@ price-pulse/
 ├── deploy/                      # RocketMQ 等组件配置
 ├── docs/                        # 各阶段决策、实现语义与验收结果
 ├── frontend/                    # Vue 3 + TypeScript Web 页面
+├── scripts/                     # 性能与故障实验入口
 ├── src/main/java/               # Spring Boot 应用代码
 ├── src/main/resources/
 │   ├── application.yml          # 公共配置
@@ -259,7 +265,7 @@ price-pulse/
 └── README.md
 ```
 
-后续业务代码采用模块化单体，按照 `user`、`stock`、`market`、`alert`、`matching`、`notification`、`assistant` 等业务职责组织，而不是按 Controller、Service、Mapper 建立全局大目录。
+业务代码采用模块化单体，按照 `user`、`stock`、`market`、`alert`、`matching`、`notification`、`assistant` 等业务职责组织，而不是按 Controller、Service、Mapper 建立全局大目录。
 
 ## 本地启动
 
@@ -349,6 +355,7 @@ docker compose -f compose.yaml down
 | `./mvnw -Pintegration verify` | 真实 MySQL、Redis 与 Flyway | Docker，由 Testcontainers 管理 |
 | `./mvnw -Pmq-it verify` | RocketMQ 基础发送与消费闭环 | 是，需启动 Compose |
 | `./mvnw -Pmq-pipeline-it verify` | Outbox 到站内通知的完整真实 MQ 链路 | 是，需启动 Compose |
+| `bash scripts/run-performance.sh` | 规则规模对比、HTTP 负载、通知积压与故障恢复 | Docker；MySQL/Redis 临时隔离，MQ 使用独立主题和消费组 |
 | `./mvnw -Pai-live verify` | 云端模型与结构化输出闭环 | 是，需要供应商 API Key |
 
 真实 AI 测试推荐使用 Groq 免费层：
@@ -378,7 +385,7 @@ unset PRICEPULSE_AI_API_KEY
 | Phase 5（已完成） | Outbox、RocketMQ、消费幂等和站内通知 |
 | Phase 6A（已完成） | Vue 3 四个基础页面与真实业务联调 |
 | Phase 6B（已完成） | AI 自然语言规则草稿、澄清与用户确认流程 |
-| Phase 7 | 压力测试、故障实验、性能报告和最终项目文档 |
+| Phase 7（已完成） | 性能对比、HTTP 负载、通知积压、故障实验及结果报告 |
 
 详细记录：
 
@@ -390,3 +397,5 @@ unset PRICEPULSE_AI_API_KEY
 - [`docs/phase-5.md`](docs/phase-5.md)：发布租约、失败退避、真实 MQ 链路、消费幂等与通知 API。
 - [`docs/phase-6a.md`](docs/phase-6a.md)：Vue 页面、技术取舍与真实业务闭环。
 - [`docs/phase-6b.md`](docs/phase-6b.md)：AI 草稿边界、校验、澄清与失败策略。
+- [`docs/phase-7.md`](docs/phase-7.md)：实验设计、复现命令、指标和计时边界。
+- [`docs/performance/2026-10-27.md`](docs/performance/2026-10-27.md)：实测结果、故障对账和保留问题。

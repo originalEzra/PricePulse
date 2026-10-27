@@ -148,6 +148,15 @@
     </build>
     <profiles>
         <profile>
+            <id>performance</id>
+            <properties><integration.includes>**/PerformanceIT.java</integration.includes></properties>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
             <id>integration</id>
             <properties><integration.includes>**/InfrastructureIT.java</integration.includes></properties>
             <build><plugins><plugin>
