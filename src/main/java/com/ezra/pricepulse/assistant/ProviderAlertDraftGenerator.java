@@ -20,7 +20,13 @@ final class ProviderAlertDraftGenerator implements AlertDraftGenerator {
             BELOW means the user wants an alert when price falls to or crosses a value.
             ONCE means one alert. REPEAT means it can alert again after rearming.
 
-            Set complete=false when the stock symbol, direction, threshold price, or repeat policy is unclear.
+            In the symbol field, copy the stock name, code, or name/code fragment supplied by the user.
+            The business server resolves it against the stock catalog. A partial reference is valid:
+            for example, keep "001" as "001" and "Technology" as "Technology".
+            Never expand a fragment into a guessed full symbol. Do not mark a request incomplete merely
+            because the supplied stock name or code is partial. If no stock reference is supplied, ask for one.
+
+            Set complete=false when the stock reference, direction, threshold price, or repeat policy is unclear.
             For a REPEAT request, rearmPrice is also required; ask where the price must move before rearming.
             When complete=false, put one concise Chinese question in clarificationQuestion and use harmless
             placeholders for the other required schema fields. When complete=true, clarificationQuestion is empty.

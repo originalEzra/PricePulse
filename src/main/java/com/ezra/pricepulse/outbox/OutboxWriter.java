@@ -22,9 +22,10 @@ public class OutboxWriter {
     @Transactional(propagation = Propagation.MANDATORY)
     public void alertTriggered(long triggerId, long userId, long ruleId, long stockId) {
         try {
-            mapper.insertAlertTriggered(triggerId, json.writeValueAsString(Map.of(
+            int inserted = mapper.insertAlertTriggered(triggerId, json.writeValueAsString(Map.of(
                     "schemaVersion", 1, "triggerId", triggerId, "userId", userId,
                     "ruleId", ruleId, "stockId", stockId)));
+            if (inserted != 1) throw new IllegalStateException("Only persisted REAL triggers may create Outbox events");
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot serialize alert event", exception);
         }

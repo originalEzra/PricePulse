@@ -30,13 +30,14 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, { ...init, headers })
-  } catch {
-    throw new ApiClientError('无法连接后端，请确认 Spring Boot 已在 18080 端口运行', 'NETWORK_ERROR')
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+    throw new ApiClientError('无法连接服务，请确认前端和后端都已启动后刷新页面', 'NETWORK_ERROR')
   }
 
   const envelope = (await response.json().catch(() => null)) as ApiEnvelope<T> | null
   if (!response.ok || !envelope?.success) {
-    if (response.status === 401 && token) {
+    if (response.status === 401 && token && accessToken() === token) {
       localStorage.removeItem(AUTH_STORAGE_KEY)
       window.dispatchEvent(new Event('pricepulse:unauthorized'))
     }

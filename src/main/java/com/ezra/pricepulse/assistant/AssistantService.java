@@ -8,7 +8,9 @@ import com.ezra.pricepulse.common.error.ErrorCode;
 import com.ezra.pricepulse.stock.Stock;
 import com.ezra.pricepulse.stock.StockMapper;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -29,16 +31,29 @@ public class AssistantService {
             return AlertDraftResponse.clarification(questionOrDefault(modelDraft.clarificationQuestion()));
         }
 
-        String symbol = requiredText(modelDraft.symbol(), "stock symbol").toUpperCase(Locale.ROOT);
+        String reference = requiredText(modelDraft.symbol(), "stock name or code");
+        if (reference.length() > 128) {
+            return AlertDraftResponse.clarification("股票名称或代码过长，请补充一个简短的名称或代码片段。");
+        }
+        if (modelDraft.market() != null && modelDraft.market().trim().length() > 16) {
+            return AlertDraftResponse.clarification("市场代码过长，请核对股票所属市场后重试。");
+        }
+        String normalizedInput = request.text().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+        String normalizedReference = reference.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+        if (!normalizedInput.contains(normalizedReference)) {
+            return AlertDraftResponse.clarification("还不能确定你指的是哪只股票，请补充名称或代码片段。");
+        }
         String market = optionalText(modelDraft.market(), 16, null);
-        var stocks = stockMapper.findActiveBySymbol(symbol, market == null ? null : market.toUpperCase(Locale.ROOT));
+        String normalizedMarket = market == null ? null : market.toUpperCase(Locale.ROOT);
+        var exactSymbols = stockMapper.findActiveBySymbol(reference.toUpperCase(Locale.ROOT), normalizedMarket);
+        var stocks = exactSymbols.isEmpty() ? resolveNameOrFragment(reference, normalizedMarket) : exactSymbols;
         if (stocks.isEmpty()) {
             throw new BusinessException(
                     ErrorCode.RESOURCE_NOT_FOUND,
-                    "没有找到代码为 " + symbol + " 的可用股票，请从股票列表确认后重试");
+                    "没有找到与“" + reference + "”匹配的可用股票，请补充名称或代码后重试");
         }
         if (stocks.size() > 1) {
-            return AlertDraftResponse.clarification("这个股票代码在多个市场存在，请在描述中补充市场代码。");
+            return AlertDraftResponse.clarification(ambiguityQuestion(reference, stocks, !exactSymbols.isEmpty()));
         }
         Stock stock = stocks.getFirst();
 
@@ -68,6 +83,27 @@ public class AssistantService {
         return AlertDraftResponse.ready(new AlertRuleDraft(
                 stock.id(), stock.symbol(), stock.name(), name, note, direction,
                 threshold, triggerMode, rearmPrice));
+    }
+
+    private List<Stock> resolveNameOrFragment(String reference, String market) {
+        var exactNames = stockMapper.findActiveByName(reference, market);
+        if (!exactNames.isEmpty()) {
+            return exactNames;
+        }
+        String pattern = "%" + reference.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        return stockMapper.findActiveByFragment(pattern, market);
+    }
+
+    private String ambiguityQuestion(String reference, List<Stock> stocks, boolean exactSymbol) {
+        String candidates = stocks.stream().limit(5)
+                .map(stock -> stock.symbol() + " · "
+                        + (stock.name().length() > 24 ? stock.name().substring(0, 24) + "…" : stock.name())
+                        + "（" + stock.market() + "）")
+                .collect(Collectors.joining("、"));
+        String more = stocks.size() > 5 ? "等" : "";
+        return exactSymbol
+                ? "这个股票代码在多个市场存在：" + candidates + "。请补充市场代码。"
+                : "“" + reference + "”匹配到多只股票：" + candidates + more + "。请补充更完整的名称、代码或市场代码。";
     }
 
     private BigDecimal parsePrice(String raw, String field) {

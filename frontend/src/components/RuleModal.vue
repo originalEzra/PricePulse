@@ -33,7 +33,7 @@ watch(
       name: source?.name ?? `${props.stock.symbol} 价格提醒`,
       note: source?.note ?? '',
       direction: source?.direction ?? 'ABOVE',
-      thresholdPrice: source?.thresholdPrice ?? props.stock.latestPrice ?? 100,
+      thresholdPrice: source?.thresholdPrice ?? Number(Number(props.stock.latestPrice ?? 100).toFixed(2)),
       triggerMode: source?.triggerMode ?? 'ONCE',
       rearmPrice: source?.rearmPrice ?? null,
     })

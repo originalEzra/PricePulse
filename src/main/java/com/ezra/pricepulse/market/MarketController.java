@@ -1,6 +1,7 @@
 package com.ezra.pricepulse.market;
 
 import com.ezra.pricepulse.common.api.ApiResponse;
+import com.ezra.pricepulse.user.CurrentUserId;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -29,17 +30,18 @@ public class MarketController {
 
     @PostMapping("/quotes")
     public ApiResponse<QuoteResult> ingest(@Valid @RequestBody QuoteInputRequest request) {
-        return ApiResponse.success(marketService.ingestLive(request));
+        throw new com.ezra.pricepulse.common.error.BusinessException(
+                com.ezra.pricepulse.common.error.ErrorCode.FORBIDDEN, "Real ingestion is server-internal");
     }
 
     @PostMapping("/replay")
-    public ApiResponse<BatchQuoteResponse> replay(@Valid @RequestBody ReplayRequest request) {
-        return ApiResponse.success(marketService.replay(request));
+    public ApiResponse<BatchQuoteResponse> replay(@CurrentUserId Long userId, @Valid @RequestBody ReplayRequest request) {
+        return ApiResponse.success(marketService.replay(userId, request));
     }
 
     @PostMapping("/simulate")
-    public ApiResponse<BatchQuoteResponse> simulate(@Valid @RequestBody SimulationRequest request) {
-        return ApiResponse.success(marketService.simulate(request));
+    public ApiResponse<BatchQuoteResponse> simulate(@CurrentUserId Long userId, @Valid @RequestBody SimulationRequest request) {
+        return ApiResponse.success(marketService.simulate(userId, request));
     }
 
     @GetMapping("/stocks/{stockId}/quotes")

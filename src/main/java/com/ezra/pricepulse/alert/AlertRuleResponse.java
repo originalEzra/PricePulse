@@ -20,7 +20,7 @@ public record AlertRuleResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
 
-    static AlertRuleResponse from(AlertRule rule) {
+    public static AlertRuleResponse from(AlertRule rule) {
         return new AlertRuleResponse(
                 rule.getId(), rule.getStockId(), rule.getStockSymbol(), rule.getStockName(),
                 rule.getName(), rule.getNote(), rule.getDirection(), rule.getThresholdPrice(),

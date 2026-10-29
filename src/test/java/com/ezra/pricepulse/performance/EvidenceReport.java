@@ -56,7 +56,7 @@ final class EvidenceReport {
     static void write(ObjectMapper json, Map<String, Object> result, String status) throws Exception {
         result.put("status", status);
         result.put("updatedAt", Instant.now().toString());
-        Path directory = Path.of("target", "performance");
+        Path directory = Path.of(System.getProperty("perf.report-dir", "target/performance"));
         Files.createDirectories(directory);
         String raw = json.writerWithDefaultPrettyPrinter().writeValueAsString(result);
         String markdown = markdown(json.valueToTree(result));

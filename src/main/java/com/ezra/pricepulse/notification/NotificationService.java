@@ -5,6 +5,8 @@ import com.ezra.pricepulse.common.error.ErrorCode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -12,11 +14,15 @@ import java.util.List;
 import java.util.Locale;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @Profile("!standalone & !mq-it")
 public class NotificationService {
+    private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
     private final NotificationMapper mapper;
     private final ObjectMapper json;
     private final Clock clock;
@@ -38,6 +44,10 @@ public class NotificationService {
                 || delivery.getStockId() != event.stockId()) {
             throw new IllegalArgumentException("Alert event does not match its persisted trigger");
         }
+        if (!"REAL".equals(delivery.getOriginType())) {
+            log.info("Acknowledged legacy alert message without creating a notification; triggerId={}", event.triggerId());
+            return;
+        }
         NotificationText text = createText(delivery);
         mapper.insertIfAbsent(delivery.getUserId(), delivery.getTriggerId(), text.title(), text.content());
     }
@@ -46,6 +56,18 @@ public class NotificationService {
     public List<NotificationResponse> list(long userId, String requestedStatus, int limit) {
         NotificationStatus status = parseStatus(requestedStatus);
         return mapper.listOwned(userId, status, limit).stream().map(NotificationResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public NotificationFeedResponse feed(long userId) {
+        NotificationCounts counts = mapper.countOwned(userId);
+        var latest = mapper.listOwned(userId, null, 20).stream().map(NotificationResponse::from).toList();
+        return new NotificationFeedResponse(counts.totalCount(), counts.unreadCount(), latest);
+    }
+
+    @Transactional
+    public NotificationReadAllResponse markAllRead(long userId) {
+        return new NotificationReadAllResponse(mapper.markAllRead(userId, now()));
     }
 
     @Transactional
@@ -85,14 +107,19 @@ public class NotificationService {
                 case "BELOW" -> "下破";
                 default -> throw new IllegalStateException("Rule snapshot contains an unknown direction");
             };
-            String title = delivery.getStockSymbol() + " 已" + verb + " " + threshold;
+            String displayThreshold = displayPrice(new BigDecimal(threshold));
+            String title = delivery.getStockSymbol() + " 已" + verb + " " + displayThreshold;
             String content = "%s（%s）价格 %s，触发提醒“%s”（%s %s）。".formatted(
                     delivery.getStockName(), delivery.getStockSymbol(),
-                    delivery.getTriggerPrice().toPlainString(), ruleName, verb, threshold);
+                    displayPrice(delivery.getTriggerPrice()), ruleName, verb, displayThreshold);
             return new NotificationText(title, content);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot read the persisted rule snapshot", exception);
         }
+    }
+
+    private String displayPrice(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private LocalDateTime now() {

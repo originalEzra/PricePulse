@@ -106,6 +106,12 @@
         ORDER BY r.id
     </select>
 
+    <select id="listSnapshotSource" resultMap="alertRuleMap">
+        <include refid="selectRule"/>
+        WHERE r.user_id = #{userId} AND r.stock_id = #{stockId} AND r.status != 'DELETED'
+        ORDER BY r.id
+    </select>
+
     <select id="findCandidates" resultMap="alertRuleMap">
         <include refid="selectRule"/>
         WHERE r.stock_id = #{stockId} AND r.status IN ('ACTIVE', 'COOLDOWN')

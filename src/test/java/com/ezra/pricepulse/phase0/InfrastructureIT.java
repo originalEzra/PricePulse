@@ -54,6 +54,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+@org.springframework.context.annotation.Import(com.ezra.pricepulse.market.RealQuoteTestSupport.class)
 @SpringBootTest
 @ActiveProfiles("integration")
 @Testcontainers
@@ -86,7 +87,7 @@ class InfrastructureIT {
     @Autowired ObjectMapper objectMapper;
     @Autowired JwtEncoder jwtEncoder;
     @Autowired PlatformTransactionManager transactionManager;
-    @Autowired MarketService marketService;
+    @Autowired com.ezra.pricepulse.market.RealQuoteTestSupport.Fixture realFixture;
     @Autowired NotificationService notificationService;
     @Autowired OutboxDispatchService outboxDispatchService;
     @Autowired StockMapper stockMapper;
@@ -126,6 +127,53 @@ class InfrastructureIT {
         assertThat(stockMapper.findActiveBySymbol(symbol, "SIM"))
                 .singleElement().satisfies(stock -> assertThat(stock.id()).isEqualTo(stockId));
         assertThat(stockMapper.findActiveBySymbol(symbol, "UNKNOWN")).isEmpty();
+    }
+
+    @Test
+    void assistantNameAndFragmentLookupRespectsMarketsAndActiveStatus() {
+        String marker = "REF" + testSuffix();
+        jdbc.update("""
+                INSERT INTO stocks (symbol, name, market, currency, status)
+                VALUES (?, ?, 'SIM', 'USD', 'ACTIVE'),
+                       (?, ?, 'OTHER', 'USD', 'ACTIVE'),
+                       (?, ?, 'SIM', 'USD', 'INACTIVE')
+                """, marker + "001", marker + " Technology",
+                marker + "002", marker + " Consumer",
+                marker + "003", marker + " Hidden");
+
+        assertThat(stockMapper.findActiveByName(marker.toLowerCase() + " technology", null))
+                .singleElement().satisfies(stock -> assertThat(stock.symbol()).isEqualTo(marker + "001"));
+        assertThat(stockMapper.findActiveByFragment("%" + marker + "%", null)).hasSize(2);
+        assertThat(stockMapper.findActiveByFragment("%" + marker.toLowerCase() + "%", "SIM"))
+                .singleElement().satisfies(stock -> assertThat(stock.symbol()).isEqualTo(marker + "001"));
+        assertThat(stockMapper.findActiveByFragment("%" + marker + "001%", null))
+                .singleElement().satisfies(stock -> assertThat(stock.name()).endsWith("Technology"));
+        assertThat(stockMapper.findActiveByFragment("%" + marker + "%", "UNKNOWN")).isEmpty();
+    }
+
+    @Test
+    void assistantFragmentLookupEscapesLiteralWildcardCharacters() {
+        String marker = "LIT" + testSuffix();
+        jdbc.update("""
+                INSERT INTO stocks (symbol, name, market, currency, status)
+                VALUES (?, ?, 'SIM', 'USD', 'ACTIVE'), (?, ?, 'SIM', 'USD', 'ACTIVE')
+                """, marker + "1", marker + "%_! Holdings", marker + "2", marker + "abc! Holdings");
+
+        assertThat(stockMapper.findActiveByFragment("%" + marker + "!%!_!!%", null))
+                .singleElement().satisfies(stock -> assertThat(stock.symbol()).isEqualTo(marker + "1"));
+    }
+
+    @Test
+    void assistantFragmentLookupBoundsTheCandidateList() {
+        String marker = "MANY" + testSuffix();
+        for (int index = 0; index < 7; index++) {
+            jdbc.update("""
+                    INSERT INTO stocks (symbol, name, market, currency, status)
+                    VALUES (?, ?, 'SIM', 'USD', 'ACTIVE')
+                    """, marker + index, marker + " candidate " + index);
+        }
+
+        assertThat(stockMapper.findActiveByFragment("%" + marker + "%", null)).hasSize(6);
     }
 
     @Test
@@ -175,7 +223,7 @@ class InfrastructureIT {
         var expectedColumnCounts = Map.of(
                 "users", 7,
                 "stocks", 11,
-                "quote_events", 10,
+                "quote_events", 17,
                 "alert_rules", 14,
                 "alert_triggers", 8,
                 "outbox_events", 13,
@@ -363,7 +411,7 @@ class InfrastructureIT {
         long simulationStockId = insertStock("S" + suffix);
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).withNano(123_000_000);
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
                                 "eventKey", "live-unauthorized-" + suffix,
@@ -380,7 +428,7 @@ class InfrastructureIT {
                 "eventTime", now.minusSeconds(10),
                 "source", "TEST",
                 "sequenceNo", 1);
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(liveEvent)))
@@ -388,14 +436,14 @@ class InfrastructureIT {
                 .andExpect(jsonPath("$.data.outcome").value("PROCESSED"))
                 .andExpect(jsonPath("$.data.previousPrice").doesNotExist());
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(liveEvent)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.outcome").value("DUPLICATE"));
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -408,7 +456,7 @@ class InfrastructureIT {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("CONFLICT"));
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -420,7 +468,7 @@ class InfrastructureIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.outcome").value("DISCARDED_STALE"));
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -432,7 +480,7 @@ class InfrastructureIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.outcome").value("DISCARDED_FUTURE"));
 
-        mvc.perform(post("/api/market/quotes")
+        mvc.perform(post("/test/real-quotes/live")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
@@ -470,7 +518,7 @@ class InfrastructureIT {
                         "eventTime", LocalDateTime.of(2024, 1, 1, 9, 0, 30),
                         "source", "IGNORED",
                         "sequenceNo", 3));
-        mvc.perform(post("/api/market/replay")
+        mvc.perform(post("/test/real-quotes/replay")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("events", replayEvents))))
@@ -481,31 +529,9 @@ class InfrastructureIT {
                 .andExpect(jsonPath("$.data.results[2].outcome")
                         .value("DISCARDED_OUT_OF_ORDER"));
 
-        Map<String, Object> simulation = Map.of(
-                "stockId", simulationStockId,
-                "runKey", "phase3-" + suffix,
-                "steps", 10,
-                "mode", "OSCILLATE",
-                "seed", 42,
-                "stepRatio", 0.01,
-                "initialPrice", 100,
-                "startTime", LocalDateTime.of(2024, 2, 1, 9, 0));
-        mvc.perform(post("/api/market/simulate")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(simulation)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.processed").value(10))
-                .andExpect(jsonPath("$.data.duplicates").value(0));
-
-        mvc.perform(post("/api/market/simulate")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(simulation)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.processed").value(0))
-                .andExpect(jsonPath("$.data.duplicates").value(10))
-                .andExpect(jsonPath("$.data.discarded").value(0));
+        mvc.perform(post("/api/market/simulate").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
 
         mvc.perform(get("/api/market/stocks/{stockId}/quotes", liveStockId)
                         .header("Authorization", "Bearer " + token))
@@ -624,6 +650,71 @@ class InfrastructureIT {
     }
 
     @Test
+    void observedReplayReportsRealTriggerCooldownAndRearmTransitionsWithoutReplayingDuplicates() throws Exception {
+        String token = matchingToken(testSuffix());
+        for (String direction : List.of("ABOVE", "BELOW")) {
+            String suffix = testSuffix();
+            long stockId = insertStock("TRACE" + suffix);
+            long ruleId = createMatchingRule(token, stockId, direction, "100", "REPEAT",
+                    direction.equals("ABOVE") ? "95" : "105");
+            List<String> prices = direction.equals("ABOVE")
+                    ? List.of("99", "100", "99", "95", "110")
+                    : List.of("101", "100", "101", "105", "90");
+            var events = new java.util.ArrayList<Map<String, Object>>();
+            for (int index = 0; index < prices.size(); index++) {
+                events.add(matchingEvent(stockId, suffix, index + 1, prices.get(index)));
+            }
+            String request = json(Map.of("ruleId", ruleId, "events", events));
+            String body = mvc.perform(post("/test/real-quotes/replay")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            JsonNode points = objectMapper.readTree(body).path("data").path("results");
+            assertThat(points).hasSize(5);
+            List<String> expected = List.of("NONE", "TRIGGERED", "NONE", "REARMED", "TRIGGERED");
+            for (int index = 0; index < points.size(); index++) {
+                JsonNode point = points.get(index);
+                assertThat(point.path("observation").path("event").asText()).isEqualTo(expected.get(index));
+                assertThat(point.path("observation").path("ruleId").asLong()).isEqualTo(ruleId);
+                assertThat(point.path("observation").path("direction").asText()).isEqualTo(direction);
+                if (expected.get(index).equals("TRIGGERED")) {
+                    long triggerId = point.path("observation").path("triggerId").asLong();
+                    assertThat(triggerId).isPositive();
+                    assertThat(jdbc.queryForObject(
+                            "SELECT quote_event_id FROM alert_triggers WHERE id = ?", Long.class, triggerId))
+                            .isEqualTo(point.path("eventId").asLong());
+                }
+            }
+            assertThat(points.get(1).path("observation").path("afterStatus").asText()).isEqualTo("COOLDOWN");
+            assertThat(points.get(2).path("observation").path("afterStatus").asText()).isEqualTo("COOLDOWN");
+            assertThat(points.get(3).path("observation").path("afterStatus").asText()).isEqualTo("ACTIVE");
+            mvc.perform(post("/test/real-quotes/replay").header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.duplicates").value(5))
+                    .andExpect(jsonPath("$.data.results[0].observation").isEmpty());
+            assertThat(triggerCount(ruleId)).isEqualTo(2);
+            mvc.perform(post("/test/real-quotes/replay").header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json(Map.of("ruleId", ruleId, "events", List.of(matchingEvent(stockId, suffix + "-late", 1, "90"))))))
+                    .andExpect(jsonPath("$.data.results[0].outcome").value("DISCARDED_OUT_OF_ORDER"))
+                    .andExpect(jsonPath("$.data.results[0].observation").isEmpty());
+        }
+    }
+
+    @Test
+    void legacySimulationCannotMutateSharedStateEvenWithAnOwnedRule() throws Exception {
+        String token = matchingToken(testSuffix());
+        long before = jdbc.queryForObject("SELECT COUNT(*) FROM quote_events", Long.class);
+        for (String endpoint : List.of("/api/market/quotes", "/api/market/replay", "/api/market/simulate")) {
+            mvc.perform(post(endpoint).header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isForbidden());
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM quote_events", Long.class)).isEqualTo(before);
+    }
+
+    @Test
     void editsPauseDeleteAndStockMovesKeepCandidatesConsistentWithDatabase() throws Exception {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
@@ -711,7 +802,7 @@ class InfrastructureIT {
         redis.delete(ruleIndexKey(stockId));
         redis.opsForValue().set(ruleIndexKey(stockId), "wrong-type");
         try {
-            mvc.perform(post("/api/market/replay")
+            mvc.perform(post("/test/real-quotes/replay")
                             .header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("events", List.of(event)))))
@@ -779,7 +870,7 @@ class InfrastructureIT {
         long[] rolledBackTriggerId = {0};
 
         transaction.executeWithoutResult(state -> {
-            var result = marketService.replay(new ReplayRequest(List.of(event)));
+            var result = realFixture.replay(null, new ReplayRequest(List.of(event)));
             assertThat(result.results().getFirst().matching().triggered()).isEqualTo(1);
             assertThat(ruleStatus(ruleId)).isEqualTo("COMPLETED");
             rolledBackTriggerId[0] = jdbc.queryForObject(
@@ -925,7 +1016,8 @@ class InfrastructureIT {
                 .andExpect(jsonPath("$.data[0].ruleId").value(ruleId))
                 .andExpect(jsonPath("$.data[0].stockId").value(stockId))
                 .andExpect(jsonPath("$.data[0].status").value("UNREAD"))
-                .andExpect(jsonPath("$.data[0].title").value(org.hamcrest.Matchers.containsString("下破")));
+                .andExpect(jsonPath("$.data[0].title").value("D" + suffix + " 已下破 90.00"))
+                .andExpect(jsonPath("$.data[0].content").value(org.hamcrest.Matchers.containsString("价格 90.00，")));
         mvc.perform(get("/api/notifications")
                         .header("Authorization", "Bearer " + outsider))
                 .andExpect(status().isOk())
@@ -951,11 +1043,76 @@ class InfrastructureIT {
     }
 
     @Test
+    void notificationFeedAndBulkReadRequireAuthenticationAndHandleAnEmptyAccount() throws Exception {
+        mvc.perform(get("/api/notifications/feed")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/notifications/read-all")).andExpect(status().isUnauthorized());
+        String token = matchingToken(testSuffix());
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(0))
+                .andExpect(jsonPath("$.data.unreadCount").value(0))
+                .andExpect(jsonPath("$.data.latest.length()").value(0));
+        mvc.perform(post("/api/notifications/read-all").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.markedRead").value(0));
+    }
+
+    @Test
+    void notificationCountsIncludeOlderRowsAndBulkReadIsIsolatedAndIdempotent() throws Exception {
+        String suffix = testSuffix();
+        String token = matchingToken(suffix);
+        String outsider = matchingToken(testSuffix());
+        long firstId = seedNotificationHistory(token, suffix, 105);
+        seedNotificationHistory(outsider, testSuffix(), 1);
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(105))
+                .andExpect(jsonPath("$.data.unreadCount").value(105))
+                .andExpect(jsonPath("$.data.latest.length()").value(20));
+        mvc.perform(get("/api/notifications").param("limit", "100")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(100));
+
+        // The oldest unread row is outside both the feed and the visible list.
+        mvc.perform(post("/api/notifications/{id}/read", firstId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        LocalDateTime firstReadAt = jdbc.queryForObject(
+                "SELECT read_at FROM notifications WHERE id = ?", LocalDateTime.class, firstId);
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.data.totalCount").value(105))
+                .andExpect(jsonPath("$.data.unreadCount").value(104));
+        mvc.perform(post("/api/notifications/read-all").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.markedRead").value(104));
+        mvc.perform(post("/api/notifications/read-all").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.markedRead").value(0));
+        assertThat(jdbc.queryForObject(
+                "SELECT read_at FROM notifications WHERE id = ?", LocalDateTime.class, firstId))
+                .isEqualTo(firstReadAt);
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.data.totalCount").value(105))
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + outsider))
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                .andExpect(jsonPath("$.data.unreadCount").value(1));
+
+        // Marking all read affects the current rows, not notifications created afterward.
+        seedNotificationHistory(token, testSuffix(), 1);
+        mvc.perform(get("/api/notifications/feed").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.data.totalCount").value(106))
+                .andExpect(jsonPath("$.data.unreadCount").value(1))
+                .andExpect(jsonPath("$.data.latest[0].status").value("UNREAD"));
+    }
+
+    @Test
     void priceLimitsAndMicrosecondPrecisionAreValidatedBeforeMatching() throws Exception {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         long stockId = insertStock("P" + suffix);
-        mvc.perform(post("/api/market/replay")
+        mvc.perform(post("/test/real-quotes/replay")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("events", List.of(
@@ -969,12 +1126,12 @@ class InfrastructureIT {
         var preciseEvent = new java.util.LinkedHashMap<>(matchingEvent(stockId, suffix, 2, "100"));
         preciseEvent.put("eventTime", LocalDateTime.of(2024, 6, 1, 10, 0, 2, 987_654_321));
         String body = json(Map.of("events", List.of(preciseEvent)));
-        mvc.perform(post("/api/market/replay")
+        mvc.perform(post("/test/real-quotes/replay")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.results[0].outcome").value("PROCESSED"));
-        mvc.perform(post("/api/market/replay")
+        mvc.perform(post("/test/real-quotes/replay")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
@@ -986,6 +1143,36 @@ class InfrastructureIT {
 
     private String testSuffix() {
         return UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    private long seedNotificationHistory(String token, String suffix, int count) throws Exception {
+        long stockId = insertStock("NOTICE" + suffix);
+        long ruleId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
+        replayQuote(token, stockId, suffix, 1, "100");
+        replayQuote(token, stockId, suffix, 2, "90");
+        long triggerId = jdbc.queryForObject(
+                "SELECT id FROM alert_triggers WHERE rule_id = ?", Long.class, ruleId);
+        notificationService.consume(jdbc.queryForObject(
+                "SELECT payload FROM outbox_events WHERE aggregate_id = ?", String.class, triggerId));
+        long firstId = jdbc.queryForObject(
+                "SELECT id FROM notifications WHERE trigger_id = ?", Long.class, triggerId);
+        // Valid persisted snapshots make it cheap to populate history without replaying 100 rules.
+        for (int index = 1; index < count; index++) {
+            String triggerKey = "notification-history:" + suffix + ":" + index;
+            jdbc.update("""
+                    INSERT INTO alert_triggers
+                        (trigger_key, rule_id, quote_event_id, trigger_price, event_time, rule_snapshot)
+                    SELECT ?, rule_id, quote_event_id, trigger_price, event_time, rule_snapshot
+                    FROM alert_triggers WHERE id = ?
+                    """, triggerKey, triggerId);
+            jdbc.update("""
+                    INSERT INTO notifications (user_id, trigger_id, title, content)
+                    SELECT n.user_id, t.id, n.title, n.content
+                    FROM notifications n JOIN alert_triggers t ON t.trigger_key = ?
+                    WHERE n.id = ?
+                    """, triggerKey, firstId);
+        }
+        return firstId;
     }
 
     private String matchingToken(String suffix) throws Exception {
@@ -1014,7 +1201,7 @@ class InfrastructureIT {
     }
 
     private JsonNode replayQuote(String token, long stockId, String run, int step, String price) throws Exception {
-        String response = mvc.perform(post("/api/market/replay")
+        String response = mvc.perform(post("/test/real-quotes/replay")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("events", List.of(matchingEvent(stockId, run, step, price))))))
@@ -1046,7 +1233,7 @@ class InfrastructureIT {
     }
 
     private String ruleIndexKey(long stockId) {
-        return "pricepulse:rules:{" + stockId + "}";
+        return com.ezra.pricepulse.matching.RuleIndex.key(stockId);
     }
 
     private long insertStock(String symbol) {

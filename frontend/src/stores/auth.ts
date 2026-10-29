@@ -48,5 +48,9 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(AUTH_STORAGE_KEY)
   }
 
-  return { session, authenticated, login, register, logout, clear }
+  function syncFromStorage() {
+    session.value = restore()
+  }
+
+  return { session, authenticated, login, register, logout, clear, syncFromStorage }
 })

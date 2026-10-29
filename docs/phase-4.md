@@ -91,6 +91,8 @@ Lua 写入时先移除旧标记，完整更新后才写新标记；即使脚本�
 
 新增接口 `GET /api/alert-rules/{ruleId}/triggers?limit=100`，要求 JWT。查询同时约束当前用户 ID；不属于自己的规则返回空列表，自己已删除规则的历史仍可查看。行情响应新增 `matching`，包含候选数量、触发数量与重新激活数量，重复或丢弃行情不再次匹配。
 
+行情实验台扩展：`POST /api/market/simulate` 和单股票 `/replay` 可选传入 `ruleId`。只有属于当前用户及目标股票的规则才允许观察；有效点的 `observation` 返回匹配前后状态、实际规则阈值、`TRIGGERED / REARMED / NONE`、版本和真实触发 ID。观察读数与匹配共享股票行锁及事务，不根据前端价格穿越推测是否触发。没有选择规则、重复或丢弃行情时，`observation=null`。不指定规则的原有调用方式保持不变。
+
 ## 验收
 
 真实 MySQL/Redis 测试覆盖：

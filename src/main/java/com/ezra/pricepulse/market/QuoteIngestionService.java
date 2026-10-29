@@ -11,7 +11,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,24 +30,37 @@ public class QuoteIngestionService {
     private final MarketProperties properties;
     private final Clock clock;
     private final AlertEvaluationService evaluation;
+    private final MarketDataMapper data;
 
     public QuoteIngestionService(
             QuoteEventMapper quoteEventMapper,
             StockMapper stockMapper,
             MarketProperties properties,
             Clock clock,
-            AlertEvaluationService evaluation) {
+            AlertEvaluationService evaluation,
+            MarketDataMapper data) {
         this.quoteEventMapper = quoteEventMapper;
         this.stockMapper = stockMapper;
         this.properties = properties;
         this.clock = clock;
         this.evaluation = evaluation;
+        this.data = data;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public QuoteResult ingest(QuoteCandidate candidate, QuoteIngestionPolicy policy) {
-        candidate = new QuoteCandidate(candidate.eventKey(), candidate.stockId(), candidate.price(),
-                candidate.eventTime().truncatedTo(ChronoUnit.MICROS), candidate.source(), candidate.sequenceNo());
+        return ingest(candidate, policy, null);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public QuoteResult ingest(QuoteCandidate candidate, QuoteIngestionPolicy policy, RuleTraceSelection trace) {
+        if (policy != QuoteIngestionPolicy.LIVE) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "Legacy replay and simulation cannot enter the real-market write pipeline");
+        }
+        java.time.Instant received = candidate.receivedAt() == null ? clock.instant() : candidate.receivedAt();
+        LocalDateTime receivedAt = MarketTime.utc(received);
+        long eventNs = MarketTime.nanos(candidate.eventTime().toInstant(ZoneOffset.UTC));
         Stock stock = stockMapper.findActiveByIdForUpdate(candidate.stockId());
         if (stock == null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Stock was not found");
@@ -61,6 +73,7 @@ public class QuoteIngestionService {
         }
 
         QuoteEvent event = buildEvent(candidate, price);
+        event.setReceivedAt(receivedAt);
         try {
             quoteEventMapper.insert(event);
         } catch (DuplicateKeyException exception) {
@@ -81,18 +94,34 @@ public class QuoteIngestionService {
             }
         }
 
-        if (stock.latestQuoteAt() != null && !candidate.eventTime().isAfter(stock.latestQuoteAt())) {
+        var state = data.streamState(stock.id());
+        boolean sameSource = state != null && state.provider().equals(candidate.provider()) && state.feed().equals(candidate.feed());
+        Long watermark = null;
+        if (sameSource) watermark = state.eventTimeNs();
+        else if ("INTERNAL".equals(candidate.provider()) && stock.latestQuoteAt()!=null)
+            watermark = MarketTime.nanos(stock.latestQuoteAt().toInstant(ZoneOffset.UTC));
+        // Equal event timestamps can contain distinct trades; identity dedup happens before ordering.
+        if (watermark != null && eventNs < watermark) {
             return discard(
                     event, stock.latestPrice(), QuoteOutcome.DISCARDED_OUT_OF_ORDER, OUT_OF_ORDER);
         }
 
-        MatchingResult matched = evaluation.evaluate(stock, event.getId(), price, candidate.eventTime());
-        if (stockMapper.updateLatestQuote(stock.id(), price, candidate.eventTime()) != 1
-                || quoteEventMapper.markProcessed(event.getId()) != 1) {
+        var before = trace == null ? null : evaluation.observeRule(trace.userId(), trace.ruleId(), stock.id());
+        boolean baseline = "ALPACA".equals(candidate.provider()) && (!sameSource
+                || !state.continuityId().equals(candidate.continuityId()));
+        event.setAcceptedSequence(state == null ? 1L : state.acceptedSequence()+1);
+        event.setProcessedAt(MarketTime.utc(clock.instant()));
+        event.setBaselineReason(baseline ? (candidate.gapReason()==null ? "STARTUP_OR_RECONNECT" : candidate.gapReason()) : null);
+        MatchingResult matched = evaluation.evaluate(stock, event.getId(), price, event.getEventTime(), baseline);
+        data.saveStreamState(new MarketDataModels.StreamState(stock.id(),candidate.provider(),candidate.feed(),eventNs,
+                event.getAcceptedSequence(),candidate.continuityId(),receivedAt,event.getProcessedAt()));
+        if (stockMapper.updateLatestQuote(stock.id(), price, event.getEventTime()) != 1
+                || quoteEventMapper.complete(event) != 1) {
             throw new BusinessException(ErrorCode.CONFLICT, "Quote state changed concurrently");
         }
         return new QuoteResult(event.getId(), event.getEventKey(), stock.id(), stock.latestPrice(),
-                price, candidate.eventTime(), QuoteOutcome.PROCESSED, null, matched);
+                price, candidate.eventTime(), QuoteOutcome.PROCESSED, null, matched,
+                evaluation.observation(before, event.getId()));
     }
 
     private QuoteEvent buildEvent(QuoteCandidate candidate, BigDecimal price) {
@@ -100,9 +129,13 @@ public class QuoteIngestionService {
         event.setEventKey(candidate.eventKey());
         event.setStockId(candidate.stockId());
         event.setPrice(price);
-        event.setEventTime(candidate.eventTime());
+        event.setEventTime(MarketTime.utc(candidate.eventTime().toInstant(ZoneOffset.UTC)));
+        event.setEventTimeNs(MarketTime.nanos(candidate.eventTime().toInstant(ZoneOffset.UTC)));
+        event.setProvider(candidate.provider());
+        event.setFeed(candidate.feed());
         event.setSource(candidate.source());
         event.setSequenceNo(candidate.sequenceNo());
+        event.setOriginType("REAL");
         return event;
     }
 
@@ -123,8 +156,12 @@ public class QuoteIngestionService {
             BigDecimal normalizedPrice,
             BigDecimal previousPrice) {
         boolean samePayload = event.getStockId() == candidate.stockId()
+                && "REAL".equals(event.getOriginType())
                 && event.getPrice().compareTo(normalizedPrice) == 0
-                && event.getEventTime().equals(candidate.eventTime())
+                && (event.getEventTimeNs() == null ? event.getEventTime().equals(MarketTime.utc(candidate.eventTime().toInstant(ZoneOffset.UTC)))
+                    : event.getEventTimeNs() == MarketTime.nanos(candidate.eventTime().toInstant(ZoneOffset.UTC)))
+                && (event.getProvider() == null || event.getProvider().equals(candidate.provider()))
+                && (event.getFeed() == null || event.getFeed().equals(candidate.feed()))
                 && event.getSource().equals(candidate.source())
                 && Objects.equals(event.getSequenceNo(), candidate.sequenceNo());
         if (!samePayload) {

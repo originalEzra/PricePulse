@@ -37,8 +37,15 @@ public class AlertEvaluationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime) {
+        return evaluate(stock, quoteId, price, eventTime, false);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime, boolean baseline) {
         BigDecimal previous = stock.latestQuoteAt() == null ? null : stock.latestPrice();
-        List<Long> ids = index.candidates(stock, previous, price);
+        // Baselines cannot trigger ACTIVE rules. Cooldown rearming only needs the new price.
+        if (baseline) previous = price;
+        List<Long> ids = baseline ? rules.cooldownIds(stock.id()) : index.candidates(stock, previous, price);
         if (ids.isEmpty()) {
             return MatchingResult.empty();
         }
@@ -52,9 +59,10 @@ public class AlertEvaluationService {
                 if (previous == null) {
                     continue;
                 }
-                if (rule.getStatus() == AlertRuleStatus.ACTIVE && crosses(rule, previous, price)) {
-                    AlertRuleStatus target = rule.getTriggerMode() == AlertTriggerMode.ONCE
-                            ? AlertRuleStatus.COMPLETED : AlertRuleStatus.COOLDOWN;
+                var decision = RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),
+                        rule.getStatus(), previous, price);
+                if (decision.kind() == RuleTransitionEngine.Kind.TRIGGERED) {
+                    AlertRuleStatus target = decision.target();
                     requireTransition(rule, target, eventTime);
                     recordTrigger(rule, quoteId, price, eventTime);
                     rule.setStatus(target);
@@ -62,7 +70,7 @@ public class AlertEvaluationService {
                     rule.setVersion(rule.getVersion() + 1);
                     changed.add(rule);
                     triggered++;
-                } else if (rule.getStatus() == AlertRuleStatus.COOLDOWN && rearms(rule, price)) {
+                } else if (decision.kind() == RuleTransitionEngine.Kind.REARMED) {
                     requireTransition(rule, AlertRuleStatus.ACTIVE, null);
                     rule.setStatus(AlertRuleStatus.ACTIVE);
                     rule.setVersion(rule.getVersion() + 1);
@@ -90,17 +98,37 @@ public class AlertEvaluationService {
         }).toList();
     }
 
-    private boolean crosses(AlertRule rule, BigDecimal previous, BigDecimal current) {
-        BigDecimal threshold = rule.getThresholdPrice();
-        return rule.getDirection() == AlertDirection.ABOVE
-                ? previous.compareTo(threshold) < 0 && current.compareTo(threshold) >= 0
-                : previous.compareTo(threshold) > 0 && current.compareTo(threshold) <= 0;
+    public void requireObservedRule(long userId, long ruleId, long stockId) {
+        AlertRule rule = rules.findOwned(ruleId, userId);
+        if (rule == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Rule was not found");
+        }
+        if (rule.getStockId() != stockId) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Observed rule must belong to this stock");
+        }
     }
 
-    private boolean rearms(AlertRule rule, BigDecimal current) {
-        return rule.getDirection() == AlertDirection.ABOVE
-                ? current.compareTo(rule.getRearmPrice()) <= 0
-                : current.compareTo(rule.getRearmPrice()) >= 0;
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AlertRule observeRule(long userId, long ruleId, long stockId) {
+        AlertRule rule = rules.findOwned(ruleId, userId);
+        return rule != null && rule.getStockId() == stockId ? rule : null;
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public RuleObservation observation(AlertRule before, long quoteId) {
+        if (before == null) return null;
+        AlertRule after = observeRule(before.getUserId(), before.getId(), before.getStockId());
+        if (after == null) return null;
+        // The stock row lock is shared by matching and rule edits: both reads describe this quote's transaction.
+        Long triggerId = before.getStatus() == AlertRuleStatus.ACTIVE
+                && (after.getStatus() == AlertRuleStatus.COOLDOWN || after.getStatus() == AlertRuleStatus.COMPLETED)
+                ? triggers.findIdForQuote(before.getId(), quoteId) : null;
+        String event = triggerId != null ? "TRIGGERED"
+                : before.getStatus() == AlertRuleStatus.COOLDOWN && after.getStatus() == AlertRuleStatus.ACTIVE
+                ? "REARMED" : "NONE";
+        return new RuleObservation(before.getId(), before.getName(), before.getDirection(),
+                before.getThresholdPrice(), before.getRearmPrice(), before.getTriggerMode(),
+                before.getStatus(), after.getStatus(), event, triggerId, after.getVersion());
     }
 
     private void requireTransition(AlertRule rule, AlertRuleStatus target, LocalDateTime triggeredAt) {

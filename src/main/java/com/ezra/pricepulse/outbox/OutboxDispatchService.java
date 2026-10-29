@@ -27,6 +27,7 @@ public class OutboxDispatchService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<OutboxEvent> claimBatch() {
+        mapper.quarantineLegacy();
         LocalDateTime now = now();
         LocalDateTime leaseCutoff = now.minus(properties.getLeaseDuration());
         mapper.failExpiredExhaustedLeases(leaseCutoff, properties.getMaxAttempts(), now);

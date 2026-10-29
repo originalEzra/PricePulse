@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -50,6 +52,11 @@ public class GlobalExceptionHandler {
         ErrorCode code = ErrorCode.MALFORMED_REQUEST;
         return ResponseEntity.status(code.status())
                 .body(ApiResponse.failure(ApiError.of(code.name(), code.defaultMessage())));
+    }
+
+    @ExceptionHandler({ServletRequestBindingException.class,MethodArgumentTypeMismatchException.class})
+    ResponseEntity<ApiResponse<Void>> handleInvalidRequestBinding() {
+        return validationFailure(List.of());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

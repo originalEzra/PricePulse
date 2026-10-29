@@ -4,5 +4,6 @@ public enum OutboxStatus {
     PENDING,
     SENDING,
     SENT,
-    FAILED
+    FAILED,
+    QUARANTINED
 }

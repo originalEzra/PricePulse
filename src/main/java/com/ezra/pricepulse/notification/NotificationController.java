@@ -34,6 +34,16 @@ public class NotificationController {
         return ApiResponse.success(service.list(userId, status, limit));
     }
 
+    @GetMapping("/feed")
+    public ApiResponse<NotificationFeedResponse> feed(@CurrentUserId Long userId) {
+        return ApiResponse.success(service.feed(userId));
+    }
+
+    @PostMapping("/read-all")
+    public ApiResponse<NotificationReadAllResponse> markAllRead(@CurrentUserId Long userId) {
+        return ApiResponse.success(service.markAllRead(userId));
+    }
+
     @PostMapping("/{notificationId}/read")
     public ApiResponse<NotificationResponse> markRead(
             @CurrentUserId Long userId,
