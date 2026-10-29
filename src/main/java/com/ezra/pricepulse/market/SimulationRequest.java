@@ -19,5 +19,6 @@ public record SimulationRequest(
         long seed,
         @NotNull @DecimalMin(value = "0", inclusive = false) @DecimalMax("0.2") BigDecimal stepRatio,
         @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal initialPrice,
-        @NotNull LocalDateTime startTime) {
+        @NotNull LocalDateTime startTime,
+        @Positive Long ruleId) {
 }

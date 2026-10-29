@@ -22,6 +22,10 @@
                next_retry_at, last_error, locked_at, locked_by, created_at, published_at
         FROM outbox_events
         WHERE attempts &lt; #{maxAttempts}
+          AND (event_type != 'ALERT_TRIGGERED' OR EXISTS (
+              SELECT 1 FROM alert_triggers t JOIN quote_events q ON q.id = t.quote_event_id
+              WHERE t.id = outbox_events.aggregate_id AND q.origin_type = 'REAL'
+          ))
           AND (
             (status IN ('PENDING', 'FAILED') AND next_retry_at &lt;= #{now})
             OR (status = 'SENDING' AND locked_at &lt;= #{leaseCutoff})
@@ -30,6 +34,16 @@
         LIMIT #{limit}
         FOR UPDATE SKIP LOCKED
     </select>
+
+    <update id="quarantineLegacy">
+        UPDATE outbox_events o
+        JOIN alert_triggers t ON t.id = o.aggregate_id
+        JOIN quote_events q ON q.id = t.quote_event_id
+        SET o.status = 'QUARANTINED', o.locked_at = NULL, o.locked_by = NULL,
+            o.last_error = 'LEGACY source cannot enter real notification delivery'
+        WHERE o.aggregate_type = 'ALERT_TRIGGER' AND o.event_type = 'ALERT_TRIGGERED'
+          AND o.status IN ('PENDING', 'FAILED', 'SENDING') AND q.origin_type != 'REAL'
+    </update>
 
     <update id="claim">
         UPDATE outbox_events

@@ -8,9 +8,12 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface OutboxMapper {
+    int quarantineLegacy();
     @Insert("""
             INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
-            VALUES ('ALERT_TRIGGER', #{triggerId}, 'ALERT_TRIGGERED', #{payload})
+            SELECT 'ALERT_TRIGGER', #{triggerId}, 'ALERT_TRIGGERED', #{payload}
+            FROM alert_triggers t JOIN quote_events q ON q.id=t.quote_event_id
+            WHERE t.id=#{triggerId} AND q.origin_type='REAL'
             """)
     int insertAlertTriggered(@Param("triggerId") long triggerId, @Param("payload") String payload);
 

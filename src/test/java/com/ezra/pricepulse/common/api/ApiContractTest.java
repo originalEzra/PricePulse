@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 class ApiContractTest {
@@ -63,9 +64,16 @@ class ApiContractTest {
                 .andExpect(jsonPath("$.error.message").value("Request body is malformed"));
     }
 
+    @Test void missingMandatoryHeaderUses400WithoutBindingInternals() throws Exception {
+        mvc.perform(get("/test-api/header")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error.message").value("Request validation failed"));
+    }
+
     @RestController
     @RequestMapping("/test-api")
     static class TestController {
+        @GetMapping("/header") void requiredHeader(@RequestHeader("Idempotency-Key") String ignored) {}
         @GetMapping("/conflict")
         void conflict() {
             throw new BusinessException(ErrorCode.CONFLICT, "Rule state changed");

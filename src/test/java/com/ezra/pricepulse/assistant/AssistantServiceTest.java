@@ -9,6 +9,8 @@ import com.ezra.pricepulse.stock.StockMapper;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,6 +18,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
 
 class AssistantServiceTest {
 
@@ -28,7 +32,7 @@ class AssistantServiceTest {
         when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock()));
         var service = new AssistantService(generator, stockMapper);
 
-        AlertDraftResponse response = service.draft(new AlertDraftRequest("涨到 100 提醒我"));
+        AlertDraftResponse response = service.draft(new AlertDraftRequest("demo001 涨到 100 提醒我"));
 
         assertThat(response.ready()).isTrue();
         assertThat(response.clarificationQuestion()).isNull();
@@ -36,6 +40,112 @@ class AssistantServiceTest {
         assertThat(response.draft().stockSymbol()).isEqualTo("DEMO001");
         assertThat(response.draft().thresholdPrice()).isEqualByComparingTo("100.0000");
         assertThat(response.draft().triggerMode()).isEqualTo(AlertTriggerMode.ONCE);
+        verify(stockMapper, never()).findActiveByName(any(), any());
+        verify(stockMapper, never()).findActiveByFragment(any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"001", "Technology", "demo tech"})
+    void resolvesAUniqueNameOrCodeFragment(String reference) {
+        StockMapper mapper = mock(StockMapper.class);
+        when(mapper.findActiveByFragment("%" + reference + "%", null)).thenReturn(List.of(stock()));
+
+        var response = new AssistantService(text -> draftFor(reference, ""), mapper)
+                .draft(new AlertDraftRequest(reference + " 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isTrue();
+        assertThat(response.draft().stockSymbol()).isEqualTo("DEMO001");
+        assertThat(response.draft().stockName()).isEqualTo("Demo Technology");
+    }
+
+    @Test
+    void prefersAnExactNameOverPartialMatches() {
+        StockMapper mapper = mock(StockMapper.class);
+        when(mapper.findActiveByName("Demo Technology", null)).thenReturn(List.of(stock()));
+
+        var response = new AssistantService(text -> draftFor("Demo Technology", ""), mapper)
+                .draft(new AlertDraftRequest("Demo Technology 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isTrue();
+        assertThat(response.draft().stockId()).isEqualTo(1L);
+        verify(mapper, never()).findActiveByFragment(any(), any());
+    }
+
+    @Test
+    void refusesAFullSymbolInventedByTheModelFromAPartialReference() {
+        StockMapper mapper = mock(StockMapper.class);
+
+        var response = new AssistantService(text -> draftFor("DEMO001", ""), mapper)
+                .draft(new AlertDraftRequest("001 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isFalse();
+        assertThat(response.draft()).isNull();
+        assertThat(response.clarificationQuestion()).contains("名称或代码片段");
+        verifyNoInteractions(mapper);
+    }
+
+    @Test
+    void listsCandidatesInsteadOfChoosingAnAmbiguousFragment() {
+        StockMapper mapper = mock(StockMapper.class);
+        when(mapper.findActiveByFragment("%001%", null)).thenReturn(List.of(
+                stock(), stock(2, "ALT001", "Other Technology", "OTHER")));
+
+        var response = new AssistantService(text -> draftFor("001", ""), mapper)
+                .draft(new AlertDraftRequest("001 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isFalse();
+        assertThat(response.draft()).isNull();
+        assertThat(response.clarificationQuestion())
+                .contains("DEMO001", "Demo Technology", "SIM", "ALT001", "OTHER", "补充");
+    }
+
+    @Test
+    void keepsTheExplicitMarketWhenResolvingAFragment() {
+        StockMapper mapper = mock(StockMapper.class);
+        when(mapper.findActiveByFragment("%001%", "SIM")).thenReturn(List.of(stock()));
+
+        var response = new AssistantService(text -> draftFor("001", "sim"), mapper)
+                .draft(new AlertDraftRequest("SIM 的 001 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isTrue();
+        verify(mapper).findActiveBySymbol("001", "SIM");
+        verify(mapper).findActiveByName("001", "SIM");
+        verify(mapper, never()).findActiveByFragment(any(), org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    void treatsSqlWildcardCharactersAsLiteralStockText() {
+        StockMapper mapper = mock(StockMapper.class);
+        when(mapper.findActiveByFragment("%AC!%!_!!%", null)).thenReturn(List.of(stock()));
+
+        var response = new AssistantService(text -> draftFor("AC%_!", ""), mapper)
+                .draft(new AlertDraftRequest("AC%_! 涨到 100 提醒一次"));
+
+        assertThat(response.ready()).isTrue();
+        verify(mapper).findActiveByFragment("%AC!%!_!!%", null);
+    }
+
+    @Test
+    void asksForAShorterReferenceWithoutSearching() {
+        StockMapper mapper = mock(StockMapper.class);
+
+        var response = new AssistantService(text -> draftFor("A".repeat(129), ""), mapper)
+                .draft(new AlertDraftRequest("查询股票"));
+
+        assertThat(response.ready()).isFalse();
+        verifyNoInteractions(mapper);
+    }
+
+    @Test
+    void doesNotBroadenTheSearchWhenAnExplicitMarketIsInvalid() {
+        StockMapper mapper = mock(StockMapper.class);
+
+        var response = new AssistantService(text -> draftFor("001", "M".repeat(17)), mapper)
+                .draft(new AlertDraftRequest("查询指定市场的股票"));
+
+        assertThat(response.ready()).isFalse();
+        assertThat(response.clarificationQuestion()).contains("市场代码");
+        verifyNoInteractions(mapper);
     }
 
     @Test
@@ -63,7 +173,7 @@ class AssistantServiceTest {
         when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock()));
         var service = new AssistantService(generator, stockMapper);
 
-        AlertDraftResponse response = service.draft(new AlertDraftRequest("每次涨到 100 都提醒"));
+        AlertDraftResponse response = service.draft(new AlertDraftRequest("DEMO001 每次涨到 100 都提醒"));
 
         assertThat(response.ready()).isFalse();
         assertThat(response.clarificationQuestion()).contains("回到多少");
@@ -129,8 +239,17 @@ class AssistantServiceTest {
     }
 
     private Stock stock() {
+        return stock(1L, "DEMO001", "Demo Technology", "SIM");
+    }
+
+    private Stock stock(long id, String symbol, String name, String market) {
         return new Stock(
-                1L, "DEMO001", "Demo Technology", "SIM", "USD",
+                id, symbol, name, market, "USD",
                 new BigDecimal("95.0000"), null, "ACTIVE", null, null, "token");
+    }
+
+    private ModelAlertDraft draftFor(String reference, String market) {
+        return new ModelAlertDraft(true, "", reference, market, AlertDirection.ABOVE, "100",
+                AlertTriggerMode.ONCE, "", "", "");
     }
 }

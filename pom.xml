@@ -158,7 +158,7 @@
         </profile>
         <profile>
             <id>integration</id>
-            <properties><integration.includes>**/InfrastructureIT.java</integration.includes></properties>
+            <properties><integration.includes>**/*InfrastructureIT.java</integration.includes></properties>
             <build><plugins><plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
@@ -185,7 +185,7 @@
         </profile>
         <profile>
             <id>ai-live</id>
-            <properties><integration.includes>**/AiLiveIT.java</integration.includes></properties>
+            <properties><integration.includes>**/*AiLiveIT.java</integration.includes></properties>
             <build><plugins><plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>

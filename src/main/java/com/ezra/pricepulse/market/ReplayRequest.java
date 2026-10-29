@@ -2,9 +2,12 @@ package com.ezra.pricepulse.market;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record ReplayRequest(
-        @NotEmpty @Size(max = 1000) List<@Valid QuoteInputRequest> events) {
+        @NotEmpty @Size(max = 1000) List<@Valid QuoteInputRequest> events,
+        @Positive Long ruleId) {
+    public ReplayRequest(List<QuoteInputRequest> events) { this(events, null); }
 }

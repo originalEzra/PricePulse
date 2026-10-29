@@ -3,16 +3,19 @@
 <mapper namespace="com.ezra.pricepulse.market.QuoteEventMapper">
     <insert id="insert" useGeneratedKeys="true" keyProperty="event.id">
         INSERT INTO quote_events (
-            event_key, stock_id, price, event_time, source, sequence_no, processing_status
+            event_key, stock_id, price, event_time, source, sequence_no, processing_status, origin_type, received_at,
+            event_time_ns, provider, feed
         ) VALUES (
             #{event.eventKey}, #{event.stockId}, #{event.price}, #{event.eventTime},
-            #{event.source}, #{event.sequenceNo}, 'RECEIVED'
+            #{event.source}, #{event.sequenceNo}, 'RECEIVED', #{event.originType}, #{event.receivedAt},
+            #{event.eventTimeNs}, #{event.provider}, #{event.feed}
         )
     </insert>
 
     <select id="findByEventKey" resultType="com.ezra.pricepulse.market.QuoteEvent">
         SELECT id, event_key, stock_id, price, event_time, received_at, source,
-               sequence_no, processing_status, discard_reason
+               sequence_no, processing_status, discard_reason, origin_type, event_time_ns, provider, feed,
+               accepted_sequence, processed_at, baseline_reason
         FROM quote_events
         WHERE event_key = #{eventKey}
     </select>
@@ -31,9 +34,9 @@
 
     <select id="listByStock" resultType="com.ezra.pricepulse.market.QuoteEvent">
         SELECT id, event_key, stock_id, price, event_time, received_at, source,
-               sequence_no, processing_status, discard_reason
+               sequence_no, processing_status, discard_reason, origin_type
         FROM quote_events
-        WHERE stock_id = #{stockId}
+        WHERE stock_id = #{stockId} AND origin_type = 'REAL'
         ORDER BY event_time DESC, id DESC
         LIMIT #{limit}
     </select>

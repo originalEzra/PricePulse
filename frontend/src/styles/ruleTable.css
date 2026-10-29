@@ -1,0 +1,20 @@
+.rule-section-head h2 small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.rule-display-hint { margin: 0; padding: 0 24px 12px; font-size: 11px; color: var(--muted); line-height: 1.7; }
+.rule-table-scroll { overflow-x: auto; padding: 0 16px 12px; }
+.rule-table-scroll:focus-visible { outline: 2px solid #55a180; outline-offset: -2px; }
+.rule-table { width: 100%; min-width: 580px; border-collapse: collapse; text-align: left; font-size: 12px; }
+.rule-table caption { padding: 0 8px 12px; text-align: left; font-size: 11px; color: var(--muted); }
+.rule-table th, .rule-table td { padding: 9px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+.rule-table th { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.rule-table input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+.rule-name { display: flex; align-items: flex-start; gap: 7px; min-width: 90px; }
+.rule-name strong { overflow-wrap: anywhere; line-height: 1.6; }
+.rule-name i { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; }
+.rule-direction, .rule-price { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rule-price small, .rule-source small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.rule-table .status-pill { display: inline-grid; gap: 3px; border-radius: 8px; text-align: center; }
+.rule-table .status-pill b { font-size: 10px; }
+.rule-table .status-pill small { font-size: 10px; font-weight: 400; }
+.rule-table .row-actions { flex-wrap: wrap; min-width: 72px; }
+.rule-result { white-space: nowrap; font-size: 11px; color: var(--muted); }
+.rule-result.triggered { color: #197957; font-weight: 600; }

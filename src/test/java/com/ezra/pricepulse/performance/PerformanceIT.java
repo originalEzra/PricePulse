@@ -9,7 +9,6 @@ import com.ezra.pricepulse.auth.AuthService;
 import com.ezra.pricepulse.auth.RegisterRequest;
 import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
-import com.ezra.pricepulse.market.MarketService;
 import com.ezra.pricepulse.market.QuoteInputRequest;
 import com.ezra.pricepulse.market.QuoteOutcome;
 import com.ezra.pricepulse.market.QuoteResult;
@@ -76,10 +75,13 @@ import static org.mockito.Mockito.when;
  * Opt-in experiments. Uses disposable MySQL/Redis and a run-specific topic/group on Compose MQ.
  * No timing thresholds: measured speed is evidence, not a pass/fail assertion about a laptop.
  */
+@org.springframework.context.annotation.Import(com.ezra.pricepulse.market.RealQuoteTestSupport.class)
 @SpringBootTest(classes = PricePulseApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "price-pulse.security.jwt.secret=performance-only-synthetic-jwt-secret-at-least-32-bytes",
         "price-pulse.assistant.enabled=false",
+        "price-pulse.alpaca.enabled=false",
+        "price-pulse.alpaca.business-writes-enabled=false",
         "price-pulse.messaging.enabled=true",
         "price-pulse.messaging.publisher-initial-delay-ms=3600000",
         "price-pulse.messaging.lease-duration=PT1S",
@@ -131,7 +133,7 @@ class PerformanceIT {
     @Autowired StockMapper stocks;
     @Autowired AlertRuleMapper rules;
     @Autowired RuleIndex index;
-    @Autowired MarketService market;
+    @Autowired com.ezra.pricepulse.market.RealQuoteTestSupport.Fixture market;
     @Autowired AuthService auth;
     @Autowired StringRedisTemplate redis;
     @Autowired PlatformTransactionManager transactions;
@@ -326,7 +328,7 @@ class PerformanceIT {
     private double httpQuote(HttpClient client, long stockId, int step) throws Exception {
         var input = event(stockId, step, step % 2 == 0 ? "95.1" : "95");
         String body = json.writeValueAsString(new ReplayRequest(List.of(input)));
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/market/replay"))
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/test/real-quotes/replay"))
                 .timeout(Duration.ofSeconds(15)).header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -510,7 +512,7 @@ class PerformanceIT {
     }
 
     private QuoteResult quote(long stockId, int step, String price) {
-        return market.replay(new ReplayRequest(List.of(event(stockId, step, price)))).results().getFirst();
+        return market.replay(null, new ReplayRequest(List.of(event(stockId, step, price)))).results().getFirst();
     }
 
     private int notificationCount(long stockId) {

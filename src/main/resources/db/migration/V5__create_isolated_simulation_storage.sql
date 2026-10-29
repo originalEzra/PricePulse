@@ -1,0 +1,95 @@
+CREATE TABLE simulation_runs (
+    id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    stock_id BIGINT UNSIGNED NOT NULL,
+    origin_snapshot JSON NOT NULL,
+    history_prefix_snapshot JSON NOT NULL,
+    parameters JSON NOT NULL,
+    seed BIGINT NOT NULL,
+    generator_version VARCHAR(32) NOT NULL,
+    calendar_snapshot JSON NOT NULL,
+    sim_clock DATETIME(6) NOT NULL,
+    sim_clock_ns BIGINT NOT NULL,
+    latest_price DECIMAL(19,4) NOT NULL,
+    next_point_seq BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    last_batch_no BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    version BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    rule_index_token CHAR(36) NOT NULL,
+    start_request_key VARCHAR(128) NOT NULL,
+    start_request_hash CHAR(64) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_simulation_user (user_id),
+    CONSTRAINT fk_simulation_user FOREIGN KEY (user_id) REFERENCES users(id),
+    -- stock_id is validated through an MVCC read. No FK shared lock on the real quote row.
+    CONSTRAINT chk_simulation_price CHECK (latest_price > 0)
+);
+
+CREATE TABLE simulation_rule_snapshots (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    source_rule_id BIGINT UNSIGNED NOT NULL,
+    source_version BIGINT UNSIGNED NOT NULL,
+    config_json JSON NOT NULL,
+    source_status VARCHAR(16) NOT NULL,
+    initial_state VARCHAR(16) NOT NULL,
+    current_state VARCHAR(16) NOT NULL,
+    state_version BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_triggered_at DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_sim_rule_source (run_id, source_rule_id),
+    UNIQUE KEY uk_sim_rule_owner (id, run_id),
+    INDEX idx_sim_rule_state (run_id, current_state, id),
+    CONSTRAINT fk_sim_rule_run FOREIGN KEY (run_id) REFERENCES simulation_runs(id) ON DELETE CASCADE,
+    CONSTRAINT chk_sim_initial CHECK (initial_state IN ('ACTIVE', 'PAUSED')),
+    CONSTRAINT chk_sim_state CHECK (current_state IN ('ACTIVE', 'PAUSED', 'COOLDOWN', 'COMPLETED'))
+);
+
+CREATE TABLE simulation_steps (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    batch_no BIGINT UNSIGNED NOT NULL,
+    request_key VARCHAR(128) NOT NULL,
+    request_hash CHAR(64) NOT NULL,
+    from_clock DATETIME(6) NOT NULL,
+    to_clock DATETIME(6) NOT NULL,
+    from_clock_ns BIGINT NOT NULL,
+    to_clock_ns BIGINT NOT NULL,
+    first_point_seq BIGINT UNSIGNED NOT NULL,
+    last_point_seq BIGINT UNSIGNED NOT NULL,
+    points_json JSON NOT NULL,
+    summary_json JSON NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_sim_step_batch (run_id, batch_no),
+    UNIQUE KEY uk_sim_step_request (run_id, request_key),
+    UNIQUE KEY uk_sim_step_owner (id, run_id),
+    INDEX idx_sim_step_time (run_id, to_clock, id),
+    CONSTRAINT fk_sim_step_run FOREIGN KEY (run_id) REFERENCES simulation_runs(id) ON DELETE CASCADE,
+    CONSTRAINT chk_sim_step_time CHECK (to_clock_ns > from_clock_ns),
+    CONSTRAINT chk_sim_step_seq CHECK (last_point_seq >= first_point_seq)
+);
+
+CREATE TABLE simulation_rule_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    run_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    step_id BIGINT UNSIGNED NOT NULL,
+    snapshot_rule_id BIGINT UNSIGNED NOT NULL,
+    point_seq BIGINT UNSIGNED NOT NULL,
+    event_type VARCHAR(16) NOT NULL,
+    event_time DATETIME(6) NOT NULL,
+    event_time_ns BIGINT NOT NULL,
+    price DECIMAL(19,4) NOT NULL,
+    from_state VARCHAR(16) NOT NULL,
+    to_state VARCHAR(16) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_sim_event (run_id, snapshot_rule_id, point_seq, event_type),
+    INDEX idx_sim_event_time (run_id, event_time, id),
+    CONSTRAINT fk_sim_event_step FOREIGN KEY (step_id, run_id)
+        REFERENCES simulation_steps(id, run_id) ON DELETE CASCADE,
+    CONSTRAINT fk_sim_event_rule FOREIGN KEY (snapshot_rule_id, run_id)
+        REFERENCES simulation_rule_snapshots(id, run_id) ON DELETE CASCADE,
+    CONSTRAINT chk_sim_event_type CHECK (event_type IN ('TRIGGERED', 'REARMED')),
+    CONSTRAINT chk_sim_event_price CHECK (price > 0)
+);

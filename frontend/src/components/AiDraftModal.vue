@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { assistantApi } from '../api'
 import { errorMessage } from '../api/client'
 import type { AlertRuleDraft } from '../api/types'
+import { formatPrice } from '../utils/format'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; useDraft: [draft: AlertRuleDraft] }>()
@@ -84,10 +85,10 @@ const directionLabel = (value: AlertRuleDraft['direction']) => value === 'ABOVE'
               maxlength="1000"
               rows="5"
               :disabled="loading"
-              placeholder="例如：当 DEMO001 上涨到 100 时提醒我，只提醒一次。"
+              placeholder="例如：001 涨到 100 时提醒我，只提醒一次。"
               required
             />
-            <small>AI 只负责整理草稿，不会直接创建规则或提供投资建议。</small>
+            <small>支持股票名称或代码片段，多只匹配时会请你补充。AI 整理草稿后，由你确认保存。</small>
           </label>
 
           <div v-if="clarification" class="clarification-card">
@@ -101,9 +102,9 @@ const directionLabel = (value: AlertRuleDraft['direction']) => value === 'ABOVE'
               <div><strong>{{ draft.stockSymbol }} · {{ draft.stockName }}</strong><small>{{ draft.name }}</small></div>
             </div>
             <dl>
-              <div><dt>条件</dt><dd>{{ directionLabel(draft.direction) }} {{ Number(draft.thresholdPrice).toLocaleString('zh-CN', { maximumFractionDigits: 4 }) }}</dd></div>
+              <div><dt>条件</dt><dd>{{ directionLabel(draft.direction) }} {{ formatPrice(draft.thresholdPrice) }}</dd></div>
               <div><dt>模式</dt><dd>{{ draft.triggerMode === 'ONCE' ? '仅提醒一次' : '可重复提醒' }}</dd></div>
-              <div v-if="draft.rearmPrice != null"><dt>重新激活</dt><dd>{{ Number(draft.rearmPrice).toLocaleString('zh-CN', { maximumFractionDigits: 4 }) }}</dd></div>
+              <div v-if="draft.rearmPrice != null"><dt>重新激活</dt><dd>{{ formatPrice(draft.rearmPrice) }}</dd></div>
             </dl>
             <p v-if="draft.note">{{ draft.note }}</p>
           </div>

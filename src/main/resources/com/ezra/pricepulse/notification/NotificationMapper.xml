@@ -11,6 +11,7 @@
         <result property="triggerPrice" column="trigger_price"/>
         <result property="eventTime" column="event_time"/>
         <result property="ruleSnapshot" column="rule_snapshot"/>
+        <result property="originType" column="origin_type"/>
     </resultMap>
 
     <resultMap id="notificationMap" type="com.ezra.pricepulse.notification.Notification">
@@ -41,6 +42,7 @@
         FROM notifications n
         JOIN alert_triggers t ON t.id = n.trigger_id
         JOIN alert_rules r ON r.id = t.rule_id
+        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
     </sql>
 
     <select id="findDelivery" resultMap="deliveryMap">
@@ -48,9 +50,10 @@
                CAST(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockId')) AS UNSIGNED) AS stock_id,
                JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')) AS stock_symbol,
                JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')) AS stock_name,
-               t.trigger_price, t.event_time, t.rule_snapshot
+               t.trigger_price, t.event_time, t.rule_snapshot, q.origin_type
         FROM alert_triggers t
         JOIN alert_rules r ON r.id = t.rule_id
+        JOIN quote_events q ON q.id = t.quote_event_id
         WHERE t.id = #{triggerId}
     </select>
 
@@ -73,9 +76,28 @@
         LIMIT #{limit}
     </select>
 
+    <select id="countOwned" resultType="com.ezra.pricepulse.notification.NotificationCounts">
+        SELECT COUNT(*) AS total_count,
+               COALESCE(SUM(CASE WHEN n.status = 'UNREAD' THEN 1 ELSE 0 END), 0) AS unread_count
+        FROM notifications n
+        JOIN alert_triggers t ON t.id = n.trigger_id
+        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        WHERE n.user_id = #{userId}
+    </select>
+
     <update id="markRead">
-        UPDATE notifications
-        SET status = 'READ', read_at = COALESCE(read_at, #{readAt})
-        WHERE id = #{notificationId} AND user_id = #{userId}
+        UPDATE notifications n
+        JOIN alert_triggers t ON t.id = n.trigger_id
+        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        SET n.status = 'READ', n.read_at = COALESCE(n.read_at, #{readAt})
+        WHERE n.id = #{notificationId} AND n.user_id = #{userId}
+    </update>
+
+    <update id="markAllRead">
+        UPDATE notifications n
+        JOIN alert_triggers t ON t.id = n.trigger_id
+        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        SET n.status = 'READ', n.read_at = COALESCE(n.read_at, #{readAt})
+        WHERE n.user_id = #{userId} AND n.status = 'UNREAD'
     </update>
 </mapper>

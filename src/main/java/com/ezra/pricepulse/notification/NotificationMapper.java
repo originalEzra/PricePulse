@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface NotificationMapper {
+    NotificationCounts countOwned(long userId);
+
     AlertTriggerDelivery findDelivery(long triggerId);
 
     int insertIfAbsent(
@@ -26,4 +28,6 @@ public interface NotificationMapper {
             @Param("userId") long userId,
             @Param("notificationId") long notificationId,
             @Param("readAt") LocalDateTime readAt);
+
+    int markAllRead(@Param("userId") long userId, @Param("readAt") LocalDateTime readAt);
 }

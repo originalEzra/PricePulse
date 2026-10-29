@@ -20,5 +20,7 @@ class ModelAlertDraftSchemaTest {
                 .contains(
                         "complete", "clarificationQuestion", "symbol", "market", "direction",
                         "thresholdPrice", "triggerMode", "rearmPrice", "name", "note");
+        assertThat(schema.path("properties").path("symbol").path("description").asText())
+                .contains("fragment", "Do not expand");
     }
 }

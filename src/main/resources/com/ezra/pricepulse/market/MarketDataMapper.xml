@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ezra.pricepulse.market.MarketDataMapper">
+  <insert id="saveBars">
+    INSERT INTO market_price_bars(stock_id,provider,feed,resolution,adjustment,interval_start,interval_end,
+      open_price,high_price,low_price,close_price,revision,fetched_at) VALUES
+    <foreach collection="bars" item="b" separator=",">
+      (#{b.stockId},'ALPACA','iex','1Min','raw',#{b.intervalStart},#{b.intervalEnd},
+       #{b.openPrice},#{b.highPrice},#{b.lowPrice},#{b.closePrice},1,#{b.fetchedAt})
+    </foreach>
+    AS v ON DUPLICATE KEY UPDATE
+      revision=market_price_bars.revision + IF(market_price_bars.open_price &lt;&gt; v.open_price
+        OR market_price_bars.high_price &lt;&gt; v.high_price OR market_price_bars.low_price &lt;&gt; v.low_price
+        OR market_price_bars.close_price &lt;&gt; v.close_price,1,0),
+      open_price=v.open_price,high_price=v.high_price,low_price=v.low_price,close_price=v.close_price,fetched_at=v.fetched_at
+  </insert>
+</mapper>

@@ -46,6 +46,34 @@ public interface StockMapper {
     List<Stock> findActiveBySymbol(@Param("symbol") String symbol, @Param("market") String market);
 
     @Select("""
+            <script>
+            SELECT id, symbol, name, market, currency, latest_price, latest_quote_at,
+                   status, created_at, updated_at, rule_index_token
+            FROM stocks
+            WHERE UPPER(name) = UPPER(#{name}) AND status = 'ACTIVE'
+            <if test='market != null'>AND market = #{market}</if>
+            ORDER BY market, symbol, id
+            LIMIT 6
+            </script>
+            """)
+    List<Stock> findActiveByName(@Param("name") String name, @Param("market") String market);
+
+    @Select("""
+            <script>
+            SELECT id, symbol, name, market, currency, latest_price, latest_quote_at,
+                   status, created_at, updated_at, rule_index_token
+            FROM stocks
+            WHERE status = 'ACTIVE'
+              AND (UPPER(symbol) LIKE UPPER(#{pattern}) ESCAPE '!'
+                   OR UPPER(name) LIKE UPPER(#{pattern}) ESCAPE '!')
+            <if test='market != null'>AND market = #{market}</if>
+            ORDER BY market, symbol, id
+            LIMIT 6
+            </script>
+            """)
+    List<Stock> findActiveByFragment(@Param("pattern") String pattern, @Param("market") String market);
+
+    @Select("""
             SELECT id, symbol, name, market, currency, latest_price, latest_quote_at,
                    status, created_at, updated_at, rule_index_token
             FROM stocks

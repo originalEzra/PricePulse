@@ -35,6 +35,8 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/**", "/api/system/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/market/quotes", "/api/market/simulate",
+                                "/api/market/replay").denyAll()
                         .requestMatchers(HttpMethod.GET, "/api/stocks", "/api/stocks/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions

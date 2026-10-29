@@ -39,7 +39,7 @@ a { color: inherit; text-decoration: none; }
 .stock-name, .stock-price { display: grid; }.stock-name small, .stock-price small { color: var(--muted); font-size: 11px; }.stock-price { text-align: right; }
 .market-panel { padding-bottom: 12px; }.market-summary { display: flex; justify-content: space-between; padding: 25px 28px 6px; }.ticker-large { color: #9aa09f; margin: 1px 0; font-weight: 600; }.latest-price { display: grid; text-align: right; }.latest-price span, .latest-price small { color: var(--muted); font-size: 11px; }.latest-price strong { font-size: 30px; letter-spacing: -1px; }
 .chart-meta { display: flex; justify-content: space-between; padding: 10px 28px 0; color: var(--muted); font-size: 11px; }.positive { color: #168b65; }.negative { color: #d95950; }
-.sparkline { color: #39aa83; height: 185px; padding: 10px 22px 0; }.sparkline.falling { color: #e36b60; }.sparkline svg { width: 100%; height: 100%; overflow: visible; }.chart-empty { height: 100%; display: grid; place-items: center; border-bottom: 1px dashed var(--line); color: #a0a4a3; }
+.chart-empty { height: 100%; display: grid; place-items: center; border-bottom: 1px dashed var(--line); color: #a0a4a3; }
 .rule-section-head { border-top: 1px solid var(--line); padding-top: 20px; }.text-button { color: #167b5e; border: 0; background: transparent; font-weight: 700; }
 .rule-list { border-top: 1px solid #ecece7; }.rule-row { display: grid; grid-template-columns: 38px 1fr auto auto; gap: 12px; align-items: center; padding: 14px 24px; border-bottom: 1px solid #ecece7; }
 .direction-dot { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #177c5c; background: #e1f4ec; font-weight: 700; }.direction-dot.below { color: #ca544a; background: #ffebe8; }

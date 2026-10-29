@@ -14,6 +14,29 @@ public class QuoteEvent {
     private Long sequenceNo;
     private QuoteProcessingStatus processingStatus;
     private String discardReason;
+    private String originType;
+    private Long eventTimeNs;
+    private String provider;
+    private String feed;
+    private Long acceptedSequence;
+    private LocalDateTime processedAt;
+    private String baselineReason;
+
+    public Long getEventTimeNs() { return eventTimeNs; }
+    public void setEventTimeNs(Long v) { eventTimeNs=v; }
+    public String getProvider() { return provider; }
+    public void setProvider(String v) { provider=v; }
+    public String getFeed() { return feed; }
+    public void setFeed(String v) { feed=v; }
+    public Long getAcceptedSequence() { return acceptedSequence; }
+    public void setAcceptedSequence(Long v) { acceptedSequence=v; }
+    public LocalDateTime getProcessedAt() { return processedAt; }
+    public void setProcessedAt(LocalDateTime v) { processedAt=v; }
+    public String getBaselineReason() { return baselineReason; }
+    public void setBaselineReason(String v) { baselineReason=v; }
+
+    public String getOriginType() { return originType; }
+    public void setOriginType(String originType) { this.originType = originType; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

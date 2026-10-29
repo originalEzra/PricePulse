@@ -2,6 +2,7 @@
 /logs/
 /.local/
 /.idea/
+/.run/
 /.vscode/
 *.iml
 .DS_Store

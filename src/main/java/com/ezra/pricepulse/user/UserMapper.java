@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Select;
 
 @Mapper
 public interface UserMapper {
+    @Select("SELECT id FROM users WHERE id = #{userId} AND status = 'ACTIVE' FOR UPDATE")
+    Long lockActive(long userId);
     @Select("SELECT COUNT(*) > 0 FROM users WHERE id = #{userId} AND status = 'ACTIVE'")
     boolean existsActive(long userId);
 
