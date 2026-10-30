@@ -36,12 +36,12 @@ mybatis:
 price-pulse:
   alpaca:
     enabled: ${PRICEPULSE_ALPACA_ENABLED:false}
-    # Remains false until the normal-session acceptance step is explicitly authorized.
-    business-writes-enabled: false
+    # Read-only by default; local operators explicitly opt in after reviewing the write scope.
+    business-writes-enabled: ${PRICEPULSE_ALPACA_BUSINESS_WRITES_ENABLED:false}
     key-id: ${APCA_API_KEY_ID:}
     secret-key: ${APCA_API_SECRET_KEY:}
     environment: ${APCA_API_ENV:paper}
-    symbols: [AAPL, MSFT, NVDA, AMZN, GOOGL]
+    symbols: [AAPL, MSFT, NVDA, AMZN, GOOGL, ORCL, SMCI, SOFI, AMD, TSLA, CRWD, MU, INTC, BA, HOOD]
     queue-capacity: 1024
   assistant:
     enabled: ${PRICEPULSE_AI_ENABLED:false}

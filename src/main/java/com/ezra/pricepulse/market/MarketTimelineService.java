@@ -108,7 +108,8 @@ public class MarketTimelineService {
         var rows=data.events(userId,stockId,fromNs,toNs,pos.after(),pos.watermark());
         var page=rows.subList(0,Math.min(100,rows.size())).stream().map(row->{
             try { return new TimelineEvent(row.triggerId(),row.quoteId(),MarketTime.instant(row.eventTimeNs()),
-                    Long.toString(row.eventTimeNs()),row.price().toPlainString(),json.readTree(row.ruleSnapshot()),row.notificationStatus()); }
+                    Long.toString(row.eventTimeNs()),row.price().toPlainString(),json.readTree(row.ruleSnapshot()),row.notificationStatus(),
+                    row.triggerContext()==null ? null : json.readTree(row.triggerContext())); }
             catch(JsonProcessingException e){throw new IllegalStateException("Unreadable trigger snapshot",e);}
         }).toList();
         String next=rows.size()>100?cursors.encode(userId,stockId,fromNs,toNs,page.getLast().triggerId(),pos.watermark()):null;

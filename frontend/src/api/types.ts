@@ -90,6 +90,7 @@ export interface AlertTrigger {
   triggerPrice: number
   eventTime: string
   ruleSnapshot: AlertRule
+  triggerContext?: OpeningGapContext | null
   createdAt: string
 }
 
@@ -172,6 +173,12 @@ export interface TimelinePoint {
 export interface TimelineEvent {
   triggerId: number; quoteId: number; eventTime: string; epochNanos: string; price: string
   ruleSnapshot: AlertRule; notificationStatus: 'PENDING' | 'UNREAD' | 'READ' | 'FAILED'
+  triggerContext?: OpeningGapContext | null
+}
+export interface OpeningGapContext {
+  kind: 'OPENING_GAP'; referencePrice: string; referenceTime: string; referenceEpochNanos: string
+  referenceSource: string; referenceBarId: number; referenceRevision: number; referenceFetchedAt: string
+  sessionDate: string; sessionOpen: string; ruleEffectiveAt: string
 }
 export interface TimelineEventPage { events: TimelineEvent[]; eventCursor: string | null; watermark: string }
 export interface MarketTimeline extends TimelineEventPage {
@@ -180,7 +187,13 @@ export interface MarketTimeline extends TimelineEventPage {
   range: { from: string; to: string; asOf: string; marketTimeZone: string }
   coverage: { requestedFrom: string; requestedTo: string; syncedAt: string } | null
   health: { connection: string; market: 'OPEN' | 'CLOSED'; freshness: string; businessWritesEnabled: boolean
-    lastObservedAt: string | null; lastAcceptedAt: string | null; lastError: string | null }
+    lastObservedAt: string | null; lastAcceptedAt: string | null; lastError: string | null
+    stream?: { connectionAttempts: number; subscriptions: number; sentPings: number; receivedPongs: number; heartbeatTimeouts: number
+      lastPongAt: string | null; lastFailureAt: string | null; lastFailureCode: string | null; lastCloseCode: number | null
+      clientTimingGaps?: number; lastCloseRequestedAt?: string | null; lastCloseSentAt?: string | null
+      recentFailures?: Array<{ at: string; code: string; connectionAttempt: number; lastFrameAt: string | null
+        lastPingAt: string | null; lastPongAt: string | null; schedulerDelayMillis: number | null
+        receiveSilenceMillis: number | null; clockDriftMillis: number | null }> } }
   gaps: Array<{ from: string; to: string; reason: string }>
   sessions: TradingSession[]
   dataQuality: { availableBars: number; displayedBars: number; expectedMinutes: number; unavailableMinutes: number

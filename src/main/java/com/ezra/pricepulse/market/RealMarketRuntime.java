@@ -106,7 +106,7 @@ public class RealMarketRuntime {
     }
     @PreDestroy public void stop() {
         stopped=true;
-        if(stream!=null)stream.close();
+        if(stream!=null)stream.closeAndAwait();
         if(scheduler!=null)scheduler.shutdownNow();
         lanes.values().forEach(MarketQuoteLane::close);
     }

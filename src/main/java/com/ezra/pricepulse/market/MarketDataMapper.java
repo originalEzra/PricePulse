@@ -32,6 +32,13 @@ public interface MarketDataMapper {
         ORDER BY interval_end,id
         """)
     List<Bar> bars(@Param("stockId") long stockId, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+    @Select("""
+        SELECT id,stock_id,interval_start,interval_end,open_price,high_price,low_price,close_price,revision,fetched_at
+        FROM market_price_bars WHERE stock_id=#{stockId} AND provider='ALPACA' AND feed='iex'
+          AND resolution='1Min' AND adjustment='raw' AND interval_start=#{close}-INTERVAL 1 MINUTE
+          AND interval_end=#{close}
+        """)
+    Bar closingBar(@Param("stockId") long stockId, @Param("close") LocalDateTime close);
     @Insert("""
         INSERT INTO market_history_coverage(stock_id,provider,feed,requested_from,requested_to,synced_at)
         VALUES(#{stockId},'ALPACA','iex',#{from},#{to},#{now}) AS v
@@ -51,7 +58,7 @@ public interface MarketDataMapper {
     @Select("""
         SELECT t.id AS trigger_id,q.id AS quote_id,q.event_time_ns,t.trigger_price AS price,t.rule_snapshot,
           CASE WHEN n.id IS NOT NULL THEN n.status
-               WHEN o.status IN ('FAILED','QUARANTINED') THEN 'FAILED' ELSE 'PENDING' END AS notification_status
+               WHEN o.status IN ('FAILED','QUARANTINED') THEN 'FAILED' ELSE 'PENDING' END AS notification_status,t.trigger_context
         FROM alert_triggers t JOIN alert_rules r ON r.id=t.rule_id
         JOIN quote_events q ON q.id=t.quote_event_id
         LEFT JOIN notifications n ON n.trigger_id=t.id AND n.user_id=#{userId}

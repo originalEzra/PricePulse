@@ -20,6 +20,10 @@ public class AlertRule {
     private Long version;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime effectiveAt;
+
+    public LocalDateTime getEffectiveAt() { return effectiveAt; }
+    public void setEffectiveAt(LocalDateTime value) { effectiveAt=value; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

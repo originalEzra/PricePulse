@@ -31,6 +31,13 @@ public final class AlpacaDataClient {
         });
     }
     public Download download(AlpacaProperties properties, Map<String,Long> stocks, Instant from, Instant to) throws Exception {
+        if (stocks.isEmpty() || stocks.size()>MarketUniverse.MAX_SYMBOLS || !to.isAfter(from)
+                || Duration.between(from,to).compareTo(Duration.ofDays(45))>0)
+            throw new IllegalArgumentException("History cache requires 1–15 symbols and at most 45 days");
+        // Provider pagination counts extended-hours rows too, before we retain only regular minutes.
+        // Scale the safety bound with the requested universe/range instead of truncating fifteen stocks at twenty pages.
+        long calendarDays=Duration.between(from,to).toDays()+2;
+        long maxPages=Math.max(20,(calendarDays*1440*stocks.size()+9999)/10000+1);
         var start = from.atZone(MarketTime.NEW_YORK).toLocalDate().minusDays(8);
         var end = to.atZone(MarketTime.NEW_YORK).toLocalDate().plusDays(40);
         String host = properties.getEnvironment().equals("paper") ? "paper-api.alpaca.markets" : "api.alpaca.markets";
@@ -56,7 +63,7 @@ public final class AlpacaDataClient {
                     +"&timeframe=1Min&feed=iex&adjustment=raw&limit=10000&start="+encode(from.toString())+"&end="+encode(to.toString())
                     +(token == null ? "" : "&page_token="+encode(token));
             JsonNode body = transport.get(URI.create("https://data.alpaca.markets/v2/stocks/bars?"+query));
-            if (++pages > 20) throw new IllegalStateException("History pagination exceeded bounded cache range");
+            if (++pages > maxPages) throw new IllegalStateException("History pagination exceeded bounded cache range");
             JsonNode entries = body.required("bars");
             if (!entries.isObject()) throw new IllegalStateException("Invalid history response");
             Iterator<String> names = entries.fieldNames();

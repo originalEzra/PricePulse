@@ -1,6 +1,6 @@
 # V2：接口与时间契约
 
-状态：真实时间线及其事件分页已在 P2 实施；模拟用户 API 已在 P3 实施并验收，见 [P3 记录](v2-phase-3.md)。P2 仍为 PARTIAL，正式行情写入关闭；P4 播放体验未实施。本契约起草于 P0，以最新 V2 产品方案及已确认 D1–D4 决策为准。
+状态：真实时间线、模拟 API、P4／P5 已实施；十五股正式写入及开市提醒闭环已通过本机验收，P2 保留 IEX 关闭遗留项为 PARTIAL。最新运行见[开市记录](v2-p2-live-open-20261030.md)。本契约以最新产品方案及已确认决策为准；2026-10-30 新增开盘跳空的可空事件上下文，加载状态见[策略记录](v2-opening-gap-policy.md)。
 
 ## 公共约定
 
@@ -14,6 +14,8 @@
 - 本文件记录字段职责和操作语义；实现入口为 `MarketTimelineController` 和 `SimulationController`，standalone／mq-it 不开放模拟服务。
 
 ## 真实时间线
+
+真实时间线事件、事件分页及规则触发历史新增可空 `triggerContext`，普通／旧事件为 null；开盘跳空时包含 `kind=OPENING_GAP`、十进制字符串 `referencePrice`、`referenceTime`／字符串 `referenceEpochNanos`、`referenceSource`、`referenceBarId`／`referenceRevision`／`referenceFetchedAt`、`sessionDate`／`sessionOpen`／`ruleEffectiveAt`。这些字段冻结本次比较依据，不替换实际成交的 `price`、`eventTime`、`epochNanos` 或原规则快照。通知使用持久化上下文标记“开盘跳空”，Outbox／MQ 消息协议保持原样。
 
 `GET /api/market/stocks/{stockId}/timeline?window=1D&anchor=<UTC>`
 
@@ -29,6 +31,8 @@
 | thresholds | 当前用户的当前规则配置；明确不是完整历史配置 |
 | events | triggerId、quoteId、eventTime、price、触发时规则快照、通知处理状态 |
 | eventCursor / watermark | 事件独立翻页和固定查询水位，防止翻页时混入后续数据 |
+
+`health.stream` 继续提供累计连接、订阅、Ping／Pong、心跳超时及最近失败／关闭信息。本轮连接诊断追加 `clientTimingGaps`、`lastCloseRequestedAt`、`lastCloseSentAt`、最多 20 项的 `recentFailures`（时间、错误码、连接尝试编号、上次帧／Ping／Pong、可空调度间隔／接收静默／墙钟偏差毫秒值）。`CLIENT_TIMING_GAP` 表示客户端时间不连续，`HEARTBEAT_TIMEOUT` 表示调度仍运行时接收静默；二者都走既有缺口重建基线策略。历史计数和失败不因恢复而清空，不包含供应商原文或认证数据。源码与运行加载状态见[诊断记录](v2-stream-diagnostics-20261030.md)。
 
 `GET /api/market/stocks/{stockId}/timeline/events?from=...&to=...&cursor=...`
 

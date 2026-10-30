@@ -12,6 +12,7 @@ import { completeStockRules, reconcileShownRules, ruleLineColor, shownRuleThresh
 import '../styles/ruleTable.css'
 import { compactNewYorkTime } from '../utils/chartInspection'
 import { applyWatchlistQuote, refreshWatchlistQuotes, type WatchlistQuote } from '../utils/watchlistPrices'
+import { openingGapDetail } from '../utils/openingGap'
 
 const stocks = ref<Stock[]>([])
 const rules = ref<AlertRule[]>([])
@@ -56,11 +57,11 @@ const allEvents = computed(() => [...(timeline.value?.events ?? []), ...extraEve
 const deliveryLabel = { PENDING: '通知待生成', UNREAD: '通知未读', READ: '通知已读', FAILED: '通知投递异常' }
 const chartAnnotations = computed<TimedChartAnnotation[]>(() => allEvents.value.map(event => ({
   id: event.triggerId, eventTime: event.eventTime, price: Number(event.price), kind: event.ruleSnapshot.direction,
-  label: event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发',
+  label: openingGapDetail(event, compactNewYorkTime) ? '开盘跳空' : event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发',
   ruleName: event.ruleSnapshot.name, threshold: event.ruleSnapshot.thresholdPrice,
-  result: `已触发 · ${deliveryLabel[event.notificationStatus]}`, rawPrice: event.price,
+  result: `${openingGapDetail(event, compactNewYorkTime) ? '开盘跳空 · ' : ''}已触发 · ${deliveryLabel[event.notificationStatus]}`, rawPrice: event.price,
   ruleSnapshot: event.ruleSnapshot,
-  detail: `${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
+  detail: `${openingGapDetail(event, compactNewYorkTime) ? openingGapDetail(event, compactNewYorkTime) + ' · ' : ''}${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
 })))
 const connectionLabel: Record<string, string> = { DISABLED: '未连接行情源', CONNECTING: '连接中', SUBSCRIBED: '行情已连接', RECONNECTING: '正在重连', REJECTED: '认证或订阅被拒绝', STOPPED: '行情已停止' }
 const freshnessLabel: Record<string, string> = { MARKET_CLOSED: '正常交易时段已休市', NO_DATA: '尚未收到成交', DELAYED: '成交数据延迟', RECENT_IEX_TRADE: '近期 IEX 成交' }
@@ -256,11 +257,13 @@ onMounted(() => {
       <section class="panel stock-panel">
         <div class="panel-head"><div><p class="eyebrow">WATCHLIST</p><h2>股票列表</h2></div><input v-model="search" class="compact-input" placeholder="搜索代码或名称" /></div>
         <div v-if="loading" class="loading-block">加载行情中…</div>
+        <div class="stock-list" role="region" aria-label="股票报价列表" tabindex="0">
         <button v-for="stock in filteredStocks" :key="stock.id" class="stock-row" :class="{ selected: stock.id === selectedId }" @click="selectStock(stock.id)">
           <span class="ticker-avatar">{{ stock.symbol.slice(0, 2) }}</span>
           <span class="stock-name"><strong>{{ stock.symbol }}</strong><small>{{ stock.name }}</small></span>
           <span class="stock-price" :title="date(stock.latestQuoteAt)"><strong>{{ money(stock.latestPrice) }}</strong><small>{{ stock.currency }}</small></span>
         </button>
+        </div>
         <div v-if="!loading && filteredStocks.length === 0" class="empty-state">没有匹配的股票</div>
         <p v-if="watchlistError" class="watchlist-warning" role="status">{{ watchlistError }}</p>
       </section>
@@ -330,6 +333,7 @@ onMounted(() => {
 .window-tabs button.active { background: white; color: #23785b; box-shadow: 0 1px 5px #193b2310; }
 .market-status, .monitor-status, .market-warning { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .watchlist-warning { margin: 12px 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.stock-list { max-height: 490px; overflow-y: auto; }
 .monitor-status, .market-warning { color: #946a2f; }
 .market-bottom-tools { display: flex; gap: 16px; align-items: start; padding: 0 20px 12px; font-size: 11px; }
 .market-data-details { margin-right: auto; min-width: 0; color: var(--muted); }
@@ -337,5 +341,5 @@ onMounted(() => {
 .rules-panel { margin-top: 14px; }
 .rules-panel .rule-section-head { border-top: 0; padding: 16px 20px 12px; }
 .positive { color: #20815d; } .negative { color: #c45a53; }
-@media (max-width: 980px) { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 980px) { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } .stock-list { max-height: 280px; } }
 </style>

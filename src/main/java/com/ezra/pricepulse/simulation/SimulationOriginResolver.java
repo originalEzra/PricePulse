@@ -24,7 +24,7 @@ public class SimulationOriginResolver {
     public SimulationOriginResolver(MarketDataMapper data,ObjectMapper json,Clock clock){this.data=data;this.json=json;this.clock=clock;}
     public Seed prepare(Stock stock,SimulationApi.Start request,long seed) {
         if(!stock.market().equals("US") || !stock.currency().equals("USD")
-                || !Set.of("AAPL","MSFT","NVDA","AMZN","GOOGL").contains(stock.symbol()))throw missing();
+                || !MarketUniverse.supports(stock.symbol()))throw missing();
         Instant now=clock.instant();List<Session> sessions=data.sessions();
         if(sessions.isEmpty())throw unavailable("Trading calendar is not cached");
         Point point;

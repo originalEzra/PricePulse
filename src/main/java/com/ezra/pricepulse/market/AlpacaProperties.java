@@ -11,7 +11,7 @@ public class AlpacaProperties {
     private String keyId = "";
     private String secretKey = "";
     private String environment = "paper";
-    private List<String> symbols = List.of("AAPL", "MSFT", "NVDA", "AMZN", "GOOGL");
+    private List<String> symbols = MarketUniverse.SYMBOLS;
     private int queueCapacity = 1024;
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean v) { enabled = v; }
@@ -31,8 +31,9 @@ public class AlpacaProperties {
         if (!enabled) return;
         if (keyId.isBlank() || secretKey.isBlank()) throw new IllegalStateException("Alpaca credentials are not configured");
         if (!List.of("paper", "live").contains(environment)) throw new IllegalStateException("Unsupported Alpaca environment");
-        if (symbols.isEmpty() || symbols.size() > 5 || symbols.stream().anyMatch(s -> !List.of("AAPL","MSFT","NVDA","AMZN","GOOGL").contains(s)))
-            throw new IllegalStateException("Configure 1–5 supported US symbols");
+        if (symbols.isEmpty() || symbols.size() > MarketUniverse.MAX_SYMBOLS
+                || new java.util.HashSet<>(symbols).size()!=symbols.size() || symbols.stream().anyMatch(s -> !MarketUniverse.supports(s)))
+            throw new IllegalStateException("Configure 1–15 distinct supported US symbols");
         if (queueCapacity < 1 || queueCapacity > 10000) throw new IllegalStateException("Invalid market queue capacity");
     }
     @Override public String toString() { return "AlpacaProperties[credentials=REDACTED]"; }

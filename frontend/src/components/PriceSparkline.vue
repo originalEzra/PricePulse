@@ -402,6 +402,7 @@ const rising = computed(() => {
     </div>
     <div v-if="selectedMarkers.length" class="temporal-event-details"><button class="text-button" @click="closeEventDetails">收起事件详情 ×</button>
       <article v-for="item in selectedMarkers" :key="item.id"><strong>{{ item.ruleName ?? item.label }} · {{ item.rawPrice ?? formatPrice(item.price) }}</strong><time>{{ formatNewYorkTimestamp(item.eventTime) }}</time><p>{{ item.kind === 'ABOVE' ? '▲ 上破' : '▼ 下破' }} · 阈值 {{ item.threshold ?? '—' }} · {{ item.result ?? item.label }}</p>
+        <p v-if="item.label === '开盘跳空'">{{ item.detail }}</p>
         <details v-if="item.ruleSnapshot"><summary>规则快照详情</summary><dl class="event-snapshot"><div><dt>规则名称</dt><dd>{{ item.ruleSnapshot.name }}</dd></div><div><dt>触发方式</dt><dd>{{ item.ruleSnapshot.triggerMode === 'ONCE' ? '一次性' : '重复' }}</dd></div><div><dt>重新激活价</dt><dd>{{ item.ruleSnapshot.rearmPrice ?? '—' }}</dd></div><div><dt>快照状态</dt><dd>{{ item.ruleSnapshot.status }}</dd></div><div><dt>版本</dt><dd>{{ item.ruleSnapshot.version }}</dd></div><div><dt>备注</dt><dd>{{ item.ruleSnapshot.note || '—' }}</dd></div></dl></details>
       </article>
     </div>

@@ -6,6 +6,10 @@ import { resolve } from 'node:path'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const reportOverride = process.argv.find(arg => arg.startsWith('--report-dir='))?.slice('--report-dir='.length)
+const requestedSymbols = (process.argv.find(arg => arg.startsWith('--symbols='))?.slice('--symbols='.length)
+  ?? 'AAPL,MSFT,NVDA,AMZN,GOOGL').split(',')
+if (!requestedSymbols.length || requestedSymbols.length > 15 || new Set(requestedSymbols).size !== requestedSymbols.length
+  || requestedSymbols.some(symbol => !/^[A-Z][A-Z0-9.]{0,9}$/.test(symbol))) throw new Error('LOCAL_SYMBOL_SCOPE_INVALID')
 function reportDirectory(fallback) {
   const directory = resolve(root, reportOverride ?? fallback)
   if (!directory.startsWith(resolve(root, 'target') + '/')) throw new Error('LOCAL_REPORT_DIRECTORY_INVALID')
@@ -47,8 +51,43 @@ async function get(base, path, authenticated = true) {
 }
 async function verify() {
   const base = 'http://127.0.0.1:18081'
-  const stocks = (await get(base, '/api/stocks?limit=100', false)).filter(s => ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL'].includes(s.symbol) && s.market === 'US')
-  assert.equal(stocks.length, 5)
+  const stocks = (await get(base, '/api/stocks?limit=100', false)).filter(s => requestedSymbols.includes(s.symbol) && s.market === 'US')
+  assert.equal(stocks.length, requestedSymbols.length)
+  if (process.argv.includes('--off-hours') || process.argv.includes('--armed')) {
+    const armed = process.argv.includes('--armed')
+    const checks = [], warnings = new Set()
+    for (const stock of stocks) for (const window of ['1H', '1D', '1W', '1M']) {
+      const data = await get(base, `/api/market/stocks/${stock.id}/timeline?window=${window}`)
+      assert.equal(data.scope, 'REAL'); assert.equal(data.provider, 'ALPACA'); assert.equal(data.feed, 'iex')
+      assert.equal(data.health.businessWritesEnabled, armed)
+      if (!armed) assert.equal(data.health.market, 'CLOSED')
+      assert.ok(data.points.length > 0, 'No cached history for closed-session window')
+      assert.ok(data.points.every(p => typeof p.price === 'string' && Number(p.price) > 0 && Number.isFinite(Date.parse(p.eventTime))))
+      if (data.dataQuality) {
+        assert.equal(data.dataQuality.barSamplingApplied, false)
+        assert.equal(data.points.filter(p => p.kind === 'BAR_CLOSE').length, data.dataQuality.availableBars)
+        if (!data.dataQuality.historyCoverageComplete || !data.dataQuality.calendarCoverageComplete || data.dataQuality.unavailableMinutes > 0)
+          warnings.add('HISTORICAL_COVERAGE_GAPS_RETAINED')
+      }
+      if (data.health.connection !== 'SUBSCRIBED') warnings.add('CONNECTION_' + data.health.connection)
+      if (data.health.lastError) warnings.add(data.health.lastError)
+      if (!data.health.stream) warnings.add('STREAM_DIAGNOSTICS_NOT_LOADED')
+      const events = await get(base, `/api/market/stocks/${stock.id}/timeline/events?from=${encodeURIComponent(data.range.from)}&to=${encodeURIComponent(data.range.asOf)}`)
+      assert.equal(events.events.length, 0) // Unpersisted principal owns no rules or events.
+      checks.push({ symbol: stock.symbol, window, points: data.points.length, dataQuality: data.dataQuality, health: data.health })
+    }
+    const proxy = await get('http://127.0.0.1:5173', `/api/market/stocks/${stocks[0].id}/timeline?window=1D`)
+    assert.equal(proxy.health.businessWritesEnabled, armed)
+    const report = { checkedAt: new Date().toISOString(), status: warnings.size ? 'PASSED_WITH_WARNINGS' : 'PASSED',
+      mode: armed ? 'REAL_WRITES_ENABLED_READONLY_CHECK' : 'CLOSED_SESSION_READONLY', warnings: [...warnings], formalBusinessWritesEnabled: armed,
+      newProviderConnections: 0, syntheticPrincipalPersisted: false, actualUserAccountAccessed: false,
+      realTradeReceptionValidated: false, realAlertEndToEndValidated: false, checks }
+    const directory = reportDirectory('target/v2-p2-offhours')
+    writeFileSync(resolve(directory, armed ? 'local-armed-api.json' : 'local-offhours-api.json'), JSON.stringify(report, null, 2) + '\n')
+    console.log(JSON.stringify({ status: report.status, windowsChecked: checks.length, eventPagesChecked: checks.length,
+      frontendProxyChecked: true, businessWritesEnabled: armed, symbols: requestedSymbols, warnings: report.warnings }))
+    return
+  }
   if (process.argv.includes('--axis') || process.argv.includes('--axis-before')) {
     const checks = []
     for (const stock of stocks) for (const window of ['1H', '1D', '1W', '1M']) {
