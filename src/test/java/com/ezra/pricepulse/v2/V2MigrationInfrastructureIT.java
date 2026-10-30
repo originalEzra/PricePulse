@@ -45,7 +45,7 @@ class V2MigrationInfrastructureIT {
                 .locations("classpath:db/migration").load();
         flyway.migrate();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("8");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("10");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         try (Connection c = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              Statement s = c.createStatement()) {

@@ -35,6 +35,30 @@ public final class AlpacaStream implements AutoCloseable {
     private long closingGeneration;
     private int failures;
     private ScheduledFuture<?> reconnect, heartbeat;
+    private AlpacaSubscriptions dynamic;
+    /** Install before start; subsequent changes use this same socket and are serialized behind ACKs. */
+    public synchronized void enableDynamicSubscriptions(Map<String,Long> desired) {
+        if(running)throw new IllegalStateException("Configure subscription mode before starting");
+        dynamic=new AlpacaSubscriptions();dynamic.desire(desired);
+    }
+    public synchronized void desireSubscriptions(Map<String,Long> desired) {
+        if(dynamic==null)throw new IllegalStateException("Dynamic subscriptions are disabled");
+        dynamic.desire(desired);sendNextSubscription();
+    }
+    synchronized AlpacaSubscriptions.View subscriptions(){return dynamic==null?null:dynamic.view();}
+    private void sendNextSubscription(){
+        if(!running||socket==null||dynamic==null)return;
+        var command=dynamic.next();if(command==null)return;
+        long attempt=generation;
+        try {
+            socket.sendText(json.writeValueAsString(Map.of("action",command.action(),"trades",List.of(command.symbol()))),true)
+                .exceptionally(error->{fail(attempt,"SUBSCRIPTION_SEND_FAILED",false);return null;});
+            scheduler.schedule(()->{synchronized(AlpacaStream.this){
+                var pending=dynamic.view().pending();
+                if(running&&generation==attempt&&pending!=null&&pending.id()==command.id())fail(attempt,"SUBSCRIPTION_ACK_TIMEOUT",false);
+            }},12,TimeUnit.SECONDS);
+        }catch(Exception ignored){fail(attempt,"SUBSCRIPTION_SEND_FAILED",false);}
+    }
     public AlpacaStream(AlpacaProperties properties,ObjectMapper json,ScheduledExecutorService scheduler,
             Connector connector,MarketFeedHealth health,BiConsumer<JsonNode,Instant> message,Runnable gap,Clock clock) {
         this(properties,json,scheduler,connector,health,message,gap,clock,System::nanoTime);
@@ -56,6 +80,7 @@ public final class AlpacaStream implements AutoCloseable {
     private synchronized void connect() {
         if (!running) return;
         long attempt=++generation;
+        if(dynamic!=null)dynamic.connect();
         subscribed=false; health.connection("CONNECTING");
         health.streamAttempt(clock.instant());
         lastReceivedNanos=ticker.getAsLong();lastHeartbeatNanos=lastReceivedNanos;lastHeartbeatMillis=clock.millis();
@@ -71,6 +96,7 @@ public final class AlpacaStream implements AutoCloseable {
         long now=ticker.getAsLong();
         if (subscribed && now-subscribedAtNanos>=TimeUnit.SECONDS.toNanos(30)) failures=0;
         generation++; subscribed=false;
+        if(dynamic!=null)dynamic.disconnect();
         WebSocket ws=socket; socket=null; if (ws!=null) ws.abort();
         health.streamFailure(code,clock.instant(),elapsedMillis(now,lastHeartbeatNanos),elapsedMillis(now,lastReceivedNanos),clockDrift(now));
         health.connection(terminal?"REJECTED":"RECONNECTING"); gap.run();
@@ -127,19 +153,36 @@ public final class AlpacaStream implements AutoCloseable {
                         JsonNode batch=json.readTree(fragments.toString()); fragments.setLength(0);
                         if (!batch.isArray()) throw new IllegalArgumentException();
                         for (JsonNode item:batch) {
+                            if(!running||generation!=attempt)break;
                             String type=item.path("T").asText();
                             if (type.equals("success") && item.path("msg").asText().equals("authenticated")) {
-                                ws.sendText(json.writeValueAsString(Map.of("action","subscribe","trades",properties.getSymbols())),true)
+                                if(dynamic!=null){
+                                    dynamic.authenticated();subscribed=true;subscribedAtNanos=ticker.getAsLong();
+                                    health.subscriptionSymbols(Set.of());health.connection("SUBSCRIBED");sendNextSubscription();
+                                }else ws.sendText(json.writeValueAsString(Map.of("action","subscribe","trades",properties.getSymbols())),true)
                                     .exceptionally(e->{fail(attempt,"SUBSCRIBE_SEND_FAILED",false);return null;});
                             } else if (type.equals("subscription")) {
+                                if(!item.path("trades").isArray())throw new IllegalArgumentException();
                                 Set<String> actual=new HashSet<>(); item.path("trades").forEach(s->actual.add(s.asText()));
-                                if (!actual.equals(new HashSet<>(properties.getSymbols()))) { fail(attempt,"SUBSCRIPTION_MISMATCH",true);break; }
-                                if (!subscribed) health.streamSubscribed(clock.instant());
-                                subscribed=true; subscribedAtNanos=ticker.getAsLong();health.connection("SUBSCRIBED");
+                                if(dynamic!=null){
+                                    if(!dynamic.view().authenticated()){fail(attempt,"SUBSCRIPTION_BEFORE_AUTH",true);break;}
+                                    try{if(dynamic.acknowledge(actual))health.streamSubscribed(clock.instant(),actual);}
+                                    catch(IllegalStateException mismatch){fail(attempt,"SUBSCRIPTION_MISMATCH",false);break;}
+                                    sendNextSubscription();
+                                    if(!running||generation!=attempt)break;
+                                }else{
+                                    if (!actual.equals(new HashSet<>(properties.getSymbols()))) { fail(attempt,"SUBSCRIPTION_MISMATCH",true);break; }
+                                    if (!subscribed) health.streamSubscribed(clock.instant(),actual);
+                                }
+                                if(!subscribed)subscribedAtNanos=ticker.getAsLong();
+                                subscribed=true;health.connection("SUBSCRIBED");
                             } else if (type.equals("error")) {
                                 int code=item.path("code").asInt();
+                                if(dynamic!=null&&dynamic.reject(code)){health.error("PROVIDER_ERROR_"+code);sendNextSubscription();continue;}
+                                if(dynamic!=null&&dynamic.rejectUncertain(code)){fail(attempt,"PROVIDER_ERROR_"+code,false);break;}
                                 fail(attempt,"PROVIDER_ERROR_"+code,Set.of(400,401,402,403,405,409).contains(code));break;
-                            } else if (subscribed && Set.of("t","c","x").contains(type)) message.accept(item,clock.instant());
+                            } else if (subscribed && Set.of("t","c","x").contains(type)
+                                    &&(dynamic==null||dynamic.view().confirms(item.path("S").asText()))) message.accept(item,clock.instant());
                         }
                     } catch (Exception ignored) { fragments.setLength(0);fail(attempt,"INVALID_STREAM_FRAME",false); }
                 }
@@ -186,6 +229,7 @@ public final class AlpacaStream implements AutoCloseable {
     @Override public synchronized void close() {
         if (!running && socket==null && health.connection().equals("STOPPED")) return;
         running=false;generation++;subscribed=false;
+        if(dynamic!=null)dynamic.disconnect();
         if (reconnect!=null) reconnect.cancel(false);
         if (heartbeat!=null) heartbeat.cancel(false);
         WebSocket ws=socket;socket=null;

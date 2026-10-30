@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { stockApi, marketApi, ruleApi } from '../api'
+import { stockApi, marketApi, ruleApi, monitoringApi } from '../api'
 import { ApiClientError, errorMessage } from '../api/client'
-import type { AlertRule, AlertRuleDraft, SaveAlertRule, Stock, MarketTimeline, TimelineWindow, TimelineEvent } from '../api/types'
+import type { AlertRule, AlertRuleDraft, SaveAlertRule, Stock, MarketTimeline, TimelineWindow, TimelineEvent, MonitoringPage } from '../api/types'
 import AiDraftModal from '../components/AiDraftModal.vue'
 import PriceSparkline from '../components/PriceSparkline.vue'
 import RuleModal from '../components/RuleModal.vue'
@@ -13,7 +13,15 @@ import '../styles/ruleTable.css'
 import { compactNewYorkTime } from '../utils/chartInspection'
 import { applyWatchlistQuote, refreshWatchlistQuotes, type WatchlistQuote } from '../utils/watchlistPrices'
 import { openingGapDetail } from '../utils/openingGap'
+import StockMonitoringPanel from '../components/StockMonitoringPanel.vue'
+import { confirmedMonitoring, subscriptionLabels } from '../utils/monitoring'
+import { useAuthStore } from '../stores/auth'
 
+const auth = useAuthStore()
+const monitoringManaged = ref(false), monitoringPage = ref<MonitoringPage | null>(null)
+const selectedMonitoring = computed(() => monitoringPage.value?.subscriptions.find(row => row.stock.id === selectedId.value))
+const canCreateRule = computed(() => !monitoringManaged.value || confirmedMonitoring(selectedMonitoring.value?.state))
+let loadGeneration = 0
 const stocks = ref<Stock[]>([])
 const rules = ref<AlertRule[]>([])
 const timeline = ref<MarketTimeline | null>(null)
@@ -63,7 +71,7 @@ const chartAnnotations = computed<TimedChartAnnotation[]>(() => allEvents.value.
   ruleSnapshot: event.ruleSnapshot,
   detail: `${openingGapDetail(event, compactNewYorkTime) ? openingGapDetail(event, compactNewYorkTime) + ' · ' : ''}${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
 })))
-const connectionLabel: Record<string, string> = { DISABLED: '未连接行情源', CONNECTING: '连接中', SUBSCRIBED: '行情已连接', RECONNECTING: '正在重连', REJECTED: '认证或订阅被拒绝', STOPPED: '行情已停止' }
+const connectionLabel: Record<string, string> = { DISABLED: '未连接行情源', CONNECTING: '连接中', SUBSCRIBED: '行情已连接', NOT_SUBSCRIBED: '该股票未订阅', RECONNECTING: '正在重连', REJECTED: '认证或订阅被拒绝', STOPPED: '行情已停止' }
 const freshnessLabel: Record<string, string> = { MARKET_CLOSED: '正常交易时段已休市', NO_DATA: '尚未收到成交', DELAYED: '成交数据延迟', RECENT_IEX_TRADE: '近期 IEX 成交' }
 const shortFreshness: Record<string, string> = { MARKET_CLOSED: '已休市', NO_DATA: '暂无成交', DELAYED: '数据已延迟', RECENT_IEX_TRADE: '近期成交' }
 watch(timelineWindow, () => { void loadQuotes() })
@@ -80,22 +88,28 @@ const priceMove = computed(() => {
 const activeRuleCount = computed(() => rules.value.filter((r) => r.status === 'ACTIVE' || r.status === 'COOLDOWN').length)
 
 async function load() {
+  const generation = ++loadGeneration, owner = auth.session?.accessToken
   loading.value = true
   error.value = ''
   try {
-    const [stockData, ruleData] = await Promise.all([stockApi.list(), ruleApi.list()])
-    if (disposed) return
+    let managed = false
+    try { managed = (await monitoringApi.capabilities()).managementEnabled }
+    catch (cause) { if (!(cause instanceof ApiClientError && cause.status === 404)) throw cause }
+    const [stockData, ruleData] = await Promise.all([managed ? monitoringApi.list() : stockApi.list(), ruleApi.list()])
+    if (disposed || generation !== loadGeneration || owner !== auth.session?.accessToken) return
     watchlistRequest?.abort(); watchlistRequest = null
     acceptedQuoteTimes.clear()
-    stocks.value = stockData.filter(stock => stock.market === 'US')
+    monitoringManaged.value = managed
+    if (managed) applyMonitoring(stockData as MonitoringPage)
+    else { monitoringPage.value = null; stocks.value = (stockData as Stock[]).filter(stock => stock.market === 'US') }
     rules.value = ruleData
     if (!selectedId.value && stocks.value[0]) selectedId.value = stocks.value[0].id
     void loadWatchlistPrices()
     await loadQuotes()
-  } catch (cause) {
+  } catch (cause) { if (disposed || generation !== loadGeneration || owner !== auth.session?.accessToken) return
     error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
 
@@ -103,6 +117,25 @@ async function selectStock(id: number) {
   selectedId.value = id
   await loadQuotes()
 }
+
+function applyMonitoring(page: MonitoringPage) {
+  monitoringPage.value = page
+  stocks.value = page.subscriptions.map(row => {
+    const old = stocks.value.find(stock => stock.id === row.stock.id)
+    const stock: Stock = old ?? { ...row.stock, latestPrice: null, latestQuoteAt: null }
+    applyWatchlistQuote(stock, row.stock, acceptedQuoteTimes)
+    return stock
+  })
+  if (!stocks.value.some(stock => stock.id === selectedId.value)) {
+    timelineRequest?.abort(); timeline.value = null; selectedId.value = stocks.value[0]?.id ?? null
+  }
+}
+watch(() => auth.session?.accessToken, () => {
+  loadGeneration++; timelineRequest?.abort(); watchlistRequest?.abort()
+  stocks.value = []; rules.value = []; timeline.value = null; monitoringPage.value = null; selectedId.value = null
+  acceptedQuoteTimes.clear()
+  if (auth.authenticated && !disposed) void load()
+})
 
 function updateStockPrice(quote: WatchlistQuote) {
   const stock = stocks.value.find(item => item.id === quote.id)
@@ -114,10 +147,16 @@ async function loadWatchlistPrices() {
   const request = new AbortController()
   watchlistRequest = request
   try {
+    if (monitoringManaged.value) {
+      const page = await monitoringApi.list(request.signal)
+      if (!disposed && !request.signal.aborted) applyMonitoring(page)
+      return
+    }
     const failed = await refreshWatchlistQuotes(stocks.value.filter(stock => stock.id !== selectedId.value).map(stock => stock.id),
       async (id, signal) => (await marketApi.timeline(id, '1D', signal)).stock, updateStockPrice, request.signal)
     if (!disposed && !request.signal.aborted) watchlistError.value = failed.length ? `${failed.length} 只股票报价暂未更新，将自动重试` : ''
-  } finally {
+  } catch (cause) { if (!disposed && !request.signal.aborted) watchlistError.value = errorMessage(cause) }
+  finally {
     if (watchlistRequest === request) watchlistRequest = null
   }
 }
@@ -182,9 +221,15 @@ async function moreEvents() {
   finally { eventsLoading.value = false }
 }
 
-function openCreate() { editingRule.value = null; initialDraft.value = null; modalOpen.value = true }
+function openCreate() {
+  if (!canCreateRule.value) { error.value = '请等待该股票的监控订阅确认后创建提醒'; return }
+  editingRule.value = null; initialDraft.value = null; modalOpen.value = true
+}
 function openEdit(rule: AlertRule) { editingRule.value = rule; initialDraft.value = null; modalOpen.value = true }
 async function useAiDraft(draft: AlertRuleDraft) {
+  if (monitoringManaged.value && !confirmedMonitoring(monitoringPage.value?.subscriptions.find(row => row.stock.id === draft.stockId)?.state)) {
+    aiModalOpen.value = false; error.value = '请先监控目标股票并等待行情确认，再创建提醒'; return
+  }
   if (!stocks.value.some((stock) => stock.id === draft.stockId)) {
     try {
       stocks.value.push(await stockApi.get(draft.stockId))
@@ -231,7 +276,12 @@ async function removeRule(rule: AlertRule) {
   } catch (cause) { error.value = errorMessage(cause) }
 }
 
-const statusLabel: Record<string, string> = { ACTIVE: '监控中', COOLDOWN: '冷却中', PAUSED: '已暂停', COMPLETED: '已完成' }
+const statusLabel: Record<string, string> = { ACTIVE: '已启用', COOLDOWN: '冷却中', PAUSED: '已暂停', COMPLETED: '已完成' }
+async function prepareHistory() {
+  if (!selectedId.value) return
+  try { const result = await monitoringApi.prepareHistory(selectedId.value); watchlistError.value = result.state === 'FAILED' ? '历史准备失败，请稍后重试' : '历史行情已请求准备，将自动刷新' }
+  catch (cause) { watchlistError.value = errorMessage(cause) }
+}
 const directionLabel: Record<string, string> = { ABOVE: '上破', BELOW: '下破' }
 const date = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '（纽约）' : '尚无行情'
 
@@ -249,13 +299,15 @@ onMounted(() => {
       <div><p class="eyebrow">MARKET OVERVIEW</p><h1>行情与提醒</h1><div class="dashboard-counts"><span>{{ stocks.length }} 只标的</span><span>{{ activeRuleCount }} 条运行中规则</span><span>{{ rules.length }} 条已加载规则</span></div></div>
       <div class="head-actions">
         <button class="button ai-button" @click="aiModalOpen = true">✦ AI 文本生成</button>
-        <button class="button primary" :disabled="!selectedStock" @click="openCreate">＋ 创建提醒</button>
+        <button class="button primary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">＋ 创建提醒</button>
       </div>
     </header>
     <p v-if="error" class="page-error">{{ error }} <button @click="load">重试</button></p>
+    <p v-if="!loading && !monitoringManaged" class="muted">当前显示原有共享监控，个人监控管理尚未启用。</p>
     <div class="dashboard-grid">
-      <section class="panel stock-panel">
-        <div class="panel-head"><div><p class="eyebrow">WATCHLIST</p><h2>股票列表</h2></div><input v-model="search" class="compact-input" placeholder="搜索代码或名称" /></div>
+      <StockMonitoringPanel v-if="monitoringManaged && monitoringPage" :key="auth.session?.user.id" :page="monitoringPage" :selected-id="selectedId" @select="selectStock" @changed="load" />
+      <section v-else class="panel stock-panel">
+        <div class="panel-head"><div><p class="eyebrow">MONITORING</p><h2>股票监控</h2></div><input v-model="search" class="compact-input" placeholder="筛选当前股票" /></div>
         <div v-if="loading" class="loading-block">加载行情中…</div>
         <div class="stock-list" role="region" aria-label="股票报价列表" tabindex="0">
         <button v-for="stock in filteredStocks" :key="stock.id" class="stock-row" :class="{ selected: stock.id === selectedId }" @click="selectStock(stock.id)">
@@ -268,6 +320,7 @@ onMounted(() => {
         <p v-if="watchlistError" class="watchlist-warning" role="status">{{ watchlistError }}</p>
       </section>
       <section class="panel market-panel">
+        <p v-if="monitoringManaged && timeline && !timeline.dataQuality.historyCoverageComplete" class="muted"><button class="text-button" @click="prepareHistory">准备历史行情</button> {{ watchlistError }}</p>
         <p v-if="chartError" class="page-error">{{ chartError }} <button @click="loadQuotes()">重试</button></p>
         <PriceSparkline :values="prices" :timestamps="quoteTimes" :currency="selectedStock?.currency" :thresholds="chartThresholds" :temporal-annotations="chartAnnotations"
           :scope-key="`${selectedId}:${timelineWindow}`"
@@ -281,7 +334,8 @@ onMounted(() => {
           <template #heading><div v-if="selectedStock" class="stock-chart-heading"><h2>{{ selectedStock.name }}</h2><span class="stock-symbol">{{ selectedStock.symbol }}</span>
             <div class="window-tabs" aria-label="行情时间窗口"><button v-for="item in (['1H', '1D', '1W', '1M'] as const)" :key="item" :class="{ active: timelineWindow === item }" @click="timelineWindow = item">{{ item }}</button></div>
             <p v-if="timeline" class="market-status">IEX · {{ shortFreshness[timeline.health.freshness] ?? timeline.health.freshness }} · {{ compactNewYorkTime(selectedStock.latestQuoteAt ?? '').slice(6) }}</p>
-            <p v-if="timeline" class="monitor-status">{{ connectionLabel[timeline.health.connection] ?? timeline.health.connection }} · {{ timeline.health.businessWritesEnabled ? '正式提醒已启用' : '只读观察，正式提醒未启用' }}</p>
+            <p v-if="monitoringManaged" class="monitor-status">{{ selectedMonitoring ? subscriptionLabels[selectedMonitoring.state] : '尚未请求监控' }} · {{ canCreateRule ? '正式提醒可用' : '行情订阅尚未确认' }}</p>
+            <p v-else-if="timeline" class="monitor-status">{{ connectionLabel[timeline.health.connection] ?? timeline.health.connection }} · {{ timeline.health.businessWritesEnabled && timeline.health.connection !== 'NOT_SUBSCRIBED' ? '正式提醒已启用' : '只读观察，正式提醒未启用' }}</p>
             <p v-if="timeline?.health.lastError" class="market-warning">行情有异常，请查看行情详情</p>
             <p v-if="timeline?.dataQuality && (!timeline.dataQuality.historyCoverageComplete || !timeline.dataQuality.calendarCoverageComplete || timeline.dataQuality.unavailableMinutes > 0)" class="market-warning">历史有缺口，详见行情详情</p>
           </div></template>
@@ -291,7 +345,7 @@ onMounted(() => {
       </section>
     </div>
     <section class="panel rules-panel">
-        <div class="rule-section-head"><h2>{{ selectedStock?.symbol }} 的提醒规则 <small>（{{ selectedRules.length }}）</small></h2><button class="text-button" :disabled="!selectedStock" @click="openCreate">添加规则 ＋</button></div>
+        <div class="rule-section-head"><h2>{{ selectedStock?.symbol }} 的提醒规则 <small>（{{ selectedRules.length }}）</small></h2><button class="text-button" :disabled="!selectedStock || !canCreateRule" @click="openCreate">添加规则 ＋</button></div>
         <p v-if="rulesLoading" class="rule-display-hint" role="status">正在同步完整规则列表…</p>
         <p v-if="rulesError" class="page-error" role="alert">{{ rulesError }} <button @click="loadQuotes()">重试</button></p>
         <div v-if="selectedRules.length" class="rule-table-scroll" role="region" aria-label="该股票的全部提醒规则" tabindex="0">
@@ -309,7 +363,7 @@ onMounted(() => {
             </tr></tbody>
           </table>
         </div>
-        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>选择上破或下破价格，系统会在真正穿越阈值时触发。</span><button class="button secondary" @click="openCreate">创建第一条规则</button></div>
+        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '选择上破或下破价格，系统会在真正穿越阈值时触发。' : '行情订阅确认后，可以创建该股票的提醒规则。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
       </section>
     <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />
     <RuleModal :open="modalOpen" :stock="selectedStock" :rule="editingRule" :initial-draft="initialDraft" @close="modalOpen = false" @saved="replaceRule" />

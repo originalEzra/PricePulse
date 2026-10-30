@@ -34,6 +34,11 @@ mybatis:
     map-underscore-to-camel-case: true
 
 price-pulse:
+  monitoring:
+    # Enable only after the additive migration and coordinated rollout; V8 clients stay compatible.
+    enabled: ${PRICEPULSE_MONITORING_ENABLED:false}
+    dynamic-subscriptions-enabled: ${PRICEPULSE_DYNAMIC_SUBSCRIPTIONS_ENABLED:false}
+    adopt-legacy-holds: ${PRICEPULSE_ADOPT_LEGACY_HOLDS:false}
   alpaca:
     enabled: ${PRICEPULSE_ALPACA_ENABLED:false}
     # Read-only by default; local operators explicitly opt in after reviewing the write scope.

@@ -222,10 +222,10 @@ class InfrastructureIT {
 
         var expectedColumnCounts = Map.of(
                 "users", 7,
-                "stocks", 11,
+                "stocks", 12, // V9 adds the nullable Alpaca asset identity.
                 "quote_events", 17,
-                "alert_rules", 14,
-                "alert_triggers", 8,
+                "alert_rules", 15, // V8 adds effective_at.
+                "alert_triggers", 9, // V8 adds trigger_context.
                 "outbox_events", 13,
                 "notifications", 9);
         expectedColumnCounts.forEach((table, expectedCount) -> {

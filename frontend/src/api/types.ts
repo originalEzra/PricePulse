@@ -33,6 +33,22 @@ export interface Stock {
   latestQuoteAt: string | null
 }
 
+export type SubscriptionState = 'PENDING' | 'CONFIRMED' | 'FAILED'
+export interface MonitoredStock {
+  stock: Omit<Stock, 'latestPrice'> & { latestPrice: string | null; priceKind: string }
+  version: number; state: SubscriptionState; errorCode: string | null; legacyHeld: boolean; ruleCount: number
+}
+export interface MonitoringPage {
+  subscriptions: MonitoredStock[]
+  capacity: { limit: number; reserved: number; dynamicSubscriptions: boolean }
+}
+export interface AssetSearchResult {
+  assets: Array<{ asset: { id: string; symbol: string; name: string; assetClass: string; status: string; exchange: string }
+    subscribed: boolean; requestSupported: boolean }>
+  stale: boolean; errorCode: string | null
+}
+export interface CancellationPreview { stockId: number; symbol: string; version: number; ruleCount: number; rulesDigest: string }
+
 export type AlertDirection = 'ABOVE' | 'BELOW'
 export type TriggerMode = 'ONCE' | 'REPEAT'
 export type RuleStatus = 'ACTIVE' | 'COOLDOWN' | 'PAUSED' | 'COMPLETED' | 'DELETED'
@@ -204,10 +220,13 @@ export interface MarketTimeline extends TimelineEventPage {
   thresholdSemantics: 'CURRENT_CONFIGURATION'
 }
 
-export type SimulationMode = 'NORMAL' | 'RISE' | 'FALL' | 'OSCILLATE'
+export type SimulationMode = 'NORMAL' | 'RISE' | 'FALL' | 'OSCILLATE' | 'OPENING_GAP'
+export interface SimulationGapInput { source: 'REAL_HISTORY' | 'CUSTOM'; referencePrice?: string; openingPrice: string; continuationMode: Exclude<SimulationMode, 'OPENING_GAP'> }
+export interface SimulationGapContext extends SimulationGapInput { kind: 'SIMULATED_OPENING_GAP'; scope: 'SIMULATION'; referencePrice: string; referenceTime: string; openingTime: string; direction: 'UP' | 'DOWN' | 'FLAT' }
 export interface StartSimulation {
-  stockId: number; origin: { kind: 'LATEST' | 'HISTORICAL_POINT'; pointRef?: string; revision?: string }
+  stockId: number; origin: { kind: 'LATEST' | 'HISTORICAL_POINT' | 'SIMULATION_REFERENCE'; pointRef?: string; revision?: string }
   mode: SimulationMode; stepRatio: string; seed: string | null; expectedCurrentRunId: string | null
+  openingGap?: SimulationGapInput
 }
 export interface SimulationSnapshot {
   snapshotRuleId: number; sourceRuleId: number; sourceVersion: number; config: AlertRule
@@ -216,8 +235,8 @@ export interface SimulationSnapshot {
 export interface SimulationRun {
   runId: string; stockId: number; version: number; lastBatchNo: number; simClock: string
   latestPrice: string; nextPointSeq: number; seed: string; generatorVersion: string; generatorSupported: boolean
-  origin: { kind: 'LATEST' | 'HISTORICAL_POINT'; stockSymbol: string; provider: 'ALPACA'; feed: 'iex'; point: TimelinePoint; prefixFrom: string; calendarVersion: string }
-  parameters: { mode: SimulationMode; stepRatio: string }; ruleSnapshots: SimulationSnapshot[]
+  origin: { kind: 'LATEST' | 'HISTORICAL_POINT' | 'SIMULATION_REFERENCE'; stockSymbol: string; provider: 'ALPACA' | 'SIMULATION'; feed: 'iex' | 'SIMULATION'; point: Omit<TimelinePoint,'kind'> & { kind: TimelinePoint['kind'] | 'SIMULATION_REFERENCE' }; prefixFrom: string; calendarVersion: string }
+  parameters: { mode: SimulationMode; stepRatio: string; openingGap?: SimulationGapContext }; ruleSnapshots: SimulationSnapshot[]
   stats: { triggered: number; rearmed: number }
 }
 export interface SimulationPoint { pointSeq: number; eventTime: string; price: string }
@@ -229,6 +248,7 @@ export interface SimulationTimeline {
 export interface SimulationEvent {
   id: number; snapshotRuleId: number; pointSeq: number; eventType: 'TRIGGERED' | 'REARMED'
   eventTime: string; epochNanos: string; price: string; fromState: RuleStatus; toState: RuleStatus; ruleSnapshot: AlertRule
+  triggerContext?: SimulationGapContext | null
 }
 export interface SimulationEventPage { events: SimulationEvent[]; eventCursor: string | null; watermark: string }
 export interface SimulationBatch {

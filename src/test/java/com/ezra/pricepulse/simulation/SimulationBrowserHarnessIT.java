@@ -26,6 +26,7 @@ class SimulationBrowserHarnessIT {
     @Test @Timeout(1500) void servesClearlyLabelledSyntheticBrowserFixtureUntilReleased() throws Exception {
         Path directory=Path.of(System.getProperty("pricepulse.browser-report-dir","target/v2-p3"));Files.createDirectories(directory);
         boolean chartFixture=Boolean.getBoolean("pricepulse.chart-fixture");
+        boolean gapFixture=Boolean.getBoolean("pricepulse.opening-gap-fixture");
         Path stop=directory.resolve("browser-stop.signal");
         if(Files.exists(stop))throw new IllegalStateException("Prior browser stop signal must be moved aside before starting a new harness");
         var backend=new SimulationRestartIT();Process frontend=null;
@@ -51,17 +52,21 @@ class SimulationBrowserHarnessIT {
                         Instant start=open.plusSeconds(i*60L),end=start.plusSeconds(60);if(end.isAfter(now))break;
                         // Explicit chart fixture: preserve a known five-minute in-session hole for visual checks.
                         if(chartFixture && i>=130 && i<135)continue;
-                        BigDecimal price=BigDecimal.valueOf(100+Math.sin(i/12.0)*0.1).setScale(4,RoundingMode.HALF_UP);
+                        BigDecimal price=BigDecimal.valueOf((gapFixture?345:100)+Math.sin(i/12.0)*0.1).setScale(4,RoundingMode.HALF_UP);
                         rows.add(new Object[]{stock,utc(start),utc(end),price});
                     }
                 }
-                jdbc.batchUpdate("INSERT INTO market_price_bars(stock_id,provider,feed,resolution,adjustment,interval_start,interval_end,open_price,high_price,low_price,close_price,fetched_at) VALUES(?,'ALPACA','iex','1Min','raw',?,?,100,101,99,?,NOW(6))",rows);
+                jdbc.batchUpdate("INSERT INTO market_price_bars(stock_id,provider,feed,resolution,adjustment,interval_start,interval_end,open_price,high_price,low_price,close_price,fetched_at) VALUES(?,'ALPACA','iex','1Min','raw',?,?,"+(gapFixture?"345,346,344":"100,101,99")+",?,NOW(6))",rows);
                 jdbc.update("INSERT INTO market_history_coverage(stock_id,provider,feed,requested_from,requested_to,synced_at) VALUES(?,'ALPACA','iex',?,?,NOW(6))",stock,
                         utc(ZonedDateTime.of(dates.getFirst(),LocalTime.of(9,30),zone).toInstant()),utc(now));
             }
             long aapl=jdbc.queryForObject("SELECT id FROM stocks WHERE symbol='AAPL' AND market='US'",Long.class);
             jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'合成上破规则','ABOVE',100.2,'ONCE','ACTIVE')",owner,aapl);
             jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'合成重复规则','ABOVE',100.4,'REPEAT',99.8,'COOLDOWN')",owner,aapl);
+            if(gapFixture){
+                jdbc.update("UPDATE alert_rules SET threshold_price=350,rearm_price=IF(trigger_mode='REPEAT',349,NULL) WHERE user_id=?",owner);
+                jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'合成下破规则','BELOW',340,'ONCE','ACTIVE')",owner,aapl);
+            }
             int port;try(var socket=new ServerSocket(0)){port=socket.getLocalPort();}
             var builder=new ProcessBuilder("node","node_modules/vite/bin/vite.js","--host","127.0.0.1","--port",Integer.toString(port),"--strictPort").directory(Path.of("frontend").toFile());
             builder.environment().put("PRICEPULSE_BACKEND_URL",backend.base);

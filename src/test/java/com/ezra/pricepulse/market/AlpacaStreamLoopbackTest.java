@@ -31,7 +31,8 @@ class AlpacaStreamLoopbackTest {
         if(peer!=null)peer.close();
         scheduler.shutdownNow();
     }
-    void start() throws Exception {
+    void start() throws Exception {start(false);}
+    void start(boolean dynamic) throws Exception {
         peer=new LocalPeer();
         var properties=new AlpacaProperties();properties.setEnabled(true);
         properties.setKeyId("synthetic-key");properties.setSecretKey("synthetic-secret");properties.setSymbols(List.of("AAPL"));
@@ -44,7 +45,9 @@ class AlpacaStreamLoopbackTest {
         stream=new AlpacaStream(properties,json,scheduler,
                 listener->http.newWebSocketBuilder().buildAsync(peer.uri(),listener),health,
                 (message,at)->messages.incrementAndGet(),gaps::incrementAndGet,clock,nanos::get);
+        if(dynamic)stream.enableDynamicSubscriptions(Map.of("AAPL",0L));
         stream.start();await(()->health.connection().equals("SUBSCRIBED"));
+        if(dynamic)await(()->health.confirms("AAPL"));
     }
     void advance(long seconds){now.set(now.get().plusSeconds(seconds));nanos.addAndGet(TimeUnit.SECONDS.toNanos(seconds));}
     @Test void realJdkAutomaticallyAnswersPingExactlyOnceAndConfirmsNormalClose() throws Exception {
@@ -56,6 +59,13 @@ class AlpacaStreamLoopbackTest {
         await(()->Objects.equals(health.streamSnapshot().lastCloseCode(),1000));
         assertThat(health.connection()).isEqualTo("STOPPED");assertThat(gaps).hasValue(0);
         assertThat(health.streamSnapshot().lastFailureCode()).isNull();assertThat(messages).hasValue(0);
+    }
+    @Test void realJdkSocketAddsAndRemovesOutsideLegacySymbolsWithoutReconnecting()throws Exception{
+        start(true);String epoch=stream.subscriptions().epoch();
+        stream.desireSubscriptions(Map.of("AAPL",0L,"PLTR",1L));await(()->health.confirms("PLTR"));
+        stream.desireSubscriptions(Map.of("AAPL",0L));await(()->!health.confirms("PLTR"));
+        assertThat(stream.subscriptions().absent("PLTR")).isTrue();assertThat(stream.subscriptions().epoch()).isEqualTo(epoch);
+        assertThat(health.confirms("AAPL")).isTrue();assertThat(peer.sockets).hasSize(1);assertThat(gaps).hasValue(0);
     }
     @Test void realPongsKeepQuietConnectionAliveAndMissingPongsStillDeclareAGap() throws Exception {
         start();
@@ -80,7 +90,7 @@ class AlpacaStreamLoopbackTest {
     }
     @Test void runtimeShutdownWaitsForPeerAcknowledgementBeforeStoppingItsScheduler() throws Exception {
         start();peer.closeReply=new CountDownLatch(1);
-        var runtime=new RealMarketRuntime(null,null,null,null,null,health,json,Clock.systemUTC());
+        var runtime=new RealMarketRuntime(null,null,null,null,null,health,json,Clock.systemUTC(),null,null);
         ReflectionTestUtils.setField(runtime,"stream",stream);
         ReflectionTestUtils.setField(runtime,"scheduler",scheduler);
         var stopping=CompletableFuture.runAsync(runtime::stop);
@@ -104,7 +114,7 @@ class AlpacaStreamLoopbackTest {
     }
     @Test void runtimeShutdownIsBoundedWhenPeerNeverAcknowledges() throws Exception {
         start();peer.closeReply=new CountDownLatch(1);
-        var runtime=new RealMarketRuntime(null,null,null,null,null,health,json,Clock.systemUTC());
+        var runtime=new RealMarketRuntime(null,null,null,null,null,health,json,Clock.systemUTC(),null,null);
         ReflectionTestUtils.setField(runtime,"stream",stream);
         ReflectionTestUtils.setField(runtime,"scheduler",scheduler);
         long began=System.nanoTime();
@@ -156,6 +166,8 @@ class AlpacaStreamLoopbackTest {
                         .digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)));
                 out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII));out.flush();
                 output=out;
+                Set<String> subscribed=new TreeSet<>();
+                var json=new ObjectMapper();
                 while(!stopped) {
                     int first=input.read();if(first<0)return;
                     int second=input.read();if(second<0)throw new EOFException();
@@ -168,8 +180,12 @@ class AlpacaStreamLoopbackTest {
                     int opcode=first&15;
                     if(opcode==1) {
                         String text=new String(payload,StandardCharsets.UTF_8);
-                        if(text.contains("\"auth\""))send(out,1,"[{\"T\":\"success\",\"msg\":\"authenticated\"}]".getBytes(StandardCharsets.UTF_8));
-                        else if(text.contains("\"subscribe\""))send(out,1,"[{\"T\":\"subscription\",\"trades\":[\"AAPL\"]}]".getBytes(StandardCharsets.UTF_8));
+                        var command=json.readTree(text);String action=command.path("action").asText();
+                        if(action.equals("auth"))send(out,1,"[{\"T\":\"success\",\"msg\":\"authenticated\"}]".getBytes(StandardCharsets.UTF_8));
+                        else if(action.equals("subscribe")||action.equals("unsubscribe")){
+                            command.path("trades").forEach(s->{if(action.equals("subscribe"))subscribed.add(s.asText());else subscribed.remove(s.asText());});
+                            send(out,1,json.writeValueAsBytes(List.of(Map.of("T","subscription","trades",List.copyOf(subscribed)))));
+                        }
                     } else if(opcode==9 && replyPong)send(out,10,payload);
                     else if(opcode==10)pongs.add(payload);
                     else if(opcode==8) {

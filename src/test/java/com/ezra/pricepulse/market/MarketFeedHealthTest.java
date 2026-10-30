@@ -9,7 +9,7 @@ class MarketFeedHealthTest {
         var health=new MarketFeedHealth();
         Instant failed=Instant.parse("2026-10-29T02:00:00Z"), recovered=failed.plusSeconds(60);
         health.streamFailure("HEARTBEAT_TIMEOUT",failed);
-        health.streamAttempt(recovered);health.streamSubscribed(recovered);health.connection("SUBSCRIBED");
+        health.streamAttempt(recovered);health.streamSubscribed(recovered,java.util.List.of("AAPL"));health.connection("SUBSCRIBED");
         health.streamPing(recovered);health.streamPong(recovered.plusSeconds(1));
         var view=health.snapshot("AAPL",false,recovered.plusSeconds(2),null,false);
         assertThat(view.connection()).isEqualTo("SUBSCRIBED");assertThat(view.lastError()).isEqualTo("HEARTBEAT_TIMEOUT");

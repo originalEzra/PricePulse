@@ -28,7 +28,9 @@ public class SimulationService {
     @Transactional(isolation=Isolation.REPEATABLE_READ)
     public Current start(long user,Start request,String key) {
         String requestKey=uuid(key),expected=request.expectedCurrentRunId()==null?null:uuid(request.expectedCurrentRunId());
-        var normalized=new Start(request.stockId(),request.origin(),request.mode(),request.stepRatio().stripTrailingZeros(),request.seed(),expected);
+        var gap=request.openingGap();
+        if(gap!=null)gap=new OpeningGap(gap.source(),gap.referencePrice()==null?null:gap.referencePrice().stripTrailingZeros(),gap.openingPrice()==null?null:gap.openingPrice().stripTrailingZeros(),gap.continuationMode());
+        var normalized=new Start(request.stockId(),request.origin(),request.mode(),request.stepRatio().stripTrailingZeros(),request.seed(),expected,gap);
         String hash=SimulationOriginResolver.hash(write(normalized));
         Run run=isolation.begin(user,request.stockId(),expected,requestKey,hash,
                 stock->origins.prepare(stock,normalized,request.seed()==null?random.nextLong():request.seed()));
@@ -38,12 +40,16 @@ public class SimulationService {
     public Batch advance(long user,String runId,Advance request,String key) {
         String id=uuid(runId),requestKey=uuid(key),hash=SimulationOriginResolver.hash(id+"|"+write(request));
         BatchResult result=isolation.advance(user,id,request.expectedVersion(),request.expectedBatchNo(),requestKey,hash,run->{
-            if(!SimulationGenerator.VERSION.equals(run.generatorVersion()))throw new BusinessException(ErrorCode.CONFLICT,"Generator version is unsupported; saved results remain readable");
+            if(!SimulationGenerator.supports(run.generatorVersion()))throw new BusinessException(ErrorCode.CONFLICT,"Generator version is unsupported; saved results remain readable");
             var calendar=read(run.calendarSnapshot(),SimulationCalendar.Snapshot.class);
             var parameters=read(run.parameters(),JsonNode.class);
+            var mode=SimulationGenerator.Mode.valueOf(parameters.required("mode").asText());
+            if(mode==SimulationGenerator.Mode.OPENING_GAP&&run.lastBatchNo()==0)
+                return List.of(new SimulationModels.Point(SimulationCalendar.nextOpening(MarketTime.instant(run.simClockNs()),calendar),
+                        new java.math.BigDecimal(parameters.required("openingGap").required("openingPrice").asText())));
             var times=SimulationCalendar.minutes(MarketTime.instant(run.simClockNs()),60,calendar);
             return SimulationGenerator.generate(run.generatorVersion(),run.seed(),run.nextPointSeq(),run.latestPrice(),
-                    SimulationGenerator.Mode.valueOf(parameters.required("mode").asText()),
+                    mode==SimulationGenerator.Mode.OPENING_GAP?SimulationGenerator.Mode.valueOf(parameters.required("openingGap").required("continuationMode").asText()):mode,
                     new java.math.BigDecimal(parameters.required("stepRatio").asText()),times);
         });
         Step step=store.byRequest(id,requestKey);
@@ -82,15 +88,17 @@ public class SimulationService {
         var rows=store.pageEvents(run.id(),position.after(),position.watermark(),a,b);boolean more=rows.size()>100;
         var page=more?rows.subList(0,100):rows;
         Map<Long,JsonNode> configs=new HashMap<>();store.snapshots(run.id()).forEach(s->configs.put(s.id(),read(s.configJson(),JsonNode.class)));
+        var parameters=read(run.parameters(),JsonNode.class);
         var events=page.stream().map(e->new SimulationApi.Event(e.id(),e.snapshotRuleId(),e.pointSeq(),e.eventType(),
-                MarketTime.instant(e.eventTimeNs()),Long.toString(e.eventTimeNs()),e.price().toPlainString(),e.fromState(),e.toState(),configs.get(e.snapshotRuleId()))).toList();
+                MarketTime.instant(e.eventTimeNs()),Long.toString(e.eventTimeNs()),e.price().toPlainString(),e.fromState(),e.toState(),configs.get(e.snapshotRuleId()),
+                e.pointSeq()==1&&parameters.path("mode").asText().equals("OPENING_GAP")?parameters.get("openingGap"):null)).toList();
         String next=more?cursors.encode(user,run.id(),"EVENTS",a,b,page.getLast().id(),position.watermark()):null;
         return new EventPage(events,next,Long.toString(position.watermark()));
     }
     private Current current(Run run) {
         return new Current(run.id(),run.stockId(),run.version(),run.lastBatchNo(),MarketTime.instant(run.simClockNs()),run.latestPrice().toPlainString(),
                 run.nextPointSeq(),read(run.originSnapshot(),JsonNode.class),read(run.parameters(),JsonNode.class),Long.toString(run.seed()),
-                run.generatorVersion(),SimulationGenerator.VERSION.equals(run.generatorVersion()),rules(run.id()),stats(store.eventCounts(run.id())));
+                run.generatorVersion(),SimulationGenerator.supports(run.generatorVersion()),rules(run.id()),stats(store.eventCounts(run.id())));
     }
     private List<Rules> rules(String id){return store.snapshots(id).stream().map(s->new Rules(s.id(),s.sourceRuleId(),s.sourceVersion(),read(s.configJson(),JsonNode.class),
             s.sourceStatus(),s.initialState(),s.currentState(),s.stateVersion())).toList();}

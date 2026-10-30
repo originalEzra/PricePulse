@@ -14,7 +14,8 @@ export const useSimulationStore = defineStore('simulation', () => {
       cursor => simulationApi.events(id, from, to, cursor, signal)),
   }))
   const defaults = () => ({ browseStockId: 0, originKind: 'HISTORICAL_POINT' as 'LATEST' | 'HISTORICAL_POINT',
-    mode: 'NORMAL' as SimulationMode, percent: 0.3, seedInput: '' })
+    mode: 'NORMAL' as SimulationMode, percent: 0.3, seedInput: '', referenceSource: 'REAL_HISTORY' as 'REAL_HISTORY' | 'CUSTOM',
+    customReference: '', openingPrice: '', continuationMode: 'NORMAL' as Exclude<SimulationMode, 'OPENING_GAP'> })
   const draft = reactive(defaults())
   const shownByRun = reactive(new Map<string, Set<number>>())
   function reset() { controller.reset(); Object.assign(draft, defaults()); shownByRun.clear() }

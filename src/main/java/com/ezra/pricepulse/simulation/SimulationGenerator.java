@@ -10,12 +10,14 @@ import java.util.*;
 /** Versioned per-sequence randomness; persisted price rounding is part of the algorithm. */
 public final class SimulationGenerator {
     public static final String VERSION="splitmix64-price-v1";
-    public enum Mode { NORMAL, RISE, FALL, OSCILLATE }
+    public static final String GAP_VERSION="opening-gap-v1";
+    public static boolean supports(String version){return VERSION.equals(version)||GAP_VERSION.equals(version);}
+    public enum Mode { NORMAL, RISE, FALL, OSCILLATE, OPENING_GAP }
     private SimulationGenerator() {}
     public static List<Point> generate(String version,long seed,long firstSequence,BigDecimal previous,
             Mode mode,BigDecimal ratio,List<Instant> times) {
-        if(!VERSION.equals(version))throw new BusinessException(ErrorCode.CONFLICT,"Generator version is unsupported; saved results remain readable");
-        if(firstSequence<1 || mode==null || ratio==null || ratio.signum()<=0 || ratio.compareTo(new BigDecimal("0.003"))>0)
+        if(!supports(version))throw new BusinessException(ErrorCode.CONFLICT,"Generator version is unsupported; saved results remain readable");
+        if(firstSequence<1 || mode==null || mode==Mode.OPENING_GAP || ratio==null || ratio.signum()<=0 || ratio.compareTo(new BigDecimal("0.003"))>0)
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,"Invalid simulation parameters");
         var result=new ArrayList<Point>();BigDecimal price=PriceTicks.normalize(previous,"price");long sequence=firstSequence;
         for(Instant time:times) {

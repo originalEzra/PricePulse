@@ -13,6 +13,7 @@ import type {
   Stock,
   MarketTimeline, TimelineEventPage, TimelineWindow,
   SimulationRun, StartSimulation, SimulationTimeline, SimulationEventPage, SimulationBatch,
+  MonitoringPage, MonitoredStock, AssetSearchResult, CancellationPreview,
 } from './types'
 
 export const authApi = {
@@ -27,6 +28,7 @@ export const authApi = {
 }
 
 export const simulationApi = {
+  capabilities: () => api<{ openingGap: boolean }>('/api/simulations/capabilities', { cache: 'no-store' }),
   current: (signal?: AbortSignal) => api<SimulationRun | null>('/api/simulations/current', { cache: 'no-store', signal }),
   start: (body: StartSimulation, key: string) => api<SimulationRun>('/api/simulations/start', {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
@@ -47,6 +49,19 @@ export const simulationApi = {
 export const stockApi = {
   list: (query = '') => api<Stock[]>(`/api/stocks?query=${encodeURIComponent(query)}&limit=50`),
   get: (id: number) => api<Stock>(`/api/stocks/${id}`),
+}
+
+export const monitoringApi = {
+  capabilities: (signal?: AbortSignal) => api<{ managementEnabled: boolean; dynamicSubscriptions: boolean }>('/api/monitoring/capabilities', { signal }),
+  list: (signal?: AbortSignal) => api<MonitoringPage>('/api/monitoring/subscriptions', { signal, cache: 'no-store' }),
+  search: (query: string, signal?: AbortSignal) => api<AssetSearchResult>(`/api/assets?${new URLSearchParams({ query, limit: '20' })}`, { signal, cache: 'no-store' }),
+  add: (assetId: string) => api<MonitoredStock>('/api/monitoring/subscriptions', { method: 'POST', body: JSON.stringify({ assetId }) }),
+  preview: (id: number) => api<CancellationPreview>(`/api/monitoring/subscriptions/${id}/cancellation`, { cache: 'no-store' }),
+  cancel: (preview: CancellationPreview) => api<{ deletedRules: number }>(`/api/monitoring/subscriptions/${preview.stockId}/cancel`, {
+    method: 'POST', body: JSON.stringify({ version: preview.version, rulesDigest: preview.rulesDigest, confirmed: true }),
+  }),
+  retry: (id: number, version: number) => api<MonitoredStock>(`/api/monitoring/subscriptions/${id}/retry`, { method: 'POST', body: JSON.stringify({ version }) }),
+  prepareHistory: (id: number) => api<{ requestId: string; state: string; errorCode: string | null }>(`/api/monitoring/subscriptions/${id}/history-requests`, { method: 'POST' }),
 }
 
 export const ruleApi = {

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class MarketFeedHealth {
     private static final Logger log=LoggerFactory.getLogger(MarketFeedHealth.class);
     private volatile String connection = "DISABLED", lastError;
+    private volatile Set<String> confirmedSymbols=Set.of();
     private final ConcurrentMap<String,Instant> observedAt = new ConcurrentHashMap<>();
     private final AtomicLong observed = new AtomicLong(), rejected = new AtomicLong(), overflows = new AtomicLong();
     private long connectionAttempts, subscriptions, receivedFrames, sentPings, receivedPongs, heartbeatTimeouts, clientTimingGaps;
@@ -20,7 +21,9 @@ public class MarketFeedHealth {
     private Integer lastCloseCode;
     private Instant lastCloseRequestedAt,lastCloseSentAt;
     private final ArrayDeque<MarketDataModels.StreamFailure> recentFailures=new ArrayDeque<>();
-    public void connection(String state) { connection = state; }
+    public void connection(String state) { connection = state;if(!state.equals("SUBSCRIBED"))confirmedSymbols=Set.of(); }
+    public boolean confirms(String symbol){return connection.equals("SUBSCRIBED")&&confirmedSymbols.contains(symbol);}
+    public void subscriptionSymbols(Collection<String> symbols){confirmedSymbols=Set.copyOf(symbols);}
     public void error(String safeCode) { lastError = safeCode; }
     public void observed(String symbol, Instant eventTime) {
         observed.incrementAndGet(); observedAt.merge(symbol,eventTime,(a,b)->a.isAfter(b)?a:b);
@@ -29,7 +32,7 @@ public class MarketFeedHealth {
     public void overflow() { overflows.incrementAndGet(); error("QUEUE_OVERFLOW"); }
     public String connection() { return connection; }
     public synchronized void streamAttempt(Instant at) { connectionAttempts++; lastConnectAttemptAt=at; }
-    public synchronized void streamSubscribed(Instant at) { subscriptions++; lastSubscribedAt=at; }
+    public synchronized void streamSubscribed(Instant at,Collection<String> symbols) { subscriptions++; lastSubscribedAt=at;confirmedSymbols=Set.copyOf(symbols); }
     public synchronized void streamFrame(Instant at) { receivedFrames++; lastFrameAt=at; }
     public synchronized void streamPing(Instant at) { sentPings++; lastPingAt=at; }
     public synchronized void streamPong(Instant at) { receivedPongs++; lastPongAt=at; }
@@ -62,7 +65,8 @@ public class MarketFeedHealth {
         Instant accepted = state == null ? null : MarketTime.instant(state.eventTimeNs());
         String freshness = !open ? "MARKET_CLOSED" : observedTime == null ? "NO_DATA"
                 : observedTime.isBefore(now.minusSeconds(120)) ? "DELAYED" : "RECENT_IEX_TRADE";
-        return new MarketDataModels.Health(connection,open?"OPEN":"CLOSED",freshness,writes,
+        String scopedConnection=connection.equals("SUBSCRIBED")&&!confirms(symbol)?"NOT_SUBSCRIBED":connection;
+        return new MarketDataModels.Health(scopedConnection,open?"OPEN":"CLOSED",freshness,writes,
                 observedTime,accepted,observed.get(),rejected.get(),overflows.get(),lastError,streamSnapshot());
     }
 }

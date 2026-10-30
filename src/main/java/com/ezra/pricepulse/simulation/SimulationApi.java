@@ -5,6 +5,7 @@ import com.ezra.pricepulse.market.MarketDataModels.Point;
 import com.ezra.pricepulse.market.MarketDataModels.TradingSession;
 import com.ezra.pricepulse.simulation.SimulationModels.StoredPoint;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -14,12 +15,20 @@ import java.util.List;
 
 public final class SimulationApi {
     private SimulationApi() {}
-    public enum OriginKind { LATEST, HISTORICAL_POINT }
+    public enum OriginKind { LATEST, HISTORICAL_POINT, SIMULATION_REFERENCE }
+    public enum ReferenceSource { REAL_HISTORY, CUSTOM }
+    public record OpeningGap(@NotNull ReferenceSource source,@DecimalMin("0.0001") @Digits(integer=12,fraction=4) BigDecimal referencePrice,
+            @NotNull @DecimalMin("0.0001") @Digits(integer=12,fraction=4) BigDecimal openingPrice,@NotNull SimulationGenerator.Mode continuationMode){}
     public record Origin(@NotNull OriginKind kind,@Size(max=80) String pointRef,@Size(max=40) String revision) {}
     public record Start(@NotNull @Positive Long stockId,@NotNull @Valid Origin origin,
             @NotNull SimulationGenerator.Mode mode,
             @NotNull @DecimalMin(value="0",inclusive=false) @DecimalMax("0.003") @Digits(integer=1,fraction=6) BigDecimal stepRatio,
-            Long seed,@JsonProperty(value="expectedCurrentRunId",required=true) @Size(max=36) String expectedCurrentRunId) {}
+            Long seed,@JsonProperty(value="expectedCurrentRunId",required=true) @Size(max=36) String expectedCurrentRunId,
+            @Valid @JsonInclude(JsonInclude.Include.NON_NULL) OpeningGap openingGap) {
+        public Start(Long stockId,Origin origin,SimulationGenerator.Mode mode,BigDecimal stepRatio,Long seed,String expectedCurrentRunId){
+            this(stockId,origin,mode,stepRatio,seed,expectedCurrentRunId,null);
+        }
+    }
     public record Advance(@NotNull @PositiveOrZero Long expectedVersion,@NotNull @PositiveOrZero Long expectedBatchNo) {}
     public record Rules(long snapshotRuleId,long sourceRuleId,long sourceVersion,JsonNode config,
             AlertRuleStatus sourceStatus,AlertRuleStatus initialState,AlertRuleStatus currentState,long stateVersion) {}
@@ -34,6 +43,6 @@ public final class SimulationApi {
             Range range,List<TradingSession> sessions,List<Point> realPrefix,List<StoredPoint> simulation,List<Rules> thresholds,
             Stats stats,String pointCursor,String watermark) {}
     public record Event(long id,long snapshotRuleId,long pointSeq,String eventType,Instant eventTime,String epochNanos,
-            String price,AlertRuleStatus fromState,AlertRuleStatus toState,JsonNode ruleSnapshot) {}
+            String price,AlertRuleStatus fromState,AlertRuleStatus toState,JsonNode ruleSnapshot,JsonNode triggerContext) {}
     public record EventPage(List<Event> events,String eventCursor,String watermark) {}
 }

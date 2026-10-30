@@ -22,7 +22,7 @@ class OpeningGapMigrationInfrastructureIT {
             sql.executeUpdate("INSERT INTO outbox_events(aggregate_type,aggregate_id,event_type,payload,status) VALUES('ALERT_TRIGGER',1,'ALERT_TRIGGERED','{}','SENT')");
             sql.executeUpdate("INSERT INTO notifications(user_id,trigger_id,title,content) VALUES(1,1,'Existing','Immutable')");
         }
-        var flyway=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").load();
+        var flyway=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").target("8").load();
         assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);assertThat(flyway.migrate().migrationsExecuted).isZero();
         try(var connection=DriverManager.getConnection(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword());var sql=connection.createStatement()){
             assertThat(value(sql,"SELECT effective_at FROM alert_rules WHERE id=1")).isEqualTo("2026-10-28 14:00:00.654321");

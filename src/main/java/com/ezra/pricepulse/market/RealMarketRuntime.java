@@ -1,6 +1,8 @@
 package com.ezra.pricepulse.market;
 
 import com.ezra.pricepulse.stock.StockMapper;
+import com.ezra.pricepulse.monitoring.*;
+import com.ezra.pricepulse.monitoring.MonitoringModels.Demand;
 import com.fasterxml.jackson.databind.*;
 import jakarta.annotation.PreDestroy;
 import java.net.http.HttpClient;
@@ -8,12 +10,15 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/** Fixed small universe, one upstream instance. The WS callback never performs a database transaction. */
+/** One upstream instance. Persistent demand may change; WS callbacks never access MySQL. */
 @Component
 @Profile("!standalone & !mq-it")
 public class RealMarketRuntime {
@@ -25,51 +30,102 @@ public class RealMarketRuntime {
     private final MarketFeedHealth health;
     private final ObjectMapper json;
     private final Clock clock;
+    private final MonitoringProperties monitoring;
+    private final MonitoringMapper subscriptions;
+    private final AlpacaStream.Connector connectorOverride;
+    private final Supplier<AlpacaDataClient> clientOverride;
     private final Map<String,MarketQuoteLane> lanes=new ConcurrentHashMap<>();
     private final AtomicReference<List<MarketDataModels.Session>> sessions=new AtomicReference<>(List.of());
     private ScheduledExecutorService scheduler;
     private AlpacaStream stream;
     private AlpacaDataClient client;
-    private Map<String,Long> stockIds;
+    private final Map<String,Long> stockIds=new ConcurrentHashMap<>(),intents=new ConcurrentHashMap<>();
+    private final AtomicBoolean syncing=new AtomicBoolean();
     private volatile boolean stopped;
-    public RealMarketRuntime(AlpacaProperties properties,MarketDataMapper data,StockMapper stocks,
-            MarketHistoryCache cache,QuoteIngestionService ingestion,MarketFeedHealth health,ObjectMapper json,Clock clock) {
+    @Autowired public RealMarketRuntime(AlpacaProperties properties,MarketDataMapper data,StockMapper stocks,
+            MarketHistoryCache cache,QuoteIngestionService ingestion,MarketFeedHealth health,ObjectMapper json,Clock clock,
+            MonitoringProperties monitoring,MonitoringMapper subscriptions) {
+        this(properties,data,stocks,cache,ingestion,health,json,clock,monitoring,subscriptions,null,null);
+    }
+    RealMarketRuntime(AlpacaProperties properties,MarketDataMapper data,StockMapper stocks,
+            MarketHistoryCache cache,QuoteIngestionService ingestion,MarketFeedHealth health,ObjectMapper json,Clock clock,
+            MonitoringProperties monitoring,MonitoringMapper subscriptions,AlpacaStream.Connector connectorOverride,Supplier<AlpacaDataClient> clientOverride) {
         this.properties=properties;this.data=data;this.stocks=stocks;this.cache=cache;this.ingestion=ingestion;
         this.health=health;this.json=json;this.clock=clock;
+        this.monitoring=monitoring;this.subscriptions=subscriptions;this.connectorOverride=connectorOverride;this.clientOverride=clientOverride;
     }
     @EventListener(ApplicationReadyEvent.class)
-    public void start() {
-        if (!properties.isEnabled()) return;
+    public synchronized void start() {
+        if (!properties.isEnabled()||stream!=null||stopped) return;
         properties.validate();
-        stockIds=new LinkedHashMap<>();
-        for (String symbol:properties.getSymbols()) {
+        var initial=new ArrayList<Demand>();
+        if(monitoring.isDynamicSubscriptionsEnabled())initial.addAll(subscriptions.liveDemand());
+        else for (String symbol:properties.getSymbols()) {
             var matches=stocks.findActiveBySymbol(symbol,"US");
             if (matches.size()!=1 || !matches.getFirst().currency().equals("USD"))
                 throw new IllegalStateException("Configured USD stock is not in the US catalog");
-            stockIds.put(symbol,matches.getFirst().id());
-            if (properties.isBusinessWritesEnabled()) {
-                long stockId=matches.getFirst().id();
-                lanes.put(symbol,new MarketQuoteLane(stockId,properties.getQueueCapacity(),work->process(stockId,work),code->{
-                    if(code.equals("QUEUE_OVERFLOW"))health.overflow();else health.error(code);
-                }));
-            }
+            initial.add(new Demand(matches.getFirst().id(),symbol,0));
         }
+        install(initial);
         sessions.set(data.sessions());
         scheduler=Executors.newScheduledThreadPool(3,Thread.ofPlatform().daemon().name("alpaca-io-",0).factory());
-        client=AlpacaDataClient.authenticated(properties,json);
-        stream=new AlpacaStream(properties,json,scheduler,AlpacaStream.connector(HttpClient.newHttpClient()),health,
+        client=clientOverride==null?AlpacaDataClient.authenticated(properties,json):clientOverride.get();
+        stream=new AlpacaStream(properties,json,scheduler,connectorOverride==null?AlpacaStream.connector(HttpClient.newHttpClient()):connectorOverride,health,
                 this::message,()->lanes.values().forEach(l->l.gap("RECONNECT")),clock);
+        if(monitoring.isDynamicSubscriptionsEnabled())stream.enableDynamicSubscriptions(Map.copyOf(intents));
         // Cache warmup is independent of stream availability and formal business writes.
         scheduler.scheduleWithFixedDelay(this::syncHistory,0,300,TimeUnit.SECONDS);
         stream.start();
     }
+    public synchronized void applySubscriptions(List<Demand> desired){
+        if(stopped||stream==null||!monitoring.isDynamicSubscriptionsEnabled())return;
+        boolean changed=install(desired);
+        stream.desireSubscriptions(Map.copyOf(intents));
+        if(changed)scheduler.execute(this::syncHistory);
+    }
+    private boolean install(List<Demand> desired){
+        var next=new LinkedHashMap<String,Demand>();
+        for(var d:desired)if(next.put(d.symbol(),d)!=null)throw new IllegalStateException("Duplicate upstream symbol");
+        boolean changed=false;
+        for(String symbol:new ArrayList<>(stockIds.keySet())){
+            var d=next.get(symbol);
+            if(d==null||!Objects.equals(intents.get(symbol),d.intentVersion())||!Objects.equals(stockIds.get(symbol),d.stockId())){
+                var lane=lanes.remove(symbol);if(lane!=null)lane.close();stockIds.remove(symbol);intents.remove(symbol);changed=true;
+            }
+        }
+        for(var d:desired)if(!stockIds.containsKey(d.symbol())){
+            stockIds.put(d.symbol(),d.stockId());intents.put(d.symbol(),d.intentVersion());changed=true;
+            if(properties.isBusinessWritesEnabled())lanes.put(d.symbol(),new MarketQuoteLane(d.stockId(),properties.getQueueCapacity(),work->process(d.stockId(),work),code->{
+                if(code.equals("QUEUE_OVERFLOW"))health.overflow();else health.error(code);
+            }));
+        }
+        return changed;
+    }
+    public record SubscriptionObservation(String state,String epoch,String errorCode,long intentVersion,boolean absent){}
+    public synchronized SubscriptionObservation subscription(String symbol){
+        var view=stream==null?null:stream.subscriptions();
+        if(view==null)return new SubscriptionObservation("PENDING",null,"AWAITING_UPSTREAM_CONFIRMATION",-1,false);
+        long intent=view.desired().getOrDefault(symbol,-1L);
+        var failure=view.failures().get(symbol);
+        if(failure!=null&&failure.intent()==intent)return new SubscriptionObservation("FAILED",view.epoch(),failure.code(),intent,view.rejectedAbsent(symbol));
+        if(health.connection().equals("REJECTED"))return new SubscriptionObservation("FAILED",null,"UPSTREAM_REJECTED",intent,false);
+        boolean confirmed=view.confirms(symbol);
+        return new SubscriptionObservation(confirmed?"CONFIRMED":"PENDING",confirmed?view.epoch():null,
+                confirmed?null:"AWAITING_UPSTREAM_CONFIRMATION",intent,view.absent(symbol));
+    }
     private void syncHistory() {
+        if(stopped||!syncing.compareAndSet(false,true))return;
         try {
             Instant to=clock.instant(),from=to.atZone(MarketTime.NEW_YORK).minusMonths(1).minusDays(8).toInstant();
-            var download=client.download(properties,stockIds,from,to);
-            if (stopped) return;
-            cache.store(download,stockIds.values(),from,to); sessions.set(download.sessions());
+            var snapshot=new TreeMap<>(stockIds);var entries=new ArrayList<>(snapshot.entrySet());
+            for(int offset=0;offset<entries.size();offset+=MarketUniverse.MAX_SYMBOLS){
+                var chunk=new LinkedHashMap<String,Long>();entries.subList(offset,Math.min(entries.size(),offset+MarketUniverse.MAX_SYMBOLS)).forEach(e->chunk.put(e.getKey(),e.getValue()));
+                var download=client.download(properties,chunk,from,to);
+                if (stopped) return;
+                cache.store(download,chunk.values(),from,to); sessions.set(download.sessions());
+            }
         } catch (Exception ignored) { health.error("HISTORY_SYNC_FAILED"); }
+        finally{syncing.set(false);}
     }
     private void message(JsonNode item,Instant received) {
         if (!"t".equals(item.path("T").asText())) {
@@ -104,7 +160,7 @@ public class RealMarketRuntime {
             health.reject();var lane=lanes.get(trade.symbol());if(lane!=null)lane.gap("STALE_OR_FUTURE");
         }
     }
-    @PreDestroy public void stop() {
+    @PreDestroy public synchronized void stop() {
         stopped=true;
         if(stream!=null)stream.closeAndAwait();
         if(scheduler!=null)scheduler.shutdownNow();
