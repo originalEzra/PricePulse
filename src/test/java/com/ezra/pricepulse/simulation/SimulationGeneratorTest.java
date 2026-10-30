@@ -11,6 +11,7 @@ class SimulationGeneratorTest {
     List<Instant> times(int first,int size){return java.util.stream.IntStream.range(first,first+size).mapToObj(n->Instant.parse("2026-10-28T13:30:00.123456789Z").plusSeconds(n*60L)).toList();}
     @Test void seededPathIsIdenticalAfterBatchSplitAndFreshGeneratorInvocation() {
         for(var mode:SimulationGenerator.Mode.values()) {
+            if(mode==SimulationGenerator.Mode.OPENING_GAP)continue; // Discrete opening is prepared outside the minute generator.
             var whole=SimulationGenerator.generate(SimulationGenerator.VERSION,42,1,price,mode,ratio,times(1,120));
             var first=SimulationGenerator.generate(SimulationGenerator.VERSION,42,1,price,mode,ratio,times(1,60));
             var second=SimulationGenerator.generate(SimulationGenerator.VERSION,42,61,first.getLast().price(),mode,ratio,times(61,60));
@@ -31,5 +32,10 @@ class SimulationGeneratorTest {
     @Test void rejectsUnknownVersionsAndInvalidAmplitude() {
         assertThatThrownBy(()->SimulationGenerator.generate("new-unknown-version",1,1,price,SimulationGenerator.Mode.NORMAL,ratio,times(1,1))).hasMessageContaining("unsupported");
         assertThatThrownBy(()->SimulationGenerator.generate(SimulationGenerator.VERSION,1,1,price,SimulationGenerator.Mode.NORMAL,new BigDecimal("0.3"),times(1,1))).hasMessageContaining("parameters");
+    }
+    @Test void discreteOpeningCannotBeGeneratedAsOrdinaryMinutePrices() {
+        for(String version:List.of(SimulationGenerator.VERSION,SimulationGenerator.GAP_VERSION))
+            assertThatThrownBy(()->SimulationGenerator.generate(version,42,1,price,SimulationGenerator.Mode.OPENING_GAP,ratio,times(1,60)))
+                    .hasMessageContaining("parameters");
     }
 }

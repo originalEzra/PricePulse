@@ -11,6 +11,7 @@
         <result property="triggerPrice" column="trigger_price"/>
         <result property="eventTime" column="event_time"/>
         <result property="ruleSnapshot" column="rule_snapshot"/>
+        <result property="triggerContext" column="trigger_context"/>
         <result property="originType" column="origin_type"/>
     </resultMap>
 
@@ -50,7 +51,7 @@
                CAST(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockId')) AS UNSIGNED) AS stock_id,
                JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')) AS stock_symbol,
                JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')) AS stock_name,
-               t.trigger_price, t.event_time, t.rule_snapshot, q.origin_type
+               t.trigger_price, t.event_time, t.rule_snapshot, t.trigger_context, q.origin_type
         FROM alert_triggers t
         JOIN alert_rules r ON r.id = t.rule_id
         JOIN quote_events q ON q.id = t.quote_event_id

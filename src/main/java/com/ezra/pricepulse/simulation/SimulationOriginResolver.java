@@ -21,10 +21,17 @@ public class SimulationOriginResolver {
     private final MarketDataMapper data;
     private final ObjectMapper json;
     private final Clock clock;
-    public SimulationOriginResolver(MarketDataMapper data,ObjectMapper json,Clock clock){this.data=data;this.json=json;this.clock=clock;}
+    private final com.ezra.pricepulse.monitoring.MonitoringMapper assets;
+    public SimulationOriginResolver(MarketDataMapper data,ObjectMapper json,Clock clock,com.ezra.pricepulse.monitoring.MonitoringMapper assets){this.data=data;this.json=json;this.clock=clock;this.assets=assets;}
     public Seed prepare(Stock stock,SimulationApi.Start request,long seed) {
         if(!stock.market().equals("US") || !stock.currency().equals("USD")
-                || !Set.of("AAPL","MSFT","NVDA","AMZN","GOOGL").contains(stock.symbol()))throw missing();
+                || (!MarketUniverse.supports(stock.symbol())&&assets.assetId(stock.id())==null))throw missing();
+        if(request.mode()==SimulationGenerator.Mode.OPENING_GAP)
+            return SimulationOpeningGap.prepare(data,json,clock,stock,request,seed,r->standard(stock,r,seed));
+        if(request.openingGap()!=null||request.origin().kind()==SimulationApi.OriginKind.SIMULATION_REFERENCE)throw invalid("Simulation reference requires opening-gap mode");
+        return standard(stock,request,seed);
+    }
+    private Seed standard(Stock stock,SimulationApi.Start request,long seed){
         Instant now=clock.instant();List<Session> sessions=data.sessions();
         if(sessions.isEmpty())throw unavailable("Trading calendar is not cached");
         Point point;

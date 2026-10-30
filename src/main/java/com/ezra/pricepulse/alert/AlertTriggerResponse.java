@@ -11,5 +11,6 @@ public record AlertTriggerResponse(
         BigDecimal triggerPrice,
         LocalDateTime eventTime,
         JsonNode ruleSnapshot,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        JsonNode triggerContext) {
 }

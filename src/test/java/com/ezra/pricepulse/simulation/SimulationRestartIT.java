@@ -99,7 +99,7 @@ class SimulationRestartIT {
         if(process!=null && process.isAlive()){process.destroy();if(!process.waitFor(15,TimeUnit.SECONDS)){process.destroyForcibly();process.waitFor(5,TimeUnit.SECONDS);throw new AssertionError("Disposable process did not stop gracefully");}}
         process=null;
     }
-    private JsonNode call(String method,String path,JsonNode body,String key)throws Exception {
+    JsonNode call(String method,String path,JsonNode body,String key)throws Exception {
         var request=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(15)).header("Authorization","Bearer "+token);
         if(key!=null)request.header("Idempotency-Key",key);
         if(body==null)request.GET();else request.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
@@ -107,7 +107,7 @@ class SimulationRestartIT {
         assertThat(response.statusCode()).as("Disposable simulation API "+path).isEqualTo(200);
         return json.readTree(response.body()).required("data");
     }
-    private String token(long owner)throws Exception {
+    String token(long owner)throws Exception {
         long now=Instant.now().getEpochSecond();String header=base64(json.writeValueAsBytes(Map.of("alg","HS256","typ","JWT")));
         String payload=base64(json.writeValueAsBytes(Map.of("iss","price-pulse","sub",Long.toString(owner),"iat",now,"exp",now+600)));
         Mac mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));

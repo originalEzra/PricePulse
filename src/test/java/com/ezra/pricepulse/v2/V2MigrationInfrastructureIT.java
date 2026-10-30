@@ -45,7 +45,7 @@ class V2MigrationInfrastructureIT {
                 .locations("classpath:db/migration").load();
         flyway.migrate();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("6");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("10");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         try (Connection c = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              Statement s = c.createStatement()) {
@@ -53,6 +53,7 @@ class V2MigrationInfrastructureIT {
             assertThat(value(s, "SELECT latest_price FROM stocks WHERE id=1")).isEqualTo("101.0000");
             assertThat(value(s, "SELECT latest_price FROM stocks WHERE symbol='AAPL' AND market='US'")).isEqualTo("42.0000");
             assertThat(value(s, "SELECT name FROM stocks WHERE symbol='AAPL' AND market='US'")).isEqualTo("Existing Apple");
+            assertThat(value(s, "SELECT COUNT(*) FROM stocks WHERE market='US' AND currency='USD'")).isEqualTo("15");
             assertThat(value(s, "SELECT status FROM alert_rules WHERE id=1")).isEqualTo("COOLDOWN");
             assertThat(value(s, "SELECT COUNT(*) FROM alert_triggers")).isEqualTo("1");
             assertThat(value(s, "SELECT status FROM notifications WHERE id=1")).isEqualTo("UNREAD");

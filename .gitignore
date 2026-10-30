@@ -26,3 +26,4 @@ frontend/dist/
 *.pfx
 *.jks
 *.keystore
+/src/main/resources/application-local.yml

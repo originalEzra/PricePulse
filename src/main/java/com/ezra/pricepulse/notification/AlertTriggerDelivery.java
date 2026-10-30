@@ -13,6 +13,9 @@ public class AlertTriggerDelivery {
     private BigDecimal triggerPrice;
     private LocalDateTime eventTime;
     private String ruleSnapshot;
+    private String triggerContext;
+    public String getTriggerContext() { return triggerContext; }
+    public void setTriggerContext(String value) { triggerContext=value; }
     private String originType;
     public String getOriginType() { return originType; }
     public void setOriginType(String originType) { this.originType = originType; }

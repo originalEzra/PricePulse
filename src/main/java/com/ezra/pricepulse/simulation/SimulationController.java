@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class SimulationController {
     private final SimulationService service;
     public SimulationController(SimulationService service){this.service=service;}
+    @GetMapping("/capabilities") public ApiResponse<java.util.Map<String,Object>> capabilities(){return ApiResponse.success(java.util.Map.of("openingGap",true,"scope","SIMULATION"));}
     @GetMapping("/current") public ApiResponse<Current> current(@CurrentUserId Long user){return ApiResponse.success(service.current(user));}
     @PostMapping("/start") public ApiResponse<Current> start(@CurrentUserId Long user,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody Start request){return ApiResponse.success(service.start(user,request,key));}
     @PostMapping("/{runId}/advance") public ApiResponse<Batch> advance(@CurrentUserId Long user,@PathVariable String runId,@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody Advance request){return ApiResponse.success(service.advance(user,runId,request,key));}

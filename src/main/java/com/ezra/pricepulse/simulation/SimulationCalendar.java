@@ -9,6 +9,12 @@ public final class SimulationCalendar {
     private SimulationCalendar() {}
     public record Session(String date,Instant open,Instant close) {}
     public record Snapshot(String version,List<Session> sessions) {}
+    public static Instant nextOpening(Instant referenceClose,Snapshot calendar){
+        // Reuse the full calendar validation, including overlap and coverage checks.
+        minutes(referenceClose,1,calendar);
+        if(calendar.sessions().stream().noneMatch(s->s.close().equals(referenceClose)))throw unavailable();
+        return calendar.sessions().stream().filter(s->s.open().isAfter(referenceClose)).findFirst().orElseThrow(SimulationCalendar::unavailable).open();
+    }
     public static List<Instant> minutes(Instant origin,int count,Snapshot calendar) {
         if(count<1 || count>10000 || calendar==null || calendar.sessions()==null || calendar.sessions().isEmpty())throw unavailable();
         List<Session> sessions=calendar.sessions(); Instant previous=null;

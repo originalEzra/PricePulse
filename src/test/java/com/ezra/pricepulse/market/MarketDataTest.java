@@ -103,6 +103,41 @@ class MarketDataTest {
         assertThat(p.isEnabled()).isFalse();assertThat(p.isBusinessWritesEnabled()).isFalse();
         assertThat(p.toString()).doesNotContain("private-key","private-secret");
     }
+    @Test void fifteenDistinctApprovedSymbolsAreSupportedButDuplicatesAndUnknownSymbolsAreRejected() {
+        var p=new AlpacaProperties();p.setEnabled(true);p.setKeyId("dummy-key");p.setSecretKey("dummy-secret");
+        assertThat(p.getSymbols()).hasSize(15).contains("AAPL","MSFT","NVDA","AMZN","GOOGL","TSLA","HOOD");
+        assertThatCode(p::validate).doesNotThrowAnyException();
+        p.setSymbols(List.of("AAPL","AAPL"));assertThatThrownBy(p::validate).isInstanceOf(IllegalStateException.class);
+        p.setSymbols(List.of("UNKNOWN"));assertThatThrownBy(p::validate).isInstanceOf(IllegalStateException.class);
+        assertThat(p.isBusinessWritesEnabled()).isFalse();
+    }
+    @Test void fifteenStockMonthFollowsPagesPastTheOldTwentyPageLimit() throws Exception {
+        var requested=new java.util.concurrent.atomic.AtomicInteger();
+        var stocks=new LinkedHashMap<String,Long>();MarketUniverse.SYMBOLS.forEach(symbol->stocks.put(symbol,(long)stocks.size()+1));
+        var client=new AlpacaDataClient(uri->{
+            if(uri.getPath().endsWith("calendar"))return json.readTree("[{\"date\":\"2026-10-28\",\"open\":\"09:30\",\"close\":\"16:00\"}]");
+            int page=requested.incrementAndGet();
+            return json.readTree(page<22?"{\"bars\":{},\"next_page_token\":\"page"+(page+1)+"\"}":
+                    "{\"bars\":{\"HOOD\":["+bar("2026-10-28T13:30:00Z")+"]},\"next_page_token\":null}");
+        });
+        var result=client.download(new AlpacaProperties(),stocks,Instant.parse("2026-10-01T00:00:00Z"),Instant.parse("2026-10-29T00:00:00Z"));
+        assertThat(result.pages()).isEqualTo(22);assertThat(result.bars()).hasSize(1);
+        assertThat(result.bars().getFirst().stockId()).isEqualTo(stocks.get("HOOD"));
+    }
+    @Test void historyRangeAndPageSafetyBoundsStillFailRatherThanReturnTruncatedCoverage() throws Exception {
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        var client=new AlpacaDataClient(uri->{
+            if(uri.getPath().endsWith("calendar"))return json.readTree("[]");
+            return json.readTree("{\"bars\":{},\"next_page_token\":\"p"+calls.incrementAndGet()+"\"}");
+        });
+        Instant to=Instant.parse("2026-10-29T00:00:00Z");
+        assertThatThrownBy(()->client.download(new AlpacaProperties(),Map.of("AAPL",1L),to.minusSeconds(46L*86400),to))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(calls).hasValue(0);
+        assertThatThrownBy(()->client.download(new AlpacaProperties(),Map.of("AAPL",1L),to.minusSeconds(60),to))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("bounded cache range");
+        assertThat(calls).hasValue(21);
+    }
     private JsonNode trade(String id,String time,String price,String conditions)throws Exception {
         return json.readTree("{\"T\":\"t\",\"S\":\"AAPL\",\"x\":\"V\",\"i\":"+id+",\"p\":"+price+",\"s\":100,\"c\":"+conditions+",\"t\":\""+time+"\"}");
     }

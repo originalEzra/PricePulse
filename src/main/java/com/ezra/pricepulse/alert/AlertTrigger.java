@@ -11,6 +11,7 @@ public class AlertTrigger {
     private BigDecimal triggerPrice;
     private LocalDateTime eventTime;
     private String ruleSnapshot;
+    private String triggerContext;
     private LocalDateTime createdAt;
 
     public Long getId() { return id; }
@@ -26,6 +27,8 @@ public class AlertTrigger {
     public LocalDateTime getEventTime() { return eventTime; }
     public void setEventTime(LocalDateTime eventTime) { this.eventTime = eventTime; }
     public String getRuleSnapshot() { return ruleSnapshot; }
+    public String getTriggerContext() { return triggerContext; }
+    public void setTriggerContext(String value) { triggerContext=value; }
     public void setRuleSnapshot(String ruleSnapshot) { this.ruleSnapshot = ruleSnapshot; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

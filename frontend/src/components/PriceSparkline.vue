@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   tradingSessions?: TradingSession[]; compressNonTrading?: boolean
   exactPrices?: string[]; pointSeqs?: Array<number | null>; originPrice?: string
   scopeKey?: string
+  openingGap?: { openingTime: string; direction: string }; originLabel?: string
 }>(), {
   timestamps: () => [],
   currency: '',
@@ -123,6 +124,7 @@ function axisTime(time: number, full = false) {
     ...(full || (timeDomain.value && timeDomain.value.to - timeDomain.value.from > 86400000) ? { month: 'numeric', day: 'numeric' } : {}),
     hour: '2-digit', minute: '2-digit', hour12: false })
 }
+const openingPoint = computed(() => props.openingGap ? dataPoints.value.find(p => props.timestamps[p.index] === props.openingGap!.openingTime) : undefined)
 const timeTicks = computed(() => {
   if (!timeDomain.value) return []
   const count = width.value < 520 ? 3 : 5
@@ -313,7 +315,7 @@ const rising = computed(() => {
     <div class="chart-heading-grid" :class="{ 'without-latest': !$slots.latest }">
       <div class="chart-heading-context"><slot name="heading"><h3>{{ eventScope === 'SIMULATION' ? '真实前缀与模拟结果' : '价格走势' }}</h3></slot></div>
       <ChartInfoPanel :time="inspectedTime" :price="inspectedPrice" :currency="currency" :change="inspectedChange"
-        :kind="inspectedOrigin ? '模拟起点' : inspectedSimulation ? `模拟行情 · 点 #${inspectedSequence ?? '—'}` : eventScope === 'SIMULATION' ? '真实前缀' : inspectedEvent ? '实际触发事件' : '当前行情'" />
+        :kind="inspectedOrigin ? originLabel ?? '模拟起点' : openingGap?.openingTime === inspectedTime ? '模拟开盘跳空 · 点 #1' : inspectedSimulation ? `模拟行情 · 点 #${inspectedSequence ?? '—'}` : eventScope === 'SIMULATION' ? '真实前缀' : inspectedEvent ? '实际触发事件' : '当前行情'" />
       <div v-if="$slots.latest" class="chart-heading-latest"><slot name="latest" /></div>
     </div>
     <div ref="container" class="price-chart" :class="{ falling: !rising }">
@@ -366,6 +368,7 @@ const rising = computed(() => {
         :stroke="segment.simulation ? '#a46c32' : originTime ? '#537dad' : 'currentColor'" :stroke-dasharray="segment.simulation ? '6 4' : undefined" stroke-width="2" stroke-linejoin="round" />
       <line v-for="(jump, index) in sessionJumps" :key="`jump-${index}`" class="session-jump" :x1="jump.from.x" :y1="jump.from.y" :x2="jump.to.x" :y2="jump.to.y"
         stroke="#86948c" stroke-width="1.2" stroke-dasharray="2 4"><title>休市跳空：仅连接两端已知价格，期间没有生成行情点</title></line>
+      <g v-if="openingPoint" class="event-marker simulation-opening-gap" role="button" tabindex="0" aria-label="检查模拟开盘跳空" @click.stop="selectPoint(openingPoint.index)" @keydown.enter.prevent="selectPoint(openingPoint.index)"><circle :cx="openingPoint.x" :cy="openingPoint.y" r="4" fill="#a46c32" /><text :x="Math.max(left, Math.min(openingPoint.x + 5, width - right - 90))" :y="top + 14" fill="#936129" font-size="11">{{ openingGap?.direction === 'UP' ? '⇧' : openingGap?.direction === 'DOWN' ? '⇩' : '↔' }} 模拟开盘跳空</text></g>
       <g v-if="originX != null" class="event-marker" role="button" tabindex="0" aria-label="检查模拟起点" @pointerenter="inspectOrigin" @pointermove.stop="inspectOrigin" @click.stop="inspectOrigin" @focus="inspectOrigin" @keydown.enter.prevent="inspectOrigin" @keydown.space.prevent="inspectOrigin"><line :x1="originX" :x2="originX" :y1="top" :y2="bottom" stroke="#a46c32" stroke-dasharray="3 4" />
         <text :x="Math.max(left, Math.min(originX + 5, width - right - 60))" :y="top - 7" fill="#936129" font-size="10">模拟起点</text></g>
       <g v-for="(group, index) in temporalMarkers" :key="`real-event-${index}`" class="event-marker" role="button" tabindex="0"
@@ -402,6 +405,7 @@ const rising = computed(() => {
     </div>
     <div v-if="selectedMarkers.length" class="temporal-event-details"><button class="text-button" @click="closeEventDetails">收起事件详情 ×</button>
       <article v-for="item in selectedMarkers" :key="item.id"><strong>{{ item.ruleName ?? item.label }} · {{ item.rawPrice ?? formatPrice(item.price) }}</strong><time>{{ formatNewYorkTimestamp(item.eventTime) }}</time><p>{{ item.kind === 'ABOVE' ? '▲ 上破' : '▼ 下破' }} · 阈值 {{ item.threshold ?? '—' }} · {{ item.result ?? item.label }}</p>
+        <p v-if="item.label.includes('跳空')">{{ item.detail }}</p>
         <details v-if="item.ruleSnapshot"><summary>规则快照详情</summary><dl class="event-snapshot"><div><dt>规则名称</dt><dd>{{ item.ruleSnapshot.name }}</dd></div><div><dt>触发方式</dt><dd>{{ item.ruleSnapshot.triggerMode === 'ONCE' ? '一次性' : '重复' }}</dd></div><div><dt>重新激活价</dt><dd>{{ item.ruleSnapshot.rearmPrice ?? '—' }}</dd></div><div><dt>快照状态</dt><dd>{{ item.ruleSnapshot.status }}</dd></div><div><dt>版本</dt><dd>{{ item.ruleSnapshot.version }}</dd></div><div><dt>备注</dt><dd>{{ item.ruleSnapshot.note || '—' }}</dd></div></dl></details>
       </article>
     </div>

@@ -18,12 +18,13 @@
         <result property="version" column="version"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="effectiveAt" column="effective_at"/>
     </resultMap>
 
     <sql id="selectRule">
         SELECT r.id, r.user_id, r.stock_id, s.symbol AS stock_symbol, s.name AS stock_name,
                r.name, r.note, r.direction, r.threshold_price, r.trigger_mode, r.rearm_price,
-               r.status, r.last_triggered_at, r.version, r.created_at, r.updated_at
+               r.status, r.last_triggered_at, r.version, r.created_at, r.updated_at, r.effective_at
         FROM alert_rules r
         JOIN stocks s ON s.id = r.stock_id
     </sql>
@@ -68,6 +69,7 @@
             threshold_price = #{rule.thresholdPrice},
             trigger_mode = #{rule.triggerMode},
             rearm_price = #{rule.rearmPrice},
+            effective_at = CURRENT_TIMESTAMP(6),
             last_triggered_at = NULL,
             version = version + 1
         WHERE id = #{rule.id}
@@ -82,6 +84,7 @@
     <update id="updateStatus">
         UPDATE alert_rules
         SET status = #{targetStatus}, version = version + 1
+        <if test="targetStatus.name() == 'ACTIVE'">, effective_at = CURRENT_TIMESTAMP(6)</if>
         WHERE id = #{ruleId}
           AND user_id = #{userId}
           AND version = #{expectedVersion}

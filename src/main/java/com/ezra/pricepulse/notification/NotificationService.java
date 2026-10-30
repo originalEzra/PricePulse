@@ -2,6 +2,7 @@ package com.ezra.pricepulse.notification;
 
 import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
+import com.ezra.pricepulse.alert.OpeningGapContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -112,6 +113,15 @@ public class NotificationService {
             String content = "%s（%s）价格 %s，触发提醒“%s”（%s %s）。".formatted(
                     delivery.getStockName(), delivery.getStockSymbol(),
                     displayPrice(delivery.getTriggerPrice()), ruleName, verb, displayThreshold);
+            if (delivery.getTriggerContext()!=null) {
+                OpeningGapContext opening=json.readValue(delivery.getTriggerContext(),OpeningGapContext.class);
+                if (opening.ruleEffectiveAt()==null || !opening.ruleEffectiveAt().isBefore(opening.sessionOpen()))
+                    throw new IllegalStateException("Opening trigger has no eligible rule activation");
+                title=delivery.getStockSymbol()+" 开盘跳空 · "+verb+" "+displayThreshold;
+                content="%s（%s）开盘跳空，实际成交价 %s，参考收盘价 %s（IEX 正常时段最后一分钟），触发提醒“%s”（%s %s）。".formatted(
+                        delivery.getStockName(),delivery.getStockSymbol(),delivery.getTriggerPrice().toPlainString(),
+                        opening.referencePrice(),ruleName,verb,displayThreshold);
+            }
             return new NotificationText(title, content);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot read the persisted rule snapshot", exception);

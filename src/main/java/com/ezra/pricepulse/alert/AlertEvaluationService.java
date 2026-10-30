@@ -42,10 +42,22 @@ public class AlertEvaluationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime, boolean baseline) {
+        return evaluate(stock,quoteId,price,eventTime,baseline,null);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime,
+            boolean baseline, OpeningGapContext opening) {
         BigDecimal previous = stock.latestQuoteAt() == null ? null : stock.latestPrice();
         // Baselines cannot trigger ACTIVE rules. Cooldown rearming only needs the new price.
         if (baseline) previous = price;
+        if (opening!=null) previous = new BigDecimal(opening.referencePrice());
         List<Long> ids = baseline ? rules.cooldownIds(stock.id()) : index.candidates(stock, previous, price);
+        if (opening!=null) {
+            var firstSessionIds=new java.util.LinkedHashSet<>(ids);
+            firstSessionIds.addAll(rules.cooldownIds(stock.id()));
+            ids=List.copyOf(firstSessionIds);
+        }
         if (ids.isEmpty()) {
             return MatchingResult.empty();
         }
@@ -56,6 +68,8 @@ public class AlertEvaluationService {
         for (int offset = 0; offset < ids.size(); offset += 500) {
             List<Long> page = ids.subList(offset, Math.min(offset + 500, ids.size()));
             for (AlertRule rule : rules.findCandidates(stock.id(), page)) {
+                if (opening!=null && rule.getStatus()==AlertRuleStatus.ACTIVE
+                        && (!opening.eligible(rule.getEffectiveAt()) || !opening.eligible(rule.getCreatedAt()))) continue;
                 if (previous == null) {
                     continue;
                 }
@@ -64,7 +78,7 @@ public class AlertEvaluationService {
                 if (decision.kind() == RuleTransitionEngine.Kind.TRIGGERED) {
                     AlertRuleStatus target = decision.target();
                     requireTransition(rule, target, eventTime);
-                    recordTrigger(rule, quoteId, price, eventTime);
+                    recordTrigger(rule, quoteId, price, eventTime, opening);
                     rule.setStatus(target);
                     rule.setLastTriggeredAt(eventTime);
                     rule.setVersion(rule.getVersion() + 1);
@@ -91,7 +105,8 @@ public class AlertEvaluationService {
             try {
                 return new AlertTriggerResponse(trigger.getId(), trigger.getRuleId(),
                         trigger.getQuoteEventId(), trigger.getTriggerPrice(), trigger.getEventTime(),
-                        json.readTree(trigger.getRuleSnapshot()), trigger.getCreatedAt());
+                        json.readTree(trigger.getRuleSnapshot()), trigger.getCreatedAt(),
+                        trigger.getTriggerContext()==null ? null : json.readTree(trigger.getTriggerContext()));
             } catch (JsonProcessingException exception) {
                 throw new IllegalStateException("Cannot read rule snapshot", exception);
             }
@@ -137,7 +152,7 @@ public class AlertEvaluationService {
         }
     }
 
-    private void recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime) {
+    private void recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime, OpeningGapContext opening) {
         AlertTrigger trigger = new AlertTrigger();
         trigger.setTriggerKey("rule:" + rule.getId() + ":version:" + rule.getVersion());
         trigger.setRuleId(rule.getId());
@@ -146,6 +161,7 @@ public class AlertEvaluationService {
         trigger.setEventTime(eventTime);
         try {
             trigger.setRuleSnapshot(json.writeValueAsString(AlertRuleResponse.from(rule)));
+            if (opening!=null) trigger.setTriggerContext(json.writeValueAsString(opening.forRule(rule.getEffectiveAt())));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot serialize rule snapshot", exception);
         }

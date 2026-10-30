@@ -26,19 +26,22 @@ public class AlertRuleService {
     private final StockMapper stockMapper;
     private final UserMapper userMapper;
     private final RuleIndex index;
+    private final com.ezra.pricepulse.monitoring.MonitoringAccess monitoring;
 
     public AlertRuleService(AlertRuleMapper alertRuleMapper, StockMapper stockMapper,
-            UserMapper userMapper, RuleIndex index) {
+            UserMapper userMapper, RuleIndex index, com.ezra.pricepulse.monitoring.MonitoringAccess monitoring) {
         this.alertRuleMapper = alertRuleMapper;
         this.stockMapper = stockMapper;
         this.userMapper = userMapper;
         this.index = index;
+        this.monitoring = monitoring;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public AlertRuleResponse create(long userId, SaveAlertRuleRequest request) {
         requireActiveUser(userId);
         Stock stock = lockStock(request.stockId());
+        monitoring.requireConfirmed(userId, stock);
         AlertRule rule = buildRule(userId, null, request);
         alertRuleMapper.insert(rule);
         AlertRule saved = requireOwnedRule(userId, rule.getId());
@@ -73,6 +76,8 @@ public class AlertRuleService {
         if (!EDITABLE_STATUSES.contains(current.getStatus())) {
             throw stateConflict("Only active or paused rules can be edited");
         }
+        if (current.getStatus() == AlertRuleStatus.ACTIVE)
+            monitoring.requireConfirmed(userId, locked.stocks().stream().filter(s -> s.id() == request.rule().stockId()).findFirst().orElseThrow());
         AlertRule replacement = buildRule(userId, ruleId, request.rule());
         int updated = alertRuleMapper.updateDetails(
                 replacement, request.version(), EDITABLE_STATUSES);
@@ -116,6 +121,7 @@ public class AlertRuleService {
         requireActiveUser(userId);
         LockedRule locked = lockOwnedRule(userId, ruleId, version, null);
         AlertRule current = locked.rule();
+        if (target == AlertRuleStatus.ACTIVE) monitoring.requireConfirmed(userId, locked.stocks().getFirst());
         if (!allowed.contains(current.getStatus())) {
             throw stateConflict(invalidStateMessage);
         }

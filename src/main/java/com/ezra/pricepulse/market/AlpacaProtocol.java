@@ -18,9 +18,13 @@ public final class AlpacaProtocol {
         if (!symbols.contains(symbol)) throw new IllegalArgumentException("UNSUBSCRIBED_SYMBOL");
         JsonNode conditions=item.required("c");
         if (!conditions.isArray() || conditions.isEmpty()) throw new IllegalArgumentException("INVALID_CONDITIONS");
+        String tape=item.path("z").asText();
+        boolean cta="A".equals(tape) || "B".equals(tape);
         for (JsonNode condition:conditions) {
-            // Conservative explicit last-sale policy. Odd-lot/late/average-price trades are excluded.
-            if (!Set.of("@","F").contains(condition.asText())) return null;
+            // CTA A/B regular sales use a literal space; Nasdaq regular sales use @.
+            // Keep the conservative policy: every condition must qualify, including with F.
+            String code=condition.asText();
+            if (!Set.of("@","F").contains(code) && !(cta && " ".equals(code))) return null;
         }
         JsonNode rawPrice=item.required("p");
         if (!rawPrice.isNumber() || !item.required("s").isIntegralNumber() || item.get("s").asLong()<=0)

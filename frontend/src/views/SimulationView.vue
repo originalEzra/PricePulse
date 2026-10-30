@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue'
-import { marketApi, stockApi } from '../api'
-import { errorMessage } from '../api/client'
+import { marketApi, stockApi, simulationApi } from '../api'
+import { ApiClientError, errorMessage } from '../api/client'
 import type { MarketTimeline, SimulationEvent, SimulationMode, StartSimulation, Stock } from '../api/types'
 import PriceSparkline from '../components/PriceSparkline.vue'
 import { formatPrice } from '../utils/format'
@@ -13,10 +13,14 @@ import { reconcileShownRules, ruleLineColor, simulationThresholds } from '../uti
 import { simulationPointBreaks, simulationTriggerCounts } from '../utils/simulationDisplay'
 import '../styles/ruleTable.css'
 import { compactNewYorkTime, priceDifference } from '../utils/chartInspection'
+import { closedReferencePoints, gapDescription, simulationChartRange } from '../utils/simulationGap'
 
-const modes: Record<SimulationMode, string> = { NORMAL: '正常波动', RISE: '持续上涨', FALL: '持续下跌', OSCILLATE: '反复震荡' }
+const modes: Record<SimulationMode, string> = { NORMAL: '正常波动', RISE: '持续上涨', FALL: '持续下跌', OSCILLATE: '反复震荡', OPENING_GAP: '开盘跳空' }
 const simulation = useSimulationStore(), session = simulation.controller
-const { browseStockId, originKind, mode, percent, seedInput } = toRefs(simulation.draft)
+const { browseStockId, originKind, mode, percent, seedInput, referenceSource, customReference, openingPrice, continuationMode } = toRefs(simulation.draft)
+const gapAvailable = ref(false)
+const gapMode = computed(() => mode.value === 'OPENING_GAP')
+const requiresSource = computed(() => !gapMode.value || referenceSource.value === 'REAL_HISTORY')
 const { run, timeline, events, eventsReady, busy, error, startCommands, advanceCommands } = toRefs(session)
 const shownByRun = simulation.shownByRun
 const stocks = ref<Stock[]>([])
@@ -26,25 +30,33 @@ const chart = ref<InstanceType<typeof PriceSparkline> | null>(null)
 const eventTable = ref<HTMLDivElement | null>(null)
 const selectedEvents = ref(new Set<number>())
 const loading = ref(true)
+const replacement = ref<{ input: StartSimulation; symbol: string } | null>(null)
 let sourceRequest: AbortController | null = null, disposed = false
-const locked = computed(() => !!startCommands.value.pending)
+const locked = computed(() => !!startCommands.value.pending || !!replacement.value)
 const selectedPoint = computed(() => source.value?.points.find(p => p.pointRef === selectedPointRef.value))
+const originPoints = computed(() => gapMode.value ? closedReferencePoints(source.value) : source.value?.points ?? [])
+watch([mode, source], () => { if (!originPoints.value.some(p => p.pointRef === selectedPointRef.value)) selectedPointRef.value = originPoints.value.at(-1)?.pointRef ?? '' })
+const referencePrice = computed(() => gapMode.value && referenceSource.value === 'CUSTOM' ? customReference.value : selectedPoint.value?.price ?? '')
+const gapMove = computed(() => Number(openingPrice.value) > 0 ? priceDifference(Number(openingPrice.value), Number(referencePrice.value)) : null)
+const savedGap = computed(() => run.value?.parameters.openingGap)
+const openingPending = computed(() => !!savedGap.value && run.value?.lastBatchNo === 0)
 const chartPoints = computed(() => [
   ...(timeline.value?.realPrefix ?? []).map(p => ({ ...p, pointSeq: p.eventTime === run.value?.origin.point.eventTime ? 0 : null, detail: p.kind === 'BAR_CLOSE' ? '冻结的真实分钟收盘价' : '冻结的真实成交价' })),
+  ...(run.value?.origin.kind === 'SIMULATION_REFERENCE' ? [{ ...run.value.origin.point, kind: 'SIMULATION', pointSeq: 0, detail: 'SIMULATION · 自定义模拟参考收盘价，不是真实成交' }] : []),
   ...(timeline.value?.simulation ?? []).map(p => ({ ...p, kind: 'SIMULATION', session: new Date(p.eventTime).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), detail: `模拟点 #${p.pointSeq}` })),
 ])
 const prefixGaps = computed(() => barGapRanges(timeline.value?.realPrefix ?? []))
-const pointBreaks = computed(() => simulationPointBreaks(timeline.value?.simulation ?? []))
+const pointBreaks = computed(() => [...simulationPointBreaks(timeline.value?.simulation ?? []), ...(savedGap.value ? [savedGap.value.openingTime] : [])])
 const shownSnapshotIds = computed(() => shownByRun.get(run.value?.runId ?? '') ?? new Set<number>())
 const thresholds = computed(() => simulationThresholds(run.value?.ruleSnapshots ?? [], shownSnapshotIds.value))
 const triggerCounts = computed(() => simulationTriggerCounts(events.value))
 const visibleEvents = computed(() => events.value.slice(0, visibleEventCount.value))
 function eventAnnotation(e: SimulationEvent): TimedChartAnnotation { return {
-  id: e.id, eventTime: e.eventTime, price: Number(e.price), kind: e.ruleSnapshot.direction, label: e.eventType === 'TRIGGERED' ? '模拟触发' : '模拟重新激活',
+  id: e.id, eventTime: e.eventTime, price: Number(e.price), kind: e.ruleSnapshot.direction, label: e.triggerContext ? '模拟开盘跳空' : e.eventType === 'TRIGGERED' ? '模拟触发' : '模拟重新激活',
   ruleName: e.ruleSnapshot.name, threshold: e.ruleSnapshot.thresholdPrice, result: `${e.eventType === 'TRIGGERED' ? '已触发' : '已重新激活'} · ${ruleStatusLabel[e.toState]}`,
   pointSeq: e.pointSeq, rawPrice: e.price,
   ruleSnapshot: e.ruleSnapshot,
-  detail: `${e.ruleSnapshot.name} · 快照阈值 ${formatPrice(Number(e.ruleSnapshot.thresholdPrice))} · 模拟点 #${e.pointSeq}`,
+  detail: `${e.ruleSnapshot.name} · 快照阈值 ${formatPrice(Number(e.ruleSnapshot.thresholdPrice))} · 模拟点 #${e.pointSeq}${e.triggerContext ? ' · ' + gapDescription(e.triggerContext) : ''}`,
 } }
 const annotations = computed(() => events.value.filter(e => e.eventType === 'TRIGGERED').map(eventAnnotation))
 const runReturn = computed(() => run.value ? priceDifference(Number(run.value.latestPrice), Number(run.value.origin.point.price)) : null)
@@ -91,15 +103,22 @@ async function begin() {
   if (busy.value || session.playing || session.needsRefresh || advanceCommands.value.pending) return
   let input: StartSimulation | undefined
   if (!startCommands.value.pending) {
-    if (!source.value || (originKind.value === 'HISTORICAL_POINT' && !selectedPoint.value)) return
+    if ((requiresSource.value && !source.value) || ((gapMode.value ? referenceSource.value === 'REAL_HISTORY' : originKind.value === 'HISTORICAL_POINT') && !selectedPoint.value)) return
     let seed: string | null
     try { seed = simulationSeed(seedInput.value) } catch (cause) { error.value = errorMessage(cause); return }
     if (!Number.isFinite(percent.value) || percent.value <= 0 || percent.value > 0.3) { error.value = '每分钟最大幅度应大于 0 且不超过 0.3%。'; return }
-    if (run.value && !window.confirm(`开始新实验将替换最近一次 ${run.value.origin.stockSymbol} 实验。确认替换？`)) return
-    input = { stockId: browseStockId.value, origin: originKind.value === 'LATEST' ? { kind: 'LATEST' }
+    if (gapMode.value && (![openingPrice.value, referencePrice.value].every(p => /^\d{1,12}(\.\d{1,4})?$/.test(p) && Number(p) > 0))) { error.value = '参考价和模拟开盘价须为正数，最多四位小数。'; return }
+    input = { stockId: browseStockId.value, origin: gapMode.value && referenceSource.value === 'CUSTOM' ? { kind: 'SIMULATION_REFERENCE' } : !gapMode.value && originKind.value === 'LATEST' ? { kind: 'LATEST' }
       : { kind: 'HISTORICAL_POINT', pointRef: selectedPoint.value!.pointRef, revision: selectedPoint.value!.revision },
       mode: mode.value, stepRatio: (percent.value / 100).toFixed(6), seed, expectedCurrentRunId: run.value?.runId ?? null }
+    if (gapMode.value) input.openingGap = { source: referenceSource.value, ...(referenceSource.value === 'CUSTOM' ? { referencePrice: customReference.value } : {}), openingPrice: openingPrice.value, continuationMode: continuationMode.value }
+    if (run.value) { replacement.value = { input, symbol: run.value.origin.stockSymbol }; return }
   }
+  await session.start(input)
+}
+async function confirmReplacement() {
+  if (!replacement.value || busy.value || session.playing || session.needsRefresh) return
+  const input = replacement.value.input; replacement.value = null
   await session.start(input)
 }
 async function advance() { await session.advance() }
@@ -117,9 +136,11 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', visibilityChanged)
   window.addEventListener('pagehide', pageHidden); window.addEventListener('pageshow', pageShown)
   try {
-    const available = await stockApi.list()
+    const [available, capabilities] = await Promise.all([stockApi.list(), simulationApi.capabilities().catch(cause => { if (cause instanceof ApiClientError && cause.status === 404) return { openingGap: false }; throw cause })])
     if (disposed) return
     stocks.value = available.filter(s => s.market === 'US')
+    gapAvailable.value = capabilities.openingGap
+    if (!gapAvailable.value && gapMode.value) mode.value = 'NORMAL'
     await simulation.enter()
     if (!disposed) {
       if (!stocks.value.some(stock => stock.id === browseStockId.value)) browseStockId.value = run.value?.stockId ?? stocks.value[0]?.id ?? 0
@@ -143,27 +164,30 @@ onBeforeUnmount(() => {
     <p v-if="!busy && (startCommands.pending || advanceCommands.pending)" class="scenario-summary" role="status">上次操作结果尚待确认。重试沿用原请求，不会重复推进；查询后若仍未确认，请重试原操作。
       <button class="text-button" @click="restore">查询保存进度</button></p>
     <p v-if="loading" class="muted">正在恢复最近一次实验…</p>
-    <div v-else class="simulation-grid">
+    <div v-if="replacement" class="replace-backdrop"><section class="panel replace-dialog" role="dialog" aria-modal="true" aria-labelledby="replace-title"><h2 id="replace-title">替换最近一次实验？</h2><p>开始新实验将替换最近一次 {{ replacement.symbol }} 实验。真实行情、正式规则和通知不受影响。</p><div><button class="button secondary" @click="replacement = null">返回保留原实验</button><button class="button primary" :disabled="busy || session.playing || session.needsRefresh" @click="confirmReplacement">确认替换实验</button></div></section></div>
+    <div v-if="!loading" class="simulation-grid">
       <section class="panel simulator-card">
         <div class="panel-head"><h2>开始新实验</h2></div>
         <div class="experiment-controls">
           <label>股票<select v-model="browseStockId" :disabled="locked"><option v-for="stock in stocks" :key="stock.id" :value="stock.id">{{ stock.symbol }} · {{ stock.name }}</option></select></label>
-          <label>起点<select v-model="originKind" :disabled="locked"><option value="HISTORICAL_POINT">已闭合历史点</option><option value="LATEST" :disabled="!source?.health.lastAcceptedAt">最新有效实时成交</option></select></label>
-          <label>行情模式<select v-model="mode" :disabled="locked"><option v-for="(label, key) in modes" :key="key" :value="key">{{ label }}</option></select></label>
+          <label v-if="!gapMode">起点<select v-model="originKind" :disabled="locked"><option value="HISTORICAL_POINT">已闭合历史点</option><option value="LATEST" :disabled="!source?.health.lastAcceptedAt">最新有效实时成交</option></select></label>
+          <label>行情模式<select v-model="mode" :disabled="locked"><option v-for="[key, label] in Object.entries(modes).filter(([key]) => key !== 'OPENING_GAP' || gapAvailable)" :key="key" :value="key">{{ label }}</option></select></label>
           <label>波动幅度（%）<input v-model.number="percent" type="number" min="0.0001" max="0.3" step="0.001" :disabled="locked" /></label>
-          <label v-if="originKind === 'HISTORICAL_POINT'" class="origin-picker">真实起点（纽约）<select v-model="selectedPointRef" :disabled="locked || sourceLoading"><option v-for="point in source?.points ?? []" :key="point.pointRef" :value="point.pointRef">{{ compactNewYorkTime(point.eventTime) }} · ${{ point.price }}</option></select></label>
+          <template v-if="gapMode"><label>参考价来源<select v-model="referenceSource" :disabled="locked"><option value="REAL_HISTORY">真实历史收盘</option><option value="CUSTOM">自定义 · SIMULATION</option></select></label><label>参考收盘价（USD）<input v-if="referenceSource === 'CUSTOM'" v-model="customReference" inputmode="decimal" placeholder="345.0000" :disabled="locked" /><input v-else :value="referencePrice" readonly /></label><label>模拟开盘价（USD）<input v-model="openingPrice" inputmode="decimal" placeholder="355.0000" :disabled="locked" /></label><label>开盘后走势<select v-model="continuationMode" :disabled="locked"><option v-for="[key, label] in Object.entries(modes).filter(([key]) => key !== 'OPENING_GAP')" :key="key" :value="key">{{ label }}</option></select></label></template>
+          <label v-if="gapMode ? referenceSource === 'REAL_HISTORY' : originKind === 'HISTORICAL_POINT'" class="origin-picker">{{ gapMode ? '真实参考收盘（纽约）' : '真实起点（纽约）' }}<select v-model="selectedPointRef" :disabled="locked || sourceLoading"><option v-for="point in originPoints" :key="point.pointRef" :value="point.pointRef">{{ compactNewYorkTime(point.eventTime) }} · ${{ point.price }}</option></select></label>
         </div>
-        <p v-if="sourceLoading" class="muted compact-message">正在读取真实历史…</p><p v-if="sourceError" class="form-error">{{ sourceError }}</p>
-        <div class="experiment-actions"><details class="advanced-options"><summary>高级选项</summary><label>Seed（可留空）<input v-model="seedInput" inputmode="numeric" placeholder="自动生成并保存" :disabled="locked" /></label><button class="text-button" :disabled="locked || sourceLoading" @click="loadSource">刷新真实起点列表</button><p>配置仅用于新实验；已保存实验的输入保持冻结。新建前请暂停播放。</p><p v-if="source && !source.health.lastAcceptedAt">暂无已接受实时成交，请使用历史点。</p></details><button class="button primary" :disabled="busy || session.playing || session.needsRefresh || !!advanceCommands.pending || (!startCommands.pending && (sourceLoading || !source || (originKind === 'HISTORICAL_POINT' && !selectedPoint)))" @click="begin">{{ startCommands.pending ? '重试开始' : run ? '确认并开始新实验' : '开始新实验' }}</button></div>
+        <p v-if="gapMode" class="compact-message">SIMULATION · {{ gapMove ? `${gapMove.value > 0 ? '⇧ 向上' : gapMove.value < 0 ? '⇩ 向下' : '↔ 平开'}跳空 ${gapMove.percent.toFixed(2)}%` : '请输入模拟价格' }}。首次推进执行下一有效交易日开盘，之后每次推进 60 个交易分钟。<span v-if="referenceSource === 'REAL_HISTORY' && !originPoints.length">缺少真实收盘分钟，请改用自定义模拟参考价。</span></p>
+        <p v-if="sourceLoading && requiresSource" class="muted compact-message">正在读取真实历史…</p><p v-if="sourceError && requiresSource" class="form-error">{{ sourceError }}</p>
+        <div class="experiment-actions"><details class="advanced-options"><summary>高级选项</summary><label>Seed（可留空）<input v-model="seedInput" inputmode="numeric" placeholder="自动生成并保存" :disabled="locked" /></label><button class="text-button" :disabled="locked || sourceLoading" @click="loadSource">刷新真实起点列表</button><p>配置仅用于新实验；已保存实验的输入保持冻结。新建前请暂停播放。</p><p v-if="source && !source.health.lastAcceptedAt && !gapMode">暂无已接受实时成交，请使用历史点。</p><p v-if="!gapAvailable">开盘跳空将在新版模拟服务加载后启用。</p></details><button class="button primary" :disabled="busy || session.playing || session.needsRefresh || !!advanceCommands.pending || (!startCommands.pending && ((requiresSource && (sourceLoading || !source)) || ((gapMode ? referenceSource === 'REAL_HISTORY' : originKind === 'HISTORICAL_POINT') && !selectedPoint)))" @click="begin">{{ startCommands.pending ? '重试开始' : run ? '确认并开始新实验' : '开始新实验' }}</button></div>
         <p v-if="run && browseStockId !== run.stockId" class="compact-message">浏览其他股票不会改变 {{ run.origin.stockSymbol }} 的实验。<button class="text-button" @click="browseStockId = run.stockId">返回 {{ run.origin.stockSymbol }} 起点</button></p>
       </section>
       <section class="panel result-card">
         <template v-if="run">
           <div class="panel-head"><h2>最近一次实验</h2><span class="live-chip">已保存 · {{ session.playing ? '播放中' : '已暂停' }}</span></div>
           <strong class="saved-symbol">{{ run.origin.stockSymbol }} · {{ modes[run.parameters.mode] }}</strong>
-          <dl class="saved-summary"><div><dt>起点</dt><dd>{{ compactNewYorkTime(run.origin.point.eventTime) }}<strong>${{ run.origin.point.price }}</strong></dd></div><div><dt>当前模拟</dt><dd>{{ compactNewYorkTime(run.simClock) }}<strong>${{ run.latestPrice }}</strong></dd></div><div><dt>已推进</dt><dd>{{ run.lastBatchNo }} 交易小时</dd></div></dl>
+          <dl class="saved-summary"><div><dt>{{ savedGap ? '参考收盘' : '起点' }}</dt><dd>{{ compactNewYorkTime(run.origin.point.eventTime) }}<strong>${{ run.origin.point.price }}</strong></dd></div><div><dt>当前模拟</dt><dd>{{ compactNewYorkTime(run.simClock) }}<strong>${{ run.latestPrice }}</strong></dd></div><div><dt>已推进</dt><dd>{{ Math.max(0, run.lastBatchNo - (savedGap ? 1 : 0)) }} 交易小时<span v-if="savedGap && run.lastBatchNo"> · 1 次开盘</span></dd></div></dl>
           <div class="experiment-totals"><span>规则快照 <b>{{ run.ruleSnapshots.length }}</b></span><span>已触发规则 <b>{{ eventsReady ? triggerCounts.size : '—' }}</b></span><span>{{ run.stats.triggered }} 次触发 · {{ run.stats.rearmed }} 次重新激活</span></div>
-          <div class="playback-controls"><button class="button primary" :disabled="!session.playing && !session.canPlay" @click="session.playing ? session.pause() : session.play()">{{ session.playing ? '暂停播放' : '自动播放' }}</button><label>播放速度<select :value="session.delayMs" @change="session.setDelay(Number(($event.target as HTMLSelectElement).value))"><option :value="5000">慢速 · 5 秒/小时</option><option :value="2000">标准 · 2 秒/小时</option><option :value="1000">快速 · 1 秒/小时</option></select></label><button class="button secondary" :disabled="busy || session.playing || !!startCommands.pending || (!advanceCommands.pending && !session.ready)" @click="advance">{{ advanceCommands.pending ? '重试上次推进' : '下一交易小时' }}</button></div>
+          <div class="playback-controls"><button class="button primary" :disabled="!session.playing && !session.canPlay" @click="session.playing ? session.pause() : session.play()">{{ session.playing ? '暂停播放' : '自动播放' }}</button><label>播放速度<select :value="session.delayMs" @change="session.setDelay(Number(($event.target as HTMLSelectElement).value))"><option :value="5000">慢速 · 5 秒/小时</option><option :value="2000">标准 · 2 秒/小时</option><option :value="1000">快速 · 1 秒/小时</option></select></label><button class="button secondary" :disabled="busy || session.playing || !!startCommands.pending || (!advanceCommands.pending && !session.ready)" @click="advance">{{ advanceCommands.pending ? '重试上次推进' : openingPending ? '执行模拟开盘' : '下一交易小时' }}</button></div>
           <p class="playback-status" role="status">{{ session.notice }}<span v-if="busy"> · 正在处理本次请求</span></p>
           <p v-if="!run.generatorSupported" class="form-error">当前版本仅可查看保存结果，请新建实验后推进。</p>
           <details class="experiment-details"><summary>实验详情</summary><p>Seed {{ run.seed }} · 每分钟幅度 {{ Number(run.parameters.stepRatio) * 100 }}%。每小时累计 60 个交易分钟，跳过休市。播放速度仅调整两批之间的等待；暂停或离页不再请求新批次，已受理的一小时仍可完成。结果独立保存，不进入通知中心。</p></details>
@@ -172,13 +196,13 @@ onBeforeUnmount(() => {
       </section>
     </div>
     <section v-if="run && timeline" class="panel simulation-chart-panel">
-      <PriceSparkline ref="chart" :values="chartPoints.map(p => Number(p.price))" :timestamps="chartPoints.map(p => p.eventTime)" currency="USD" :time-range="timeline.range" @event-select="selectChartEvents"
+      <PriceSparkline ref="chart" :values="chartPoints.map(p => Number(p.price))" :timestamps="chartPoints.map(p => p.eventTime)" currency="USD" :time-range="simulationChartRange(run, timeline)" @event-select="selectChartEvents"
         :scope-key="run.runId"
         :session-ids="chartPoints.map(p => p.session)" :point-kinds="chartPoints.map(p => p.kind)" :point-details="chartPoints.map(p => p.detail)"
         :trading-sessions="timeline.sessions" compress-non-trading :gap-ranges="prefixGaps" :break-times="pointBreaks"
         :exact-prices="chartPoints.map(p => p.price)" :point-seqs="chartPoints.map(p => p.pointSeq)" :origin-price="run.origin.point.price"
-        :origin-time="run.origin.point.eventTime" :thresholds="thresholds" :temporal-annotations="annotations" event-scope="SIMULATION">
-        <template #heading><h2>真实前缀与模拟结果</h2><p class="simulation-legend"><span class="real-key">●</span> 真实历史 <span class="simulation-key">●</span> 模拟走势</p><p class="chart-prompt">悬停查看 · 点击触发点展开详情</p></template>
+        :origin-time="run.origin.point.eventTime" :origin-label="savedGap ? run.origin.kind === 'SIMULATION_REFERENCE' ? '模拟参考收盘' : '真实参考收盘' : undefined" :opening-gap="savedGap" :thresholds="thresholds" :temporal-annotations="annotations" event-scope="SIMULATION">
+        <template #heading><h2>{{ run.origin.kind === 'SIMULATION_REFERENCE' ? '模拟参考与模拟结果' : '真实前缀与模拟结果' }}</h2><p class="simulation-legend"><template v-if="run.origin.kind !== 'SIMULATION_REFERENCE'"><span class="real-key">●</span> 真实历史 </template><template v-else>SIMULATION · 模拟参考价 </template><span class="simulation-key">●</span> 模拟走势</p><p v-if="savedGap" class="chart-prompt">{{ gapDescription(savedGap) }} · SIMULATION</p><p class="chart-prompt">悬停查看 · 点击触发点展开详情</p></template>
         <template #latest><small>当前模拟价（USD）</small><strong>{{ formatPrice(Number(run.latestPrice)) }}</strong><small>{{ compactNewYorkTime(run.simClock) }}</small><b v-if="runReturn" class="price-return" :class="runReturn.value >= 0 ? 'positive' : 'negative'">{{ runReturn.percent >= 0 ? '+' : '' }}{{ runReturn.percent.toFixed(2) }}%</b></template>
       </PriceSparkline>
       <p v-if="timeline.pointCursor" class="compact-message">尚有未加载的已保存价格，缺少的区间保留断线。<button class="text-button" :disabled="busy || session.playing" @click="more('POINTS')">加载更多已保存价格</button></p>
@@ -207,7 +231,7 @@ onBeforeUnmount(() => {
         <p v-if="!events.length" class="rule-display-hint">尚无触发或重新激活事件。</p>
         <div v-else ref="eventTable" class="event-table-scroll" role="region" aria-label="本实验事件表" tabindex="0"><table class="event-table"><thead><tr><th scope="col">时间（纽约）</th><th scope="col">规则</th><th scope="col">方向</th><th scope="col">价格</th><th scope="col">模拟点</th></tr></thead><tbody>
           <tr v-for="event in visibleEvents" :key="event.id" :data-event-id="event.id" :class="{ 'is-selected': selectedEvents.has(event.id) }" :aria-selected="selectedEvents.has(event.id)" tabindex="0" @click="locateEvent(event)" @keydown.enter.prevent="locateEvent(event)">
-            <td><time :datetime="event.eventTime">{{ compactNewYorkTime(event.eventTime).replace(' ET', '') }}</time></td><td class="event-rule-name">{{ event.ruleSnapshot.name }}</td><td :class="event.eventType === 'REARMED' ? 'event-rearmed' : event.ruleSnapshot.direction === 'ABOVE' ? 'positive' : 'negative'">{{ event.ruleSnapshot.direction === 'ABOVE' ? '▲ 上破' : '▼ 下破' }}<small v-if="event.eventType === 'REARMED'">重新激活</small></td><td class="event-price">{{ event.price }}</td><td>#{{ event.pointSeq }}</td>
+            <td><time :datetime="event.eventTime">{{ compactNewYorkTime(event.eventTime).replace(' ET', '') }}</time></td><td class="event-rule-name">{{ event.ruleSnapshot.name }}</td><td :class="event.eventType === 'REARMED' ? 'event-rearmed' : event.ruleSnapshot.direction === 'ABOVE' ? 'positive' : 'negative'">{{ event.ruleSnapshot.direction === 'ABOVE' ? '▲ 上破' : '▼ 下破' }}<small v-if="event.triggerContext">开盘跳空</small><small v-if="event.eventType === 'REARMED'">重新激活</small></td><td class="event-price">{{ event.price }}</td><td>#{{ event.pointSeq }}</td>
           </tr>
         </tbody></table></div>
         <p class="event-table-hint">点击事件定位图表 · 点击图中触发点高亮事件</p>
@@ -219,6 +243,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .page-wrap { padding-top: 26px; }
+.replace-backdrop { position: fixed; inset: 0; z-index: 110; background: #07172377; display: grid; place-items: center; padding: 18px; }.replace-dialog { width: min(480px, 100%); padding: 24px; }.replace-dialog p { line-height: 1.8; }.replace-dialog > div { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .page-head { margin-bottom: 18px; align-items: center; } .page-head h1 { font-size: 32px; }
 .page-head .muted { font-size: 12px; }
 .simulation-grid { gap: 14px; align-items: stretch; }
