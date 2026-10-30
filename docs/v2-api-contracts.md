@@ -91,6 +91,37 @@
 
 成功返回与 current 相同的实验 DTO，包括实际采用的起点、规则快照列表、version=0、lastBatchNo=0。LATEST 只取已接受的 ALPACA／iex 正式成交水位；没有该水位返回 503，不回退到历史收盘价。
 
+## V2.1 模拟开盘跳空扩展
+
+代码与隔离验收见[阶段 3 记录](v2.1-stage-3.md)，尚未加载到原 V8 服务。`GET /api/simulations/capabilities` 返回 `openingGap=true, scope=SIMULATION`；旧服务 404 时前端不开放该模式。
+
+开始请求增加可选 `openingGap`，普通请求未提供时规范化序列化继续省略该字段，保留旧幂等哈希。自定义参考示例：
+
+```json
+{
+  "stockId": 1,
+  "origin": { "kind": "SIMULATION_REFERENCE" },
+  "mode": "OPENING_GAP",
+  "stepRatio": "0.003",
+  "seed": "42",
+  "expectedCurrentRunId": null,
+  "openingGap": {
+    "source": "CUSTOM",
+    "referencePrice": "345",
+    "openingPrice": "355",
+    "continuationMode": "NORMAL"
+  }
+}
+```
+
+- `source=REAL_HISTORY` 时 origin 必须是 `HISTORICAL_POINT`，仍提供可信 pointRef／revision，且对应真实 session.close 的闭合分钟；不得传 referencePrice，后端读取实际收盘价。origin 及 realPrefix 保持 ALPACA／iex 来源。
+- `source=CUSTOM` 时 origin 必须是 `SIMULATION_REFERENCE`，不能传 pointRef／revision；参考价由客户端明确提供，provider／feed 均为 SIMULATION、realPrefix 为空。参考时刻取缓存日历中最近已闭市 session.close，不需要真实价格历史。
+- 参考价及开盘价为正、最多四位小数；continuationMode 只能是 NORMAL／RISE／FALL／OSCILLATE。普通模式拒绝自定义参考或 openingGap 配置。
+- 服务端冻结 `parameters.openingGap`：kind=SIMULATED_OPENING_GAP、scope=SIMULATION、source、referencePrice／referenceTime、openingPrice／openingTime、direction=UP／DOWN／FLAT、continuationMode。下一开盘严格取冻结日历，不生成休市成交。
+- 新实验 generatorVersion 为 `opening-gap-v1`，旧实验仍用原版本。未知版本仅可查看，不允许推进。
+- 开始只保存参考基线；首批 advance 只提交 #1 一个实际模拟开盘点，之后每批 60 个交易分钟从 #2 继续。版本、批次、原子提交和幂等协议不变。
+- 开盘点的实验事件新增可空 triggerContext，内容为冻结的 `parameters.openingGap`；其他事件／旧实验为 null。事件 price／eventTime 仍为实际模拟点，不伪造阈值成交。此扩展不写 REAL、正式规则、Outbox、MQ 或通知。
+
 ## 推进一个交易小时
 
 `POST /api/simulations/{runId}/advance`，必填 `Idempotency-Key`。
@@ -102,7 +133,7 @@
 }
 ```
 
-expectedBatchNo 指最后已提交批次编号，初始为 0。服务端固定推进 60 个正常交易分钟，生成 60 个按交易时长间隔一分钟的点；不接受调用方改变持续时长或实验参数。
+expectedBatchNo 指最后已提交批次编号，初始为 0。普通批次固定推进 60 个正常交易分钟，生成 60 个按交易时长间隔一分钟的点；OPENING_GAP 首批例外只提交上述一个开盘点。不接受调用方改变持续时长或已冻结实验参数。
 
 成功返回 runId、batchNo、versionAfter、fromClock、toClock、firstPointSeq、lastPointSeq、points，以及本批 triggered／rearmed 数量。事件通过独立 events 接口查询。
 
@@ -110,8 +141,8 @@ expectedBatchNo 指最后已提交批次编号，初始为 0。服务端固定�
 
 1. 校验实验归属、仍是最近实验，并锁定实验行。
 2. 先查该 Key 的已提交记录；相同请求返回原批次，不因其旧 version 已落后而重复生成。
-3. 对新请求检查预期版本与批次，执行本小时事务。
-4. 原子提交价格、状态、事件、时钟与版本。任何一步失败均不留下半小时结果。
+3. 对新请求检查预期版本与批次，执行本批次事务。
+4. 原子提交价格、状态、事件、时钟与版本。任何一步失败均不留下部分批次结果。
 
 旧批次重试返回的是该批次原始 versionAfter；前端不能用旧响应覆盖更高版本的当前状态。后端不能给原批次伪造一个新版本冒充新推进。
 
