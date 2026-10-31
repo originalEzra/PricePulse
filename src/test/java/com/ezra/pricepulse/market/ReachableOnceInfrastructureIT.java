@@ -96,6 +96,10 @@ class ReachableOnceInfrastructureIT {
         quotes.ingest(new QuoteCandidate("internal:"+stock,stock,new BigDecimal("210"),MarketTime.utc(NOW),"TEST",null),QuoteIngestionPolicy.LIVE);
         assertThat(rule("ABOVE","ONCE","205",null).status()).isEqualTo(AlertRuleStatus.ACTIVE);
     }
+    @Test void clockSkewedFutureProcessingMetadataCannotConfirmCreation(){
+        quote("base","210","a");jdbc.update("UPDATE quote_events SET processed_at=? WHERE stock_id=?",MarketTime.utc(NOW.plusSeconds(1)),stock);
+        assertThat(rule("ABOVE","ONCE","205",null).status()).isEqualTo(AlertRuleStatus.ACTIVE);
+    }
     @Test void noMissingTradeIsInventedWhenRecoveryPriceDoesNotMeetTarget(){
         quote("base","200","a");var r=rule("ABOVE","ONCE","205",null);clock.now=NOW.plusSeconds(10);
         assertThat(quote("recovery","200","b").matching().triggered()).isZero();assertThat(rules.get(user,r.id()).status()).isEqualTo(AlertRuleStatus.ACTIVE);
@@ -109,6 +113,18 @@ class ReachableOnceInfrastructureIT {
         assertThatThrownBy(()->quote("cross","211","a")).isInstanceOf(com.ezra.pricepulse.common.error.BusinessException.class);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",Long.class,r.id())).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT trigger_context FROM alert_triggers WHERE rule_id=?",String.class,r.id())).contains("LIVE");
+    }
+    @ParameterizedTest @CsvSource({"b,RECOVERY","a,LIVE"})
+    void delayedTradeConfirmationIsNotBackdatedIntoTheGapOrBeforeRuleCreation(String generation,String label){
+        quote("base","200","a");clock.now=NOW.plusSeconds(10);var r=rule("ABOVE","ONCE","205",null);clock.now=NOW.plusSeconds(60);
+        var q=new QuoteCandidate("delayed:"+stock,stock,new BigDecimal("210"),MarketTime.utc(NOW.plusSeconds(5)),"ALPACA_IEX",null,clock.now,"ALPACA","iex",generation+":2026-11-02","RECONNECT");
+        assertThat(quotes.ingest(q,QuoteIngestionPolicy.LIVE).matching().triggered()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT event_time FROM alert_triggers WHERE rule_id=?",LocalDateTime.class,r.id())).isEqualTo(MarketTime.utc(clock.now));
+        var events=timeline.events(user,stock,NOW.plusSeconds(55),clock.now.plusSeconds(1),null).events();
+        assertThat(events).hasSize(1);assertThat(events.getFirst().eventTime()).isEqualTo(clock.now);
+        assertThat(events.getFirst().triggerContext().path("confirmation").asText()).isEqualTo(label);
+        assertThat(events.getFirst().triggerContext().path("quoteEventTime").asText()).isEqualTo(NOW.plusSeconds(5).toString());
+        assertThat(jdbc.queryForObject("SELECT event_time_ns FROM quote_events WHERE id=?",Long.class,events.getFirst().quoteId())).isEqualTo(MarketTime.nanos(NOW.plusSeconds(5)));
     }
     @Test void legacyCacheTokenMissingIndexAndRollbackStillRecoverReachableCandidates(){
         quote("base","210","a");ready.set(false);var r=rule("ABOVE","ONCE","205",null);var s=stocks.findActiveById(stock);

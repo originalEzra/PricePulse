@@ -12,7 +12,7 @@
 | 创建、修改或恢复 ACTIVE ONCE | 在股票行锁内检查可信现价；满足则在同一事务写 COMPLETED、trigger 和 Outbox | 原行为不变 |
 | 已接受成交重复、乱序或过期 | 原去重、水位、舍弃逻辑先执行，不补造提醒 | 原行为不变 |
 
-`TargetReachContext` 区分 LIVE、RECOVERY、RULE_CREATED、RULE_ACTIVATED，保留确认时间、实际成交时间和基线原因。已验证的正常开盘跨越继续保留 OPENING_GAP 上一交易日参考上下文。创建确认复用已存在的真实成交外键，不生成行情点，图表按本次确认时间筛选和展示该触发。
+`TargetReachContext` 区分 LIVE、RECOVERY、RULE_CREATED、RULE_ACTIVATED，保留确认时间、实际成交时间和基线原因。已验证的正常开盘跨越继续保留 OPENING_GAP 上一交易日参考上下文。创建确认复用已存在的真实成交外键，不生成行情点，图表按本次确认时间筛选和展示该触发。恢复确认，以及成交在规则创建前产生但随后才被接受的确认，也使用本次实际确认时间；quote 本身的原始纳秒时间不改，不能倒画为缺口期间或规则创建前的突破。
 
 模拟器及已保存实验继续使用原纯 `evaluate()` 穿越语义；本轮只调整 REAL 的 `evaluateReal()`，没有把任何模拟状态引入 REAL。
 
@@ -35,7 +35,7 @@ Redis marker 采用 `reachable-once-v1:<MySQL token>`；旧 marker 自动 MISS �
 运行入口：`bash scripts/run-real-pipeline-checks.sh`。脚本冻结源码到忽略目录 target，排除 application-local.yml 和凭据，使用 Testcontainers MySQL 8.4.7、Redis 7.4.6、独立 RocketMQ 5.3.2；不覆盖正式 target/classes。
 
 - 单元测试：150 项。
-- 集成测试：88 项，包含 ReachableOnceInfrastructureIT 12、InfrastructureIT 24、MarketTimelineInfrastructureIT 8、OpeningGapInfrastructureIT 20、DynamicMonitoringInfrastructureIT 14、V2IsolationInfrastructureIT 10。
+- 阶段一首次完整集成回归 88 项；联合验证再增加 2 项延迟成交确认时间及 1 项未来处理时间拒绝测试，ReachableOnceInfrastructureIT 从 12 增至 15。最终联合计数见阶段二报告。
 - 新增测试覆盖上下对称、等价边界、创建确认、陈旧/未确认价格等待、恒价、恢复未达标、旧水位、重复/冲突、缺失及旧版 Redis marker、创建和报价并发、Outbox SQL 故障的全事务回滚，以及真实当前 lane 的 ACK/continuity 校验。
 - 旧历史夹具显式设置成交前的生效时间；旧 ONCE 首笔抑制断言改为新可达语义，原 REPEAT 基线与开盘资格断言继续保留。
 - 前端现有 50 项测试通过，另补 1 项确认上下文展示测试通过；TypeScript / Vite build 通过。

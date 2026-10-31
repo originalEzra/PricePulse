@@ -30,7 +30,8 @@ public class OnceRuleActivation {
                 ||stock.latestPrice()==null||quote.getPrice().compareTo(stock.latestPrice())!=0)return;
         var time=MarketTime.instant(quote.getEventTimeNs());var oldest=now.minus(properties.liveMaxAge());
         if(time.isBefore(oldest)||time.isAfter(now)||MarketTime.instant(quote.getReceivedAt()).isBefore(oldest)
-                ||MarketTime.instant(quote.getProcessedAt()).isBefore(oldest))return;
+                ||MarketTime.instant(quote.getProcessedAt()).isBefore(oldest)||MarketTime.instant(quote.getReceivedAt()).isAfter(now)
+                ||MarketTime.instant(quote.getProcessedAt()).isAfter(now))return;
         evaluation.confirmOnceRule(stock,rule,quote.getId(),quote.getPrice(),MarketTime.utc(now),
                 new TargetReachContext("TARGET_REACHED",created?"RULE_CREATED":"RULE_ACTIVATED",now,time,null));
     }

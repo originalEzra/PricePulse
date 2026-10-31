@@ -87,12 +87,17 @@ public class AlertEvaluationService {
                 QuoteTiming.finish("rule_decision", decisionStarted);
                 if (decision.kind() == RuleTransitionEngine.Kind.TRIGGERED) {
                     AlertRuleStatus target = decision.target();
-                    requireTransition(rule, target, eventTime);
+                    LocalDateTime triggeredAt=eventTime;
+                    if(rule.getTriggerMode()==AlertTriggerMode.ONCE && !openingCross(rule,price,opening)
+                            && (confirmation.confirmation().equals("RECOVERY")
+                                ||rule.getEffectiveAt()!=null&&eventTime.isBefore(rule.getEffectiveAt())))
+                        triggeredAt=com.ezra.pricepulse.market.MarketTime.utc(confirmation.confirmedAt());
+                    requireTransition(rule, target, triggeredAt);
                     long triggerStarted = QuoteTiming.start();
-                    try { pending.add(recordTrigger(rule, quoteId, price, eventTime, opening,confirmation)); }
+                    try { pending.add(recordTrigger(rule, quoteId, price, triggeredAt, opening,confirmation)); }
                     finally { QuoteTiming.finish("trigger_outbox_write", triggerStarted); }
                     rule.setStatus(target);
-                    rule.setLastTriggeredAt(eventTime);
+                    rule.setLastTriggeredAt(triggeredAt);
                     rule.setVersion(rule.getVersion() + 1);
                     changed.add(rule);
                     triggered++;
@@ -189,14 +194,16 @@ public class AlertEvaluationService {
         trigger.setEventTime(eventTime);
         try {
             trigger.setRuleSnapshot(json.writeValueAsString(AlertRuleResponse.from(rule)));
-            boolean openingCross=opening!=null && opening.eligible(rule.getEffectiveAt()) && opening.eligible(rule.getCreatedAt())
-                    && RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),rule.getStatus(),new BigDecimal(opening.referencePrice()),price).kind()==RuleTransitionEngine.Kind.TRIGGERED;
-            if(openingCross)trigger.setTriggerContext(json.writeValueAsString(opening.forRule(rule.getEffectiveAt())));
+            if(openingCross(rule,price,opening))trigger.setTriggerContext(json.writeValueAsString(opening.forRule(rule.getEffectiveAt())));
             else if(rule.getTriggerMode()==AlertTriggerMode.ONCE)trigger.setTriggerContext(json.writeValueAsString(confirmation));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot serialize rule snapshot", exception);
         }
         triggers.insert(trigger);
         return new OutboxWriter.PendingAlert(trigger.getId(), rule.getUserId(), rule.getId(), rule.getStockId());
+    }
+    private boolean openingCross(AlertRule rule,BigDecimal price,OpeningGapContext opening){
+        return opening!=null && opening.eligible(rule.getEffectiveAt()) && opening.eligible(rule.getCreatedAt())
+                && RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),rule.getStatus(),new BigDecimal(opening.referencePrice()),price).kind()==RuleTransitionEngine.Kind.TRIGGERED;
     }
 }
