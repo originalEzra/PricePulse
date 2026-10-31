@@ -248,7 +248,7 @@ public final class RealPipelineExperiment {
             var windows=new ArrayList<Map<String,Object>>();
             for(int second=0;second<(int)Math.ceil((end-start)/1e9);second++){
                 final long low=start+second*1_000_000_000L,high=low+1_000_000_000L;
-                windows.add(Map.of("second",second,"input",measured.stream().filter(v->v.receivedNanos>=low&&v.receivedNanos<high).count(),"processed",measured.stream().filter(v->v.finished&&!v.failed&&v.completedNanos>=low&&v.completedNanos<high).count()));
+                windows.add(Map.of("second",second,"input",measured.stream().filter(v->v.receivedNanos>=low&&v.receivedNanos<high).count(),"processed",measured.stream().filter(v->v.finished&&!v.failed&&"PROCESSED".equals(v.outcome)&&v.completedNanos>=low&&v.completedNanos<high).count()));
             }
             result.put("rateWindows",windows);result.put("producerLateness",PipelineProbe.distribution(measured.stream().map(v->Math.max(0,v.receivedNanos-v.scheduledNanos)).toList()));
             result.put("nonemptyCandidateEvents",measured.stream().filter(s->s.candidates>0).count());result.put("triggerCount",measured.stream().mapToInt(s->s.triggers).sum());result.put("rearmCount",measured.stream().mapToInt(s->s.rearms).sum());
@@ -263,7 +263,7 @@ public final class RealPipelineExperiment {
             result.put("redisBefore",redisBefore);result.put("redisAfter",afterRedis);result.put("jvmBefore",jvmBefore);result.put("jvmAfter",jvmAfter);
             var writes=new TreeMap<String,Long>();after.forEach((k,v)->writes.put(k,v-before.get(k)));result.put("tableRowDelta",writes);
             var eachStock=new ArrayList<Map<String,Object>>();
-            for(int s=0;s<c.stocks;s++){final int n=s;var group=measured.stream().filter(v->v.stock==n).toList();eachStock.add(Map.of("stock",s,"processed",group.stream().filter(v->v.finished&&!v.failed).count(),"queueWait",PipelineProbe.distribution(group.stream().filter(v->v.finished).map(v->v.phases.get("queue_wait")).toList())));}
+            for(int s=0;s<c.stocks;s++){final int n=s;var group=measured.stream().filter(v->v.stock==n).toList();eachStock.add(Map.of("stock",s,"processed",group.stream().filter(v->v.finished&&!v.failed&&"PROCESSED".equals(v.outcome)).count(),"queueWait",PipelineProbe.distribution(group.stream().filter(v->v.finished).map(v->v.phases.get("queue_wait")).toList())));}
             result.put("perStock",eachStock);result.put("resources",resourceRows);
             result.put("oracle",oracle(ids,c.scenario,samples.values(),burstAt));
             raw(c,measured);save("case-"+caseNumber+".json",result);

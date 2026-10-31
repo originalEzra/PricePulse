@@ -1,0 +1,72 @@
+{
+  "environment": {
+  "startedAtUtc": "2026-10-31T07:35:18.949891Z",
+  "java": "25.0.1+8-27",
+  "os": "Mac OS X",
+  "arch": "aarch64",
+  "visibleProcessors": 2,
+  "maxHeap": 805306368,
+  "mysql": "8.4.7",
+  "mysqlCpu": 1,
+  "redisCpu": 0.5,
+  "mysqlMemoryMiB": 768,
+  "redisMemoryMiB": 256,
+  "hikariMaximum": 10,
+  "queueCapacity": 1024,
+  "innodbFlushLogAtTrxCommit": 1,
+  "syncBinlog": 1,
+  "seed": 2026103101,
+  "suite": "correctness",
+  "durationSeconds": 15,
+  "warmupSeconds": 3,
+  "repeats": 2,
+  "rulesPerStock": 1000,
+  "ratesPerStock": [
+    50,
+    100,
+    200,
+    500,
+    1000
+  ],
+  "stockCounts": [
+    1,
+    5,
+    15
+  ],
+  "hitRules": 2,
+  "path": "mixed",
+  "instrumentation": "full",
+  "candidateIdsCaptured": false,
+  "evaluatorReference": "working-tree",
+  "commit": "a1be4289e3868282fd938650ecd2a80260073514",
+  "sources": {
+    "src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java": "c8092f42585d6ba3722f8c045d21258a258260f961e9b13054c7c395813ae0b4",
+    "src/main/java/com/ezra/pricepulse/market/MarketQuoteLane.java": "cc5b2bbcb78194407bd36cc58ffd1241cae2e49e53704a8def47d7a203a58436",
+    "src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java": "4c696e00c063e6056df5d7a3fcceed4f52041978f6476d97fdb8e89258e61b24",
+    "src/main/java/com/ezra/pricepulse/market/QuoteTiming.java": "350d09d54f389c74fc8a57579ee2bab14bd56736d46f4ccd63704dce090ca2f1",
+    "src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java": "38f20974ad86dcc2a9102d5c147d4da47ae56c73b92cca97b1d4e89db391d776",
+    "src/test/java/com/ezra/pricepulse/market/PipelineProbe.java": "480da9fe4f5f3fc5da2d8dd9f013a4714cbd016334167f6770df5e0d20805af7",
+    "src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java": "5741c2b0c625774fd1d9e50787f808f4f36dfb22300329dce3e22d8d63084832"
+  },
+  "entry": "Real MarketQuoteLane -> transactional production QuoteIngestionService; no Spring application or provider socket",
+  "eventOrigin": "2026-10-30T14:00:00Z",
+  "measuredOrigin": "2026-10-30T14:02:04Z"
+},
+  "cases": [
+
+  ],
+  "checks": [
+    {"pass":true,"name":"duplicate-order-stale-future-and-consumer-idempotency","uniqueNotification":1},
+    {"pass":true,"name":"transaction-rollback-token-mismatch-and-missing-index"},
+    {"pass":true,"name":"actual-mysql-error-worker-gap-tail-discard-and-recovery-baseline"},
+    {"faultToCommittedBaselineMs":38.110125,"name":"forced-1024-queue-overflow-and-lower-rate-recovery","timingScope":"forced worker hold; not a sustained capacity benchmark","discarded":1024,"observedFollowupRatePerSecond":40.52910404891383,"faultToQueueEmptyMs":38.477042,"normalEvents":20,"pass":true},
+    {"pass":true,"name":"same-stock-lock-wait-and-cross-stock-parallelism","otherStockCommitMs":35.953833,"lockCallMs":164.874125},
+    {"name":"production-rule-create-edit-pause-resume-delete-concurrent-with-ingestion","lifecycleTransactions":50,"pass":true,"triggers":120,"quoteEvents":120},
+    {"pass":true,"name":"thousand-trigger-bounded-outbox-rollback-safe-retry-and-idempotency","triggers":1000,"outboxRows":1000},
+    {"pass":true,"name":"mixed-real-legacy-outbox-batch-is-rejected-atomically"},
+    {"name":"performance-schema-concurrent-counter-control","databaseDigestCount":2967,"successfulRows":3000,"exactDigestAgreement":false,"executedSql":3000,"difference":-33}
+  ],
+  "rawSamples": [
+
+  ]
+}

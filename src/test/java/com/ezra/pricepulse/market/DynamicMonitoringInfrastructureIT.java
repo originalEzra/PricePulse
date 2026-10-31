@@ -107,6 +107,24 @@ class DynamicMonitoringInfrastructureIT {
         cancel(b,one.stock().id());service.reconcile();assertThat(wire.sent("unsubscribe","PLTR")).isEqualTo(1);assertThat(store.reserved()).isEqualTo(1);
         wire.ack();service.reconcile();assertThat(store.reserved()).isZero();assertThat(wire.connections).isEqualTo(1);
     }
+    @Test void optInTelemetryObservesTheActualRuntimeLaneAndRetiresCancelledStockMetrics()throws Exception{
+        var registry=new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        try(var telemetry=new MarketLaneTelemetry(registry,clock)){
+            runtime.telemetry(telemetry);
+            long u=user();var row=add(u,"AAPL");service.reconcile();wire.ack();service.reconcile();
+            rule(u,row.stock().id(),"Observed crossing",100);
+            tradeAndAwait("AAPL",row.stock().id(),99);tradeAndAwait("AAPL",row.stock().id(),101);
+            await(()->registry.find("pricepulse.market.processed").counter()!=null&&registry.get("pricepulse.market.processed").counter().count()==2);
+            await(()->registry.get("pricepulse.market.process").timer().count()==2);
+            assertThat(registry.get("pricepulse.market.input").counter().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.transaction").timer().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.queue.wait").timer().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.phase.trigger_outbox_write").timer().count()).isEqualTo(1);
+            assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",row.stock().id())).isEqualTo(1);
+            cancel(u,row.stock().id());service.reconcile();wire.ack();service.reconcile();
+            assertThat(registry.getMeters()).isEmpty();
+        }finally{runtime.telemetry(null);registry.close();}
+    }
     @Test void delayedSubscribeAfterCancellationCannotConfirmOrFreeCapacityUntilCompensated()throws Exception{
         jdbc.update("UPDATE market_subscription_control SET symbol_limit=1 WHERE id=1");long u=user();var first=add(u,"PLTR");service.reconcile();cancel(u,first.stock().id());service.reconcile();
         assertThatThrownBy(()->add(user(),"SPY")).isInstanceOf(BusinessException.class).hasMessageContaining("名额");

@@ -30,6 +30,20 @@ def server_delta(before, after):
     return {k: end[k] - start[k] for k in sorted(set(start) | set(end)) if end[k] != start[k]}
 
 
+def redis_delta(before, after):
+    result = {}
+    for name, value in after.items():
+        if not name.startswith('cmdstat_'):
+            continue
+        def parse(text):
+            return {k: float(v) for k, v in re.findall(r'(?:^|,)(calls|usec)=([0-9.]+)', text)}
+        new, old = parse(value), parse(before.get(name, 'calls=0,usec=0'))
+        calls, micros = new.get('calls', 0) - old.get('calls', 0), new.get('usec', 0) - old.get('usec', 0)
+        if calls:
+            result[name] = {'calls': int(calls), 'serverTotalMicros': micros, 'serverMeanMicros': micros / calls}
+    return result
+
+
 def validate(directory):
     data = json.loads((directory / 'summary.json').read_text())
     assert data['complete'], f'incomplete run: {directory}'
@@ -43,7 +57,9 @@ def validate(directory):
         assert case['failedTasks'] == 0, case['id']
         finished = [s for s in samples if s['completed_nanos'] != '0']
         dropped = [s for s in samples if s['discarded']]
-        assert len(finished) == case['processedEvents'] and len(dropped) == case['discardedTasks']
+        processed = [s for s in finished if s['outcome'] == 'PROCESSED']
+        assert len(processed) == case['processedEvents'] and len(dropped) == case['discardedTasks']
+        assert len(finished) - len(processed) == case.get('businessRejectedEvents', 0)
         assert len(finished) + len(dropped) == len(samples)
         for s in finished:
             received, enqueued, start, completed = (int(s[k]) for k in ('received_nanos', 'enqueued_nanos', 'started_nanos', 'completed_nanos'))
@@ -74,7 +90,7 @@ def validate(directory):
                     continue
                 if delta.get(key, 0) != count:
                     differences[key] = {'jdbc': count, 'serverDigest': delta.get(key, 0)}
-        assert case['tableRowDelta']['quote_events'] == case['processedEvents']
+        assert case['tableRowDelta']['quote_events'] == sum(s['outcome'] != 'DUPLICATE' for s in finished)
         assert case['tableRowDelta']['alert_triggers'] == case['triggerCount']
         assert case['tableRowDelta']['outbox_events'] == case['triggerCount']
         assert case['tableRowDelta']['notifications'] == 0
@@ -83,6 +99,18 @@ def validate(directory):
         artifacts.append({'name': file.name, 'bytes': size, 'sha256': hashlib.sha256(file.read_bytes()).hexdigest()})
         compact = {k: v for k, v in case.items() if k not in ('serverBefore', 'serverAfter', 'redisBefore', 'redisAfter', 'resources')}
         compact['serverSqlExecutions'] = delta
+        compact['redisCommandDelta'] = redis_delta(case['redisBefore'], case['redisAfter'])
+        start_jvm, end_jvm = case['jvmBefore'], case['jvmAfter']
+        cpu_window = end_jvm.get('sampledAtNanos', 0) - start_jvm.get('sampledAtNanos', 0)
+        if cpu_window > 0 and start_jvm['cpuNanos'] >= 0:
+            compact['jvmCpuMeanPercentOfOneCore'] = (end_jvm['cpuNanos'] - start_jvm['cpuNanos']) / cpu_window * 100
+        compact['gcDelta'] = {name: {key: end_jvm['gc'][name][key] - values[key] for key in values}
+                              for name, values in start_jvm['gc'].items()}
+        compact['maxSampledThreads'] = max((r['jvm']['threads'] for r in case['resources']), default=0)
+        compact['maxSampledHeapBytes'] = max((r['jvm']['heapUsed'] for r in case['resources']), default=0)
+        status_before = {r['Variable_name']: int(r['Value']) for r in case['serverBefore']['status']}
+        status_after = {r['Variable_name']: int(r['Value']) for r in case['serverAfter']['status']}
+        compact['mysqlStatusDelta'] = {k: status_after[k] - v for k, v in status_before.items()}
         compact['serverCounterDifferences'] = differences
         compact['comparisonEligible'] = case['firstError'] is None and case.get('warmupFailedTasks', 0) == 0 and case.get('warmupFirstError') is None
         if not compact['comparisonEligible']:
@@ -97,6 +125,19 @@ def validate(directory):
     return data, cases, artifacts
 
 
+def summary_text(payload):
+    # One JSON object per case/artifact: preserve every aggregate without huge pretty-printed diffs.
+    fields = []
+    for key, value in payload.items():
+        if isinstance(value, list):
+            body = ',\n'.join('    ' + json.dumps(item, ensure_ascii=False, separators=(',', ':')) for item in value)
+            encoded = '[\n' + body + '\n  ]'
+        else:
+            encoded = json.dumps(value, ensure_ascii=False, indent=2)
+        fields.append('  ' + json.dumps(key) + ': ' + encoded)
+    return '{\n' + ',\n'.join(fields) + '\n}\n'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', type=Path, required=True)
@@ -104,10 +145,11 @@ def main():
     args = parser.parse_args()
     data, cases, artifacts = validate(args.input)
     args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / 'summary.json').write_text(json.dumps({'environment': data['environment'], 'cases': cases, 'checks': data['checks'], 'rawSamples': artifacts}, ensure_ascii=False, indent=2) + '\n')
+    (args.output / 'summary.json').write_text(summary_text({'environment': data['environment'], 'cases': cases, 'checks': data['checks'], 'rawSamples': artifacts}))
     with (args.output / 'cases.csv').open('w', newline='') as handle:
         fields = ['id', 'scenario', 'stocks', 'ratePerStock', 'seconds', 'repeat', 'inputEvents', 'processedEvents', 'actualInputPerSecond',
-                  'completedPerSecondIncludingDrain', 'drainSeconds', 'maxQueueDepth', 'queueOverflows', 'discardedTasks', 'failedTasks', 'triggerCount', 'rearmCount', 'maxPoolActive', 'maxPoolAwaiting']
+                  'completedPerSecondIncludingDrain', 'drainSeconds', 'maxQueueDepth', 'queueOverflows', 'discardedTasks', 'failedTasks', 'triggerCount', 'rearmCount', 'maxPoolActive', 'maxPoolAwaiting',
+                  'firstError', 'warmupFailedTasks', 'warmupFirstError', 'comparisonEligible', 'inputSha256', 'initialRulesSha256', 'finalRulesSha256']
         for phase in ('quote_process_total', 'queue_wait', 'trade_processing_lag', 'transaction_total', 'transaction_commit', 'stock_lock_wait', 'mysql_rule_fetch', 'redis_candidate', 'rule_transition', 'trigger_outbox_write'):
             fields.extend(f'{phase}_{p}' for p in ('samples', 'meanMs', 'p50Ms', 'p95Ms', 'p99Ms', 'maxMs'))
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator='\n'); writer.writeheader()

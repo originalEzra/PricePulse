@@ -1,0 +1,31 @@
+{
+  "scope": "isolated queue-entry business pipeline, never production resources",
+  "seed": 2026103101,
+  "rulesPerStock": 1000,
+  "queueCapacity": 1024,
+  "jvm": {"heapMiB": 768, "visibleProcessors": 2, "nice": 10},
+  "mysql": {"image": "mysql:8.4.7", "cpu": 1, "memoryMiB": 768, "bufferPoolMiB": 128, "flushLogAtCommit": 1, "syncBinlog": 1},
+  "redis": {"image": "redis:7.4.6-alpine", "cpu": 0.5, "memoryMiB": 256, "isolation": "new password-protected disposable instance per run; production key format reused in a physically separate keyspace"},
+  "hikariMaximum": 10,
+  "baselineAndAfter": {
+    "suite": "baseline", "seconds": 8, "warmupSeconds": 2, "repeats": 2,
+    "stocks": [1, 5, 15], "singleStockRates": [50, 100, 200, 500, 1000],
+    "singleStockScenarios": ["ZERO_RULES", "ZERO_HIT", "FEW_HIT", "BURST_100", "BURST_500", "BURST_1000"],
+    "multiStockRates": [50, 100, 200], "multiStockScenarios": ["ZERO_HIT", "FEW_HIT"],
+    "cases": 84, "instrumentation": "full", "claimSustainedCapacity": false
+  },
+  "sustainedBeforeAndAfter": {
+    "suite": "sustain", "seconds": 60, "warmupSeconds": 2, "repeats": 2,
+    "stocks": [1], "rates": [100, 150, 200], "scenarios": ["ZERO_HIT", "FEW_HIT"],
+    "instrumentation": "boundary", "cases": 12,
+    "limit": "Two 60-second observations are not a production availability guarantee"
+  },
+  "functionalComparison": {
+    "suite": "sustain", "seconds": 4, "warmupSeconds": 2, "repeats": 2,
+    "stocks": [1], "rates": [100, 200],
+    "scenarios": ["ZERO_RULES", "ZERO_HIT", "FEW_HIT", "BURST_100", "BURST_500", "BURST_1000"],
+    "captureCandidates": true, "instrumentation": "full",
+    "baselineEvaluatorCommit": "7171525",
+    "check": "Loss-free traces, actual candidate IDs, fixed input hashes, initial/final rule hashes, trigger outcomes and table row counts"
+  }
+}

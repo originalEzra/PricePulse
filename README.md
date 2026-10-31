@@ -90,6 +90,7 @@ npm run dev
 
 - [系统架构与源码](docs/v2.1-final-architecture.md)
 - [MySQL B+ 树／Redis 对照、固定回放与原始数据](docs/performance/v2.1-rule-selection-2026-10-31/report.md)
+- [REAL 队列／事务性能、积压与局部批量优化](docs/performance/realtime-processing/report.md)
 - [V2.1 验收与外部待验边界](docs/v2.1-final-delivery.md)
 - [API 契约](docs/v2-api-contracts.md)
 - [Java 后端简历与面试材料](docs/v2.1-career-summary.md)

@@ -14,7 +14,7 @@ final class PipelineCorrectness {
     final RealPipelineExperiment p;
     PipelineCorrectness(RealPipelineExperiment p){this.p=p;}
     void run()throws Exception {
-        identities();rollbackAndIndexRecovery();workerFailure();parallelStocks();concurrentRules();bulkAtomicity();databaseCounterProbe();
+        identities();rollbackAndIndexRecovery();workerFailure();overloadRecovery();parallelStocks();concurrentRules();bulkAtomicity();databaseCounterProbe();
     }
     void identities()throws Exception {
         p.clock.reset();p.seed(RealPipelineExperiment.Scenario.FEW_HIT,1);
@@ -93,6 +93,38 @@ final class PipelineCorrectness {
             if(PipelineProbe.detailed)require(sample.phases.getOrDefault("stock_lock_wait",0L)>TimeUnit.MILLISECONDS.toNanos(100),"lock SQL timer sees real contention");
             require(count("market_stream_state")==2&&count("alert_triggers")==0,"stock isolation");
             p.checks.add(Map.of("name","same-stock-lock-wait-and-cross-stock-parallelism","pass",true,"lockCallMs",sample.phases.getOrDefault("stock_lock_wait",0L)/1e6,"otherStockCommitMs",otherElapsed/1e6));
+        }finally{release.countDown();}
+    }
+    void overloadRecovery()throws Exception {
+        p.clock.reset();p.seed(RealPipelineExperiment.Scenario.FEW_HIT,1);
+        var entered=new CountDownLatch(1);var release=new CountDownLatch(1);var baseline=new CountDownLatch(1);var normal=new CountDownLatch(20);
+        var discarded=new AtomicInteger();var overflows=new AtomicInteger();var faultAt=new AtomicLong();var baselineAt=new AtomicLong();
+        try(var lane=new MarketQuoteLane(1,1024,w->{
+            var t=w.trade();if(t.eventKey().equals("overload-first")){
+                entered.countDown();try{release.await(3,TimeUnit.SECONDS);}catch(InterruptedException e){throw new IllegalStateException(e);}
+            }
+            ingest(new QuoteCandidate(t.eventKey(),1,t.price(),MarketTime.utc(t.eventTime()),"ALPACA_IEX",null,t.receivedAt(),"ALPACA","iex",w.continuity()+":2026-10-30",w.reason()));
+            if(t.eventKey().equals("overload-baseline")){baselineAt.set(System.nanoTime());baseline.countDown();}
+            if(t.eventKey().startsWith("normal-"))normal.countDown();
+        },code->{require(code.equals("QUEUE_OVERFLOW"),"expected overload fault only");overflows.incrementAndGet();faultAt.set(System.nanoTime());},new MarketQuoteLane.Observer(){
+            public void discarded(MarketQuoteLane.Work w,String reason){discarded.incrementAndGet();}
+        })){
+            offer(lane,"overload-first","100");require(entered.await(3,TimeUnit.SECONDS),"blocked worker entered");
+            for(int i=0;i<1024;i++)offer(lane,"uncertain-"+i,"100.10");
+            require(lane.sample().depth()==1024,"original queue capacity reached");offer(lane,"overload-baseline","100.10");
+            release.countDown();require(baseline.await(5,TimeUnit.SECONDS),"post-overflow baseline committed");
+            RealPipelineExperiment.awaitDrain(Map.of(0,lane),5);long drainedAt=System.nanoTime();
+            require(discarded.get()==1024&&overflows.get()==1,"actual full tail discarded once");
+            require(count("alert_triggers")==0,"no alert across discarded tail");
+            require("QUEUE_OVERFLOW".equals(p.jdbc.queryForObject("SELECT baseline_reason FROM quote_events WHERE event_key='overload-baseline'",String.class)),"persisted overload baseline");
+            long normalStart=System.nanoTime();
+            for(int i=0;i<20;i++){offer(lane,"normal-"+i,"99.90");Thread.sleep(20);}
+            require(normal.await(3,TimeUnit.SECONDS),"lower-rate traffic completed");RealPipelineExperiment.awaitDrain(Map.of(0,lane),5);
+            require(overflows.get()==1&&count("quote_events")==22&&count("alert_triggers")==1&&count("outbox_events")==1,"normal processing resumes without duplicate or lost follow-up");
+            p.checks.add(Map.of("name","forced-1024-queue-overflow-and-lower-rate-recovery","pass",true,
+                    "discarded",discarded.get(),"faultToCommittedBaselineMs",(baselineAt.get()-faultAt.get())/1e6,
+                    "faultToQueueEmptyMs",(drainedAt-faultAt.get())/1e6,"normalEvents",20,
+                    "observedFollowupRatePerSecond",20/((System.nanoTime()-normalStart)/1e9),"timingScope","forced worker hold; not a sustained capacity benchmark"));
         }finally{release.countDown();}
     }
     void offer(MarketQuoteLane lane,String key,String price){lane.offer(new AlpacaProtocol.Trade("PPTEST0",key,new BigDecimal(price),p.clock.instant(),p.clock.instant()));}
