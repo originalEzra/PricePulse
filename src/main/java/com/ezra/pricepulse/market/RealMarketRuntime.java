@@ -42,6 +42,8 @@ public class RealMarketRuntime {
     private final Map<String,Long> stockIds=new ConcurrentHashMap<>(),intents=new ConcurrentHashMap<>();
     private final AtomicBoolean syncing=new AtomicBoolean();
     private volatile boolean stopped;
+    private MarketLaneTelemetry telemetry;
+    @Autowired(required=false) void telemetry(MarketLaneTelemetry telemetry){this.telemetry=telemetry;}
     @Autowired public RealMarketRuntime(AlpacaProperties properties,MarketDataMapper data,StockMapper stocks,
             MarketHistoryCache cache,QuoteIngestionService ingestion,MarketFeedHealth health,ObjectMapper json,Clock clock,
             MonitoringProperties monitoring,MonitoringMapper subscriptions) {
@@ -90,14 +92,16 @@ public class RealMarketRuntime {
         for(String symbol:new ArrayList<>(stockIds.keySet())){
             var d=next.get(symbol);
             if(d==null||!Objects.equals(intents.get(symbol),d.intentVersion())||!Objects.equals(stockIds.get(symbol),d.stockId())){
-                var lane=lanes.remove(symbol);if(lane!=null)lane.close();stockIds.remove(symbol);intents.remove(symbol);changed=true;
+                var lane=lanes.remove(symbol);if(lane!=null)lane.close();if(telemetry!=null)telemetry.detach(stockIds.get(symbol));stockIds.remove(symbol);intents.remove(symbol);changed=true;
             }
         }
         for(var d:desired)if(!stockIds.containsKey(d.symbol())){
             stockIds.put(d.symbol(),d.stockId());intents.put(d.symbol(),d.intentVersion());changed=true;
             if(properties.isBusinessWritesEnabled())lanes.put(d.symbol(),new MarketQuoteLane(d.stockId(),properties.getQueueCapacity(),work->process(d.stockId(),work),code->{
                 if(code.equals("QUEUE_OVERFLOW"))health.overflow();else health.error(code);
-            }));
+                if(telemetry!=null)telemetry.fault(d.stockId(),code);
+            },telemetry==null?MarketQuoteLane.Observer.NONE:telemetry.observer(d.stockId())));
+            if(telemetry!=null&&lanes.containsKey(d.symbol()))telemetry.attach(d.stockId(),lanes.get(d.symbol())::sample);
         }
         return changed;
     }
@@ -155,7 +159,8 @@ public class RealMarketRuntime {
         var candidate=new QuoteCandidate(trade.eventKey(),stockId,trade.price(),
                 LocalDateTime.ofInstant(trade.eventTime(),ZoneOffset.UTC),"ALPACA_IEX",null,trade.receivedAt(),
                 "ALPACA","iex",work.continuity()+":"+trade.eventTime().atZone(MarketTime.NEW_YORK).toLocalDate(),work.reason());
-        var result=ingestion.ingest(candidate,QuoteIngestionPolicy.LIVE);
+        var result=telemetry==null?ingestion.ingest(candidate,QuoteIngestionPolicy.LIVE)
+                :telemetry.ingest(stockId,()->ingestion.ingest(candidate,QuoteIngestionPolicy.LIVE));
         if (result.outcome()==QuoteOutcome.DISCARDED_STALE || result.outcome()==QuoteOutcome.DISCARDED_FUTURE) {
             health.reject();var lane=lanes.get(trade.symbol());if(lane!=null)lane.gap("STALE_OR_FUTURE");
         }

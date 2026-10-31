@@ -17,6 +17,8 @@ public interface OutboxMapper {
             """)
     int insertAlertTriggered(@Param("triggerId") long triggerId, @Param("payload") String payload);
 
+    int insertAlertTriggeredBatch(@Param("events") List<OutboxWriter.AlertPayload> events);
+
     List<OutboxEvent> selectClaimable(
             @Param("now") LocalDateTime now,
             @Param("leaseCutoff") LocalDateTime leaseCutoff,

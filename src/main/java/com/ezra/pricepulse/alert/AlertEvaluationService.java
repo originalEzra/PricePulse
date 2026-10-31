@@ -68,6 +68,7 @@ public class AlertEvaluationService {
         // Fetch only Redis candidates; MySQL remains the final authority for status and thresholds.
         for (int offset = 0; offset < ids.size(); offset += 500) {
             List<Long> page = ids.subList(offset, Math.min(offset + 500, ids.size()));
+            List<OutboxWriter.PendingAlert> pending = new ArrayList<>();
             for (AlertRule rule : rules.findCandidates(stock.id(), page)) {
                 if (opening!=null && rule.getStatus()==AlertRuleStatus.ACTIVE
                         && (!opening.eligible(rule.getEffectiveAt()) || !opening.eligible(rule.getCreatedAt()))) continue;
@@ -82,7 +83,7 @@ public class AlertEvaluationService {
                     AlertRuleStatus target = decision.target();
                     requireTransition(rule, target, eventTime);
                     long triggerStarted = QuoteTiming.start();
-                    try { recordTrigger(rule, quoteId, price, eventTime, opening); }
+                    try { pending.add(recordTrigger(rule, quoteId, price, eventTime, opening)); }
                     finally { QuoteTiming.finish("trigger_outbox_write", triggerStarted); }
                     rule.setStatus(target);
                     rule.setLastTriggeredAt(eventTime);
@@ -96,6 +97,11 @@ public class AlertEvaluationService {
                     changed.add(rule);
                     rearmed++;
                 }
+            }
+            if (!pending.isEmpty()) {
+                long outboxStarted = QuoteTiming.start();
+                try { outbox.alertTriggeredBatch(pending); }
+                finally { QuoteTiming.finish("trigger_outbox_write", outboxStarted); }
             }
         }
         if (!changed.isEmpty()) {
@@ -157,7 +163,7 @@ public class AlertEvaluationService {
         }
     }
 
-    private void recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime, OpeningGapContext opening) {
+    private OutboxWriter.PendingAlert recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime, OpeningGapContext opening) {
         AlertTrigger trigger = new AlertTrigger();
         trigger.setTriggerKey("rule:" + rule.getId() + ":version:" + rule.getVersion());
         trigger.setRuleId(rule.getId());
@@ -171,6 +177,6 @@ public class AlertEvaluationService {
             throw new IllegalStateException("Cannot serialize rule snapshot", exception);
         }
         triggers.insert(trigger);
-        outbox.alertTriggered(trigger.getId(), rule.getUserId(), rule.getId(), rule.getStockId());
+        return new OutboxWriter.PendingAlert(trigger.getId(), rule.getUserId(), rule.getId(), rule.getStockId());
     }
 }

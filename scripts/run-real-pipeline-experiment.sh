@@ -9,12 +9,19 @@ mkdir -p target
 pipeline_build="$(mktemp -d "$PWD/target/real-pipeline-build-XXXXXX")"
 python3 - "$pipeline_root" "$pipeline_build" <<'PY'
 from pathlib import Path
-import shutil, sys
+import os, re, shutil, subprocess, sys
 source, target = map(Path,sys.argv[1:])
 for name in ['pom.xml','mvnw']:
     shutil.copy2(source/name,target/name)
 shutil.copytree(source/'.mvn',target/'.mvn')
 shutil.copytree(source/'src',target/'src',ignore=shutil.ignore_patterns('application-local.yml','*.key','*.pem'))
+# Reproduce the original evaluator in the mirror only. The original single-row writer method is retained.
+reference=os.environ.get('PP_PIPELINE_EVALUATION_REF','')
+if reference:
+    if not re.fullmatch(r'[0-9a-f]{7,40}',reference):
+        raise SystemExit('Use an explicit local commit ID for the baseline evaluator')
+    name='src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java'
+    (target/name).write_bytes(subprocess.check_output(['git','show',reference+':'+name],cwd=source))
 PY
 (
   cd "$pipeline_build"

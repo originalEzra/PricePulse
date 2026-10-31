@@ -14,7 +14,7 @@ final class PipelineCorrectness {
     final RealPipelineExperiment p;
     PipelineCorrectness(RealPipelineExperiment p){this.p=p;}
     void run()throws Exception {
-        identities();rollbackAndIndexRecovery();workerFailure();parallelStocks();concurrentRules();databaseCounterProbe();
+        identities();rollbackAndIndexRecovery();workerFailure();parallelStocks();concurrentRules();bulkAtomicity();databaseCounterProbe();
     }
     void identities()throws Exception {
         p.clock.reset();p.seed(RealPipelineExperiment.Scenario.FEW_HIT,1);
@@ -138,6 +138,35 @@ final class PipelineCorrectness {
             require(actual==threads*perThread,"exact SQL completion count");
             p.checks.add(Map.of("name","performance-schema-concurrent-counter-control","executedSql",actual,"successfulRows",actual,"databaseDigestCount",database,"difference",database-actual,"exactDigestAgreement",database==actual));
         }
+    }
+    void bulkAtomicity()throws Exception {
+        p.clock.reset();p.seed(RealPipelineExperiment.Scenario.BURST_1000,1);
+        ingest(candidate("bulk-base",1,"100","bulk",p.clock.instant()));var before=p.facts();
+        p.jdbc.execute("CREATE TRIGGER bench_bulk_fail BEFORE INSERT ON outbox_events FOR EACH ROW BEGIN IF NEW.aggregate_id > 500 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated second page failure'; END IF; END");
+        var up=candidate("bulk-up",1,"110","bulk",p.clock.instant());boolean failed=false;
+        try{ingest(up);}catch(RuntimeException expected){failed=true;}finally{p.jdbc.execute("DROP TRIGGER bench_bulk_fail");}
+        require(failed&&p.facts().equals(before),"second page failure rolls back all earlier trigger/outbox rows");
+        require(p.jdbc.queryForObject("SELECT COUNT(*) FROM alert_rules WHERE status='ACTIVE' AND version=0",Long.class)==1000,"all rule transitions roll back");
+        require(ingest(up).matching().triggered()==1000,"same identity can safely retry the rolled back transaction");
+        require(ingest(up).outcome()==QuoteOutcome.DUPLICATE,"committed identity cannot duplicate the bulk");
+        require(count("outbox_events")==1000&&count("alert_triggers")==1000,"one Outbox per trigger");
+        require(p.jdbc.queryForObject("SELECT COUNT(*) FROM alert_rules WHERE status='COMPLETED' AND version=1",Long.class)==1000,"every ONCE rule completes exactly once");
+        var payloads=p.jdbc.queryForList("SELECT payload FROM outbox_events ORDER BY id",String.class);
+        p.notifications.consume(payloads.getFirst());p.notifications.consume(payloads.getFirst());p.notifications.consume(payloads.getLast());
+        require(count("notifications")==2,"bulk messages retain consumer idempotency");
+        p.checks.add(Map.of("name","thousand-trigger-bounded-outbox-rollback-safe-retry-and-idempotency","pass",true,"triggers",1000,"outboxRows",1000));
+        p.jdbc.update("INSERT INTO quote_events(stock_id,event_key,price,event_time,source,origin_type) VALUES(1,'bulk-legacy-fixture',110,'2026-10-30 14:10:00','FIXTURE','LEGACY')");
+        p.jdbc.update("INSERT INTO alert_triggers(trigger_key,rule_id,quote_event_id,trigger_price,event_time,rule_snapshot) SELECT 'legacy-bulk-guard',1,id,110,'2026-10-30 14:10:00','{}' FROM quote_events WHERE event_key='bulk-legacy-fixture'");
+        long legacy=p.jdbc.queryForObject("SELECT id FROM alert_triggers WHERE trigger_key='legacy-bulk-guard'",Long.class);
+        long real=p.json.readTree(payloads.getFirst()).get("triggerId").asLong();
+        p.jdbc.update("DELETE FROM outbox_events WHERE aggregate_id=?",real);long outboxBefore=count("outbox_events");
+        boolean guarded=false;
+        try{new TransactionTemplate(p.tx).execute(status->{
+            p.outboxWriter.alertTriggeredBatch(List.of(new com.ezra.pricepulse.outbox.OutboxWriter.PendingAlert(real,1,1,1),new com.ezra.pricepulse.outbox.OutboxWriter.PendingAlert(legacy,1,1,1)));return null;
+        });}catch(RuntimeException expected){guarded=true;}
+        require(guarded&&count("outbox_events")==outboxBefore,"a mixed REAL/LEGACY batch cannot partially commit");
+        require(p.jdbc.queryForObject("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id IN (?,?)",Long.class,real,legacy)==0,"no guarded row escapes rollback");
+        p.checks.add(Map.of("name","mixed-real-legacy-outbox-batch-is-rejected-atomically","pass",true));
     }
     long digestProbeCount(){return p.jdbc.queryForObject("SELECT COALESCE(SUM(COUNT_STAR),0) FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME=DATABASE() AND DIGEST_TEXT LIKE 'SELECT % AS %pipeline_counter_probe%'",Long.class);}
     QuoteCandidate candidate(String key,long stock,String price,String continuity,Instant at){return new QuoteCandidate(key,stock,new BigDecimal(price),MarketTime.utc(at),"ALPACA_IEX",null,p.clock.instant(),"ALPACA","iex",continuity+":2026-10-30","STARTUP");}

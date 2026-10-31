@@ -16,6 +16,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 /** Test-classpath only. All samples stay in memory until the lane has drained. */
 final class PipelineProbe {
     static boolean detailed=true;
+    static boolean captureCandidateIds=false;
     static final ThreadLocal<Sample> CURRENT = new ThreadLocal<>();
     static final List<String> PHASES = List.of("stock_lock_wait", "quote_persist", "redis_candidate",
             "mysql_rule_fetch", "rule_decision", "rule_transition", "trigger_outbox_write", "index_maintenance",
@@ -26,6 +27,7 @@ final class PipelineProbe {
         final Map<String, Long> phases = new HashMap<>(), sqlCounts = new TreeMap<>(), sqlNanos = new TreeMap<>();
         long enqueuedNanos, startedNanos, completedNanos; volatile String discarded;
         AlpacaProtocol.Trade trade; java.time.Instant wallReceivedAt;
+        List<Long> candidateIds=List.of();
         volatile boolean finished, failed; String outcome; int candidates, triggers, rearms; String baselineReason;
         AutoCloseable binding;
         Sample(String key,int stock,int number,boolean measured,long received,long scheduled) {
@@ -45,7 +47,11 @@ final class PipelineProbe {
                 default -> type.getSimpleName().equals("QuoteEventMapper") ? "quote_persist" : null;
             };
             long start=System.nanoTime();
-            try{return m.invoke(actual,a);}catch(InvocationTargetException e){throw e.getCause();}
+            try{
+                Object answer=m.invoke(actual,a);
+                if(captureCandidateIds&&type.getSimpleName().equals("AlertRuleMapper")&&m.getName().equals("cooldownIds")&&CURRENT.get()!=null)CURRENT.get().candidateIds=(List<Long>)answer;
+                return answer;
+            }catch(InvocationTargetException e){throw e.getCause();}
             finally{if(phase!=null)record(phase,start);}
         });
     }

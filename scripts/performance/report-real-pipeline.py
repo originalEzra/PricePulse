@@ -40,7 +40,7 @@ def validate(directory):
             samples = list(csv.DictReader(handle))
         assert len(samples) == case['inputEvents']
         assert case['oracle']['mismatches'] == 0
-        assert case['failedTasks'] == 0 and case['firstError'] is None, case['id']
+        assert case['failedTasks'] == 0, case['id']
         finished = [s for s in samples if s['completed_nanos'] != '0']
         dropped = [s for s in samples if s['discarded']]
         assert len(finished) == case['processedEvents'] and len(dropped) == case['discardedTasks']
@@ -53,8 +53,12 @@ def validate(directory):
             assert int(s['transaction_total_nanos']) >= int(s['transaction_body_nanos']) + int(s['transaction_commit_nanos'])
         for phase, stats in case['phases'].items():
             key = phase.removesuffix('_ms') + '_nanos'
-            # An invoked phase can legitimately take >0ns only; unobserved phases have no samples.
             values = sorted(int(s[key]) for s in finished if int(s[key]) > 0)
+            # A tiny pure decision can fall below nanoTime resolution. Its actual invocation count
+            # is retained in the run's distribution; zero in CSV also represents an uninvoked phase.
+            if len(values) < stats['samples']:
+                assert phase == 'rule_decision_ms', (case['id'], phase, 'unexpected unresolved zero duration')
+                values = [0] * (stats['samples'] - len(values)) + values
             assert len(values) == stats['samples'], (case['id'], phase)
             if values:
                 for percentile in (50, 95, 99):
@@ -80,6 +84,10 @@ def validate(directory):
         compact = {k: v for k, v in case.items() if k not in ('serverBefore', 'serverAfter', 'redisBefore', 'redisAfter', 'resources')}
         compact['serverSqlExecutions'] = delta
         compact['serverCounterDifferences'] = differences
+        compact['comparisonEligible'] = case['firstError'] is None and case.get('warmupFailedTasks', 0) == 0 and case.get('warmupFirstError') is None
+        if not compact['comparisonEligible']:
+            compact['measurementCaveat'] = ('No measured task failed, but the run retained a warmup/telemetry error. '
+                                             'Preserve this row; exclude it from clean before/after aggregates and repeat this workload.')
         compact['maxPoolAwaiting'] = max((r['poolAwaiting'] for r in case['resources']), default=0)
         compact['maxPoolActive'] = max((r['poolActive'] for r in case['resources']), default=0)
         compact['maxSampledOldestWaitMs'] = max((q['oldestWaitMs'] for r in case['resources'] for q in r['queues'].values()), default=0)

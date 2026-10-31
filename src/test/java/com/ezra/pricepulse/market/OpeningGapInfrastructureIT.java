@@ -36,6 +36,7 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
 class OpeningGapInfrastructureIT {
+    @Autowired org.apache.rocketmq.spring.core.RocketMQTemplate brokerTemplate;
     private static final String RUN=UUID.randomUUID().toString();
     private static final Network NETWORK=Network.newNetwork();
     @Container static final GenericContainer<?> NAMESRV=new GenericContainer<>("apache/rocketmq:5.3.2")
@@ -75,7 +76,7 @@ class OpeningGapInfrastructureIT {
     @Autowired MarketTimelineService timeline;
     @Autowired AlertEvaluationService evaluation;
     @Autowired AlertRuleService rules;
-    @Autowired NotificationService notifications;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean NotificationService notifications;
     @Autowired RocketMqOutboxPublisher publisher;
     @Autowired RealQuoteTestSupport.FixtureClock clock;
     @Autowired JdbcTemplate jdbc;
@@ -254,6 +255,31 @@ class OpeningGapInfrastructureIT {
         assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",rule)).isZero();
         assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",f.stock)).isZero();
         assertThat(ingest(f,"open",OPEN,"110",GENERATION,"STARTUP").matching().triggered()).isEqualTo(1);
+    }
+
+    @Test void aBatchedOnceAndRepeatOpeningCrossPublishesThroughTheIsolatedBrokerWithoutDuplicateNotifications()throws Exception {
+        var f=fixture();long once=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().minusHours(1));
+        long repeat=rule(f,"ABOVE","ACTIVE","REPEAT","106","104",CURRENT.opensAt().minusHours(1));
+        ingest(f,"bulk-previous",PRIOR.close().minusSeconds(90),"100",GENERATION,"STARTUP");
+        assertThat(ingest(f,"bulk-open",OPEN,"110.4567",GENERATION,"STARTUP").matching().triggered()).isEqualTo(2);
+        assertThat(ingest(f,"bulk-open",OPEN,"110.4567",GENERATION,"STARTUP").outcome()).isEqualTo(QuoteOutcome.DUPLICATE);
+        assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",f.stock)).isEqualTo(2);
+        publisher.publishAvailable();
+        long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+        while(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)<2&&System.nanoTime()<deadline)Thread.sleep(50);
+        assertThat(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)).isEqualTo(2);
+        assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=? AND status='SENT'",f.stock)).isEqualTo(2);
+        for(String payload:jdbc.queryForList("SELECT payload FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",String.class,f.stock)){
+            assertThat(brokerTemplate.syncSend("opening-gap-"+RUN,payload).getSendStatus()).isEqualTo(org.apache.rocketmq.client.producer.SendStatus.SEND_OK);
+        }
+        for(String payload:jdbc.queryForList("SELECT payload FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",String.class,f.stock)){
+            org.mockito.Mockito.verify(notifications,org.mockito.Mockito.timeout(15000).atLeast(2)).consume(payload);
+        }
+        // Synchronous consumption also proves the uniqueness guard without relying on broker timing.
+        for(String payload:jdbc.queryForList("SELECT payload FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",String.class,f.stock))notifications.consume(payload);
+        assertThat(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT status FROM alert_rules WHERE id=?",String.class,once)).isEqualTo("COMPLETED");
+        assertThat(jdbc.queryForObject("SELECT status FROM alert_rules WHERE id=?",String.class,repeat)).isEqualTo("COOLDOWN");
     }
 
     private Fixture fixture() {
