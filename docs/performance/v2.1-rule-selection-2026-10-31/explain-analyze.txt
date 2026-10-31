@@ -1,0 +1,335 @@
+## 1000 / dense-UP
+ID covering query:
+-> Append  (cost=46.7 rows=214) (actual time=0.0351..0.183 rows=214 loops=1)
+    -> Stream results  (cost=23.2 rows=106) (actual time=0.0214..0.0909 rows=106 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=23.2 rows=106) (actual time=0.0197..0.083 rows=106 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=23.2 rows=106) (actual time=0.018..0.0575 rows=106 loops=1)
+    -> Stream results  (cost=23.6 rows=108) (actual time=0.0125..0.068 rows=108 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=23.6 rows=108) (actual time=0.0122..0.0615 rows=108 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=23.6 rows=108) (actual time=0.0118..0.0367 rows=108 loops=1)
+
+Hydration query:
+-> Append  (cost=14.6 rows=55.5) (actual time=0.128..0.518 rows=214 loops=1)
+    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.127..0.253 rows=106 loops=1)
+        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=7.28 rows=27.8) (actual time=0.126..0.234 rows=106 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=7.28 rows=250) (actual time=0.0367..0.212 rows=250 loops=1)
+    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.127..0.254 rows=108 loops=1)
+        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=7.28 rows=27.8) (actual time=0.126..0.236 rows=108 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=7.28 rows=250) (actual time=0.0277..0.215 rows=250 loops=1)
+
+
+## 1000 / dense-DOWN
+ID covering query:
+-> Append  (cost=43.1 rows=197) (actual time=0.0258..0.199 rows=197 loops=1)
+    -> Stream results  (cost=20.6 rows=94) (actual time=0.0252..0.0931 rows=94 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=20.6 rows=94) (actual time=0.0233..0.0835 rows=94 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=20.6 rows=94) (actual time=0.0209..0.0522 rows=94 loops=1)
+    -> Stream results  (cost=22.5 rows=103) (actual time=0.0154..0.0909 rows=103 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=22.5 rows=103) (actual time=0.0151..0.0821 rows=103 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=22.5 rows=103) (actual time=0.0145..0.0477 rows=103 loops=1)
+
+Hydration query:
+-> Append  (cost=14.6 rows=55.5) (actual time=0.0684..0.818 rows=197 loops=1)
+    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.0679..0.386 rows=94 loops=1)
+        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=7.28 rows=27.8) (actual time=0.064..0.358 rows=94 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=7.28 rows=250) (actual time=0.055..0.319 rows=250 loops=1)
+    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.0582..0.415 rows=103 loops=1)
+        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=7.28 rows=27.8) (actual time=0.0563..0.388 rows=103 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=7.28 rows=250) (actual time=0.0505..0.318 rows=250 loops=1)
+
+
+## 1000 / medium-UP
+ID covering query:
+-> Append  (cost=7.42 rows=28) (actual time=0.0196..0.0514 rows=28 loops=1)
+    -> Stream results  (cost=3.92 rows=15) (actual time=0.019..0.029 rows=15 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=3.92 rows=15) (actual time=0.0175..0.026 rows=15 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=3.92 rows=15) (actual time=0.0154..0.0183 rows=15 loops=1)
+    -> Stream results  (cost=3.5 rows=13) (actual time=0.011..0.0188 rows=13 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=3.5 rows=13) (actual time=0.0106..0.0173 rows=13 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=3.5 rows=13) (actual time=0.01..0.0117 rows=13 loops=1)
+
+Hydration query:
+-> Append  (cost=13.1 rows=28) (actual time=0.05..0.0995 rows=28 loops=1)
+    -> Stream results  (cost=7.01 rows=15) (actual time=0.0496..0.0578 rows=15 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=7.01 rows=15) (actual time=0.0467..0.0506 rows=15 loops=1)
+    -> Stream results  (cost=6.11 rows=13) (actual time=0.0303..0.038 rows=13 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=6.11 rows=13) (actual time=0.0293..0.0331 rows=13 loops=1)
+
+
+## 1000 / medium-DOWN
+ID covering query:
+-> Append  (cost=6.99 rows=26) (actual time=0.0162..0.0411 rows=26 loops=1)
+    -> Stream results  (cost=3.92 rows=15) (actual time=0.0155..0.024 rows=15 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=3.92 rows=15) (actual time=0.014..0.0212 rows=15 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=3.92 rows=15) (actual time=0.0122..0.0143 rows=15 loops=1)
+    -> Stream results  (cost=3.07 rows=11) (actual time=0.00817..0.0138 rows=11 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=3.07 rows=11) (actual time=0.00788..0.0126 rows=11 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=3.07 rows=11) (actual time=0.00733..0.00854 rows=11 loops=1)
+
+Hydration query:
+-> Append  (cost=12.2 rows=26) (actual time=0.0398..0.0752 rows=26 loops=1)
+    -> Stream results  (cost=7.01 rows=15) (actual time=0.0395..0.0462 rows=15 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=7.01 rows=15) (actual time=0.037..0.0399 rows=15 loops=1)
+    -> Stream results  (cost=5.21 rows=11) (actual time=0.0218..0.0262 rows=11 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=5.21 rows=11) (actual time=0.0209..0.0227 rows=11 loops=1)
+
+
+## 1000 / sparse-UP
+ID covering query:
+-> Append  (cost=1.92 rows=2) (actual time=0.0138..0.0176 rows=1 loops=1)
+    -> Stream results  (cost=0.96 rows=1) (actual time=0.00762..0.00762 rows=0 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.96 rows=1) (actual time=0.00671..0.00671 rows=0 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=0.96 rows=1) (actual time=0.00625..0.00625 rows=0 loops=1)
+    -> Stream results  (cost=0.96 rows=1) (actual time=0.00529..0.00842 rows=1 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.96 rows=1) (actual time=0.00475..0.00775 rows=1 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=0.96 rows=1) (actual time=0.00333..0.00617 rows=1 loops=1)
+
+Hydration query:
+-> Append  (cost=1.42 rows=2) (actual time=0.0198..0.0215 rows=1 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.00788..0.00788 rows=0 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.00746..0.00746 rows=0 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.0114..0.0129 rows=1 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.00933..0.0108 rows=1 loops=1)
+
+
+## 1000 / sparse-DOWN
+ID covering query:
+-> Append  (cost=1.92 rows=2) (actual time=0.0288..0.0288 rows=0 loops=1)
+    -> Stream results  (cost=0.96 rows=1) (actual time=0.0202..0.0202 rows=0 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.96 rows=1) (actual time=0.0183..0.0183 rows=0 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=0.96 rows=1) (actual time=0.0175..0.0175 rows=0 loops=1)
+    -> Stream results  (cost=0.96 rows=1) (actual time=0.00646..0.00646 rows=0 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.96 rows=1) (actual time=0.00596..0.00596 rows=0 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=0.96 rows=1) (actual time=0.00575..0.00575 rows=0 loops=1)
+
+Hydration query:
+-> Append  (cost=1.42 rows=2) (actual time=0.0203..0.0203 rows=0 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.0133..0.0133 rows=0 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.0126..0.0126 rows=0 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.00608..0.00608 rows=0 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00592..0.00592 rows=0 loops=1)
+
+
+## 10000 / dense-UP
+ID covering query:
+-> Append  (cost=427 rows=1979) (actual time=0.0475..1.26 rows=1979 loops=1)
+    -> Stream results  (cost=212 rows=983) (actual time=0.0469..0.584 rows=983 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=212 rows=983) (actual time=0.0364..0.51 rows=983 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=212 rows=983) (actual time=0.0335..0.296 rows=983 loops=1)
+    -> Stream results  (cost=215 rows=996) (actual time=0.0284..0.582 rows=996 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=215 rows=996) (actual time=0.028..0.528 rows=996 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=215 rows=996) (actual time=0.0275..0.302 rows=996 loops=1)
+
+Hydration query:
+-> Append  (cost=201 rows=555) (actual time=1.43..6.03 rows=1979 loops=1)
+    -> Stream results  (cost=101 rows=278) (actual time=1.42..3.02 rows=983 loops=1)
+        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=101 rows=278) (actual time=1.42..2.85 rows=983 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=101 rows=2500) (actual time=0.292..2.63 rows=2500 loops=1)
+    -> Stream results  (cost=101 rows=278) (actual time=1.42..2.91 rows=996 loops=1)
+        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=101 rows=278) (actual time=1.41..2.74 rows=996 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=101 rows=2500) (actual time=0.229..2.53 rows=2500 loops=1)
+
+
+## 10000 / dense-DOWN
+ID covering query:
+-> Append  (cost=436 rows=2019) (actual time=0.055..1.89 rows=2019 loops=1)
+    -> Stream results  (cost=217 rows=1008) (actual time=0.048..0.862 rows=1008 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=217 rows=1008) (actual time=0.0459..0.78 rows=1008 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=217 rows=1008) (actual time=0.0432..0.449 rows=1008 loops=1)
+    -> Stream results  (cost=218 rows=1011) (actual time=0.0407..0.88 rows=1011 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=218 rows=1011) (actual time=0.0403..0.801 rows=1011 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=218 rows=1011) (actual time=0.0395..0.458 rows=1011 loops=1)
+
+Hydration query:
+-> Append  (cost=201 rows=555) (actual time=0.384..7.12 rows=2019 loops=1)
+    -> Stream results  (cost=101 rows=278) (actual time=0.384..3.6 rows=1008 loops=1)
+        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=101 rows=278) (actual time=0.381..3.37 rows=1008 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=101 rows=2500) (actual time=0.346..3.04 rows=2500 loops=1)
+    -> Stream results  (cost=101 rows=278) (actual time=0.606..3.38 rows=1011 loops=1)
+        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=101 rows=278) (actual time=0.605..3.15 rows=1011 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=101 rows=2500) (actual time=0.282..2.84 rows=2500 loops=1)
+
+
+## 10000 / medium-UP
+ID covering query:
+-> Append  (cost=54.5 rows=245) (actual time=0.0305..0.253 rows=245 loops=1)
+    -> Stream results  (cost=26.1 rows=117) (actual time=0.0298..0.118 rows=117 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=26.1 rows=117) (actual time=0.0281..0.107 rows=117 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=26.1 rows=117) (actual time=0.0251..0.0662 rows=117 loops=1)
+    -> Stream results  (cost=28.5 rows=128) (actual time=0.0159..0.116 rows=128 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=28.5 rows=128) (actual time=0.0156..0.105 rows=128 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=28.5 rows=128) (actual time=0.0151..0.0615 rows=128 loops=1)
+
+Hydration query:
+-> Append  (cost=111 rows=245) (actual time=0.173..1.19 rows=245 loops=1)
+    -> Stream results  (cost=52.9 rows=117) (actual time=0.173..0.552 rows=117 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=52.9 rows=117) (actual time=0.167..0.505 rows=117 loops=1)
+    -> Stream results  (cost=57.9 rows=128) (actual time=0.143..0.615 rows=128 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=57.9 rows=128) (actual time=0.141..0.555 rows=128 loops=1)
+
+
+## 10000 / medium-DOWN
+ID covering query:
+-> Append  (cost=53.3 rows=239) (actual time=0.0242..0.237 rows=239 loops=1)
+    -> Stream results  (cost=27.6 rows=124) (actual time=0.0235..0.116 rows=124 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=27.6 rows=124) (actual time=0.0216..0.104 rows=124 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=27.6 rows=124) (actual time=0.0193..0.062 rows=124 loops=1)
+    -> Stream results  (cost=25.7 rows=115) (actual time=0.0155..0.103 rows=115 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=25.7 rows=115) (actual time=0.0152..0.0935 rows=115 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=25.7 rows=115) (actual time=0.0146..0.0538 rows=115 loops=1)
+
+Hydration query:
+-> Append  (cost=108 rows=239) (actual time=0.0778..0.55 rows=239 loops=1)
+    -> Stream results  (cost=56.1 rows=124) (actual time=0.0774..0.292 rows=124 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=56.1 rows=124) (actual time=0.0752..0.26 rows=124 loops=1)
+    -> Stream results  (cost=52 rows=115) (actual time=0.061..0.24 rows=115 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=52 rows=115) (actual time=0.0601..0.212 rows=115 loops=1)
+
+
+## 10000 / sparse-UP
+ID covering query:
+-> Append  (cost=2.37 rows=2) (actual time=0.0124..0.0183 rows=1 loops=1)
+    -> Stream results  (cost=1.18 rows=1) (actual time=0.0118..0.0135 rows=1 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=1.18 rows=1) (actual time=0.0103..0.0118 rows=1 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=1.18 rows=1) (actual time=0.00817..0.00962 rows=1 loops=1)
+    -> Stream results  (cost=1.18 rows=1) (actual time=0.00358..0.00358 rows=0 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=1.18 rows=1) (actual time=0.00342..0.00342 rows=0 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=1.18 rows=1) (actual time=0.00325..0.00325 rows=0 loops=1)
+
+Hydration query:
+-> Append  (cost=1.42 rows=2) (actual time=0.0128..0.0183 rows=1 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.0126..0.0141 rows=1 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.0108..0.0121 rows=1 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.00371..0.00371 rows=0 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.0035..0.0035 rows=0 loops=1)
+
+
+## 10000 / sparse-DOWN
+ID covering query:
+-> Append  (cost=2.37 rows=2) (actual time=0.0247..0.0265 rows=1 loops=1)
+    -> Stream results  (cost=1.18 rows=1) (actual time=0.0141..0.0141 rows=0 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.18 rows=1) (actual time=0.0131..0.0131 rows=0 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=1.18 rows=1) (actual time=0.0125..0.0125 rows=0 loops=1)
+    -> Stream results  (cost=1.18 rows=1) (actual time=0.00908..0.0107 rows=1 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=1.18 rows=1) (actual time=0.00779..0.00937 rows=1 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=1.18 rows=1) (actual time=0.00479..0.00629 rows=1 loops=1)
+
+Hydration query:
+-> Append  (cost=1.42 rows=2) (actual time=0.0216..0.0231 rows=1 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.00925..0.00925 rows=0 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00888..0.00888 rows=0 loops=1)
+    -> Stream results  (cost=0.71 rows=1) (actual time=0.0116..0.0129 rows=1 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00954..0.0108 rows=1 loops=1)
+
+
+## 50000 / dense-UP
+ID covering query:
+-> Append  (cost=3900 rows=18116) (actual time=0.357..8.5 rows=9890 loops=1)
+    -> Stream results  (cost=1916 rows=8902) (actual time=0.353..4.6 rows=4917 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=1916 rows=8902) (actual time=0.341..4.11 rows=4917 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=1916 rows=8902) (actual time=0.337..2.29 rows=4917 loops=1)
+    -> Stream results  (cost=1983 rows=9214) (actual time=0.222..3.28 rows=4973 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=1983 rows=9214) (actual time=0.221..2.97 rows=4973 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=1983 rows=9214) (actual time=0.22..1.79 rows=4973 loops=1)
+
+Hydration query:
+-> Append  (cost=885 rows=5474) (actual time=7.11..29.4 rows=9890 loops=1)
+    -> Stream results  (cost=446 rows=2774) (actual time=7.11..14.3 rows=4917 loops=1)
+        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=446 rows=2774) (actual time=7.11..13.5 rows=4917 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=446 rows=24970) (actual time=1.09..12.5 rows=12500 loops=1)
+    -> Stream results  (cost=439 rows=2700) (actual time=6.16..14.6 rows=4973 loops=1)
+        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=439 rows=2700) (actual time=6.16..13.8 rows=4973 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=439 rows=24302) (actual time=0.873..12.8 rows=12500 loops=1)
+
+
+## 50000 / dense-DOWN
+ID covering query:
+-> Append  (cost=3942 rows=18314) (actual time=0.421..12.2 rows=9969 loops=1)
+    -> Stream results  (cost=1947 rows=9044) (actual time=0.42..5.56 rows=4973 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=1947 rows=9044) (actual time=0.417..5.08 rows=4973 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=1947 rows=9044) (actual time=0.412..3.03 rows=4973 loops=1)
+    -> Stream results  (cost=1995 rows=9270) (actual time=0.421..5.81 rows=4996 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=1995 rows=9270) (actual time=0.419..5.32 rows=4996 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=1995 rows=9270) (actual time=0.416..3.18 rows=4996 loops=1)
+
+Hydration query:
+-> Append  (cost=868 rows=5300) (actual time=4.48..65.3 rows=9969 loops=1)
+    -> Stream results  (cost=429 rows=2601) (actual time=4.48..31.9 rows=4973 loops=1)
+        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=429 rows=2601) (actual time=4.47..30.6 rows=4973 loops=1)
+            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=429 rows=23410) (actual time=2.24..28.5 rows=12500 loops=1)
+    -> Stream results  (cost=439 rows=2700) (actual time=3.46..32.6 rows=4996 loops=1)
+        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=439 rows=2700) (actual time=3.45..31.2 rows=4996 loops=1)
+            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=439 rows=24302) (actual time=1.72..29.2 rows=12500 loops=1)
+
+
+## 50000 / medium-UP
+ID covering query:
+-> Append  (cost=267 rows=1232) (actual time=0.0431..1.02 rows=1232 loops=1)
+    -> Stream results  (cost=134 rows=619) (actual time=0.0387..0.484 rows=619 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=134 rows=619) (actual time=0.0338..0.43 rows=619 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=134 rows=619) (actual time=0.031..0.239 rows=619 loops=1)
+    -> Stream results  (cost=133 rows=613) (actual time=0.0292..0.46 rows=613 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=133 rows=613) (actual time=0.0281..0.416 rows=613 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=133 rows=613) (actual time=0.0271..0.228 rows=613 loops=1)
+
+Hydration query:
+-> Append  (cost=555 rows=1232) (actual time=0.182..2.79 rows=1232 loops=1)
+    -> Stream results  (cost=279 rows=619) (actual time=0.182..1.39 rows=619 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=279 rows=619) (actual time=0.179..1.27 rows=619 loops=1)
+    -> Stream results  (cost=276 rows=613) (actual time=0.107..1.32 rows=613 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=276 rows=613) (actual time=0.106..1.19 rows=613 loops=1)
+
+
+## 50000 / medium-DOWN
+ID covering query:
+-> Append  (cost=263 rows=1211) (actual time=0.0349..0.973 rows=1211 loops=1)
+    -> Stream results  (cost=133 rows=614) (actual time=0.0342..0.467 rows=614 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=133 rows=614) (actual time=0.0318..0.422 rows=614 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=133 rows=614) (actual time=0.0287..0.254 rows=614 loops=1)
+    -> Stream results  (cost=129 rows=597) (actual time=0.0224..0.429 rows=597 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=129 rows=597) (actual time=0.022..0.388 rows=597 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=129 rows=597) (actual time=0.0214..0.22 rows=597 loops=1)
+
+Hydration query:
+-> Append  (cost=545 rows=1211) (actual time=0.173..2.46 rows=1211 loops=1)
+    -> Stream results  (cost=277 rows=614) (actual time=0.173..1.29 rows=614 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=277 rows=614) (actual time=0.17..1.17 rows=614 loops=1)
+    -> Stream results  (cost=269 rows=597) (actual time=0.101..1.09 rows=597 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=269 rows=597) (actual time=0.0999..0.971 rows=597 loops=1)
+
+
+## 50000 / sparse-UP
+ID covering query:
+-> Append  (cost=5.43 rows=16) (actual time=0.0207..0.0378 rows=16 loops=1)
+    -> Stream results  (cost=2.93 rows=9) (actual time=0.0199..0.0252 rows=9 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=2.93 rows=9) (actual time=0.018..0.0227 rows=9 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=2.93 rows=9) (actual time=0.0152..0.0172 rows=9 loops=1)
+    -> Stream results  (cost=2.5 rows=7) (actual time=0.00667..0.00975 rows=7 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=2.5 rows=7) (actual time=0.0065..0.00908 rows=7 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=2.5 rows=7) (actual time=0.006..0.00675 rows=7 loops=1)
+
+Hydration query:
+-> Append  (cost=7.72 rows=16) (actual time=0.0519..0.0855 rows=16 loops=1)
+    -> Stream results  (cost=4.31 rows=9) (actual time=0.0515..0.0559 rows=9 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=4.31 rows=9) (actual time=0.0495..0.0518 rows=9 loops=1)
+    -> Stream results  (cost=3.41 rows=7) (actual time=0.0252..0.0277 rows=7 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=3.41 rows=7) (actual time=0.0245..0.0258 rows=7 loops=1)
+
+
+## 50000 / sparse-DOWN
+ID covering query:
+-> Append  (cost=4.14 rows=10) (actual time=0.0294..0.0454 rows=10 loops=1)
+    -> Stream results  (cost=1.64 rows=3) (actual time=0.0254..0.028 rows=3 loops=1)
+        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.64 rows=3) (actual time=0.0192..0.0214 rows=3 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=1.64 rows=3) (actual time=0.016..0.0172 rows=3 loops=1)
+    -> Stream results  (cost=2.5 rows=7) (actual time=0.00838..0.012 rows=7 loops=1)
+        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=2.5 rows=7) (actual time=0.008..0.011 rows=7 loops=1)
+            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=2.5 rows=7) (actual time=0.00737..0.00812 rows=7 loops=1)
+
+Hydration query:
+-> Append  (cost=5.02 rows=10) (actual time=0.0232..0.0536 rows=10 loops=1)
+    -> Stream results  (cost=1.61 rows=3) (actual time=0.0229..0.0253 rows=3 loops=1)
+        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.61 rows=3) (actual time=0.0209..0.0225 rows=3 loops=1)
+    -> Stream results  (cost=3.41 rows=7) (actual time=0.0242..0.027 rows=7 loops=1)
+        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=3.41 rows=7) (actual time=0.0235..0.0248 rows=7 loops=1)
+

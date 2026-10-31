@@ -1,0 +1,79 @@
+{
+  "sql" : {
+    "MAINTENANCE" : {
+      "SETUP" : {
+        "executions" : 8,
+        "rows" : 8,
+        "nanos" : 2883667
+      },
+      "MAINTENANCE_TOKEN_SELECT" : {
+        "executions" : 12,
+        "rows" : 12,
+        "nanos" : 4415625
+      },
+      "MUTATION_RULE_WRITE" : {
+        "executions" : 4,
+        "rows" : 4,
+        "nanos" : 3643124
+      },
+      "RULE_MAINTENANCE_READ" : {
+        "executions" : 4,
+        "rows" : 4,
+        "nanos" : 1653377
+      },
+      "TOKEN_WRITE" : {
+        "executions" : 4,
+        "rows" : 4,
+        "nanos" : 1685666
+      },
+      "RULE_RANGE_IDS" : {
+        "executions" : 6,
+        "rows" : 174,
+        "nanos" : 3554126
+      },
+      "RULE_REBUILD_OR_SCAN" : {
+        "executions" : 2,
+        "rows" : 19998,
+        "nanos" : 21126458
+      }
+    }
+  },
+  "steps" : [ {
+    "rebuilds" : 0,
+    "allRuleSelectsIncludingVerification" : 2,
+    "equal" : true,
+    "action" : "ADD",
+    "elapsedNs" : 18815042
+  }, {
+    "rebuilds" : 0,
+    "allRuleSelectsIncludingVerification" : 2,
+    "equal" : true,
+    "action" : "PAUSE",
+    "elapsedNs" : 5288166
+  }, {
+    "rebuilds" : 0,
+    "allRuleSelectsIncludingVerification" : 2,
+    "equal" : true,
+    "action" : "DELETE",
+    "elapsedNs" : 6160292
+  }, {
+    "rebuilds" : 1,
+    "allRuleSelectsIncludingVerification" : 2,
+    "equal" : true,
+    "action" : "CACHE_MISSING",
+    "elapsedNs" : 35839541
+  }, {
+    "rebuilds" : 1,
+    "allRuleSelectsIncludingVerification" : 3,
+    "equal" : true,
+    "action" : "ROLLBACK_TOKEN_MISMATCH",
+    "elapsedNs" : 35907208
+  }, {
+    "rebuilds" : 0,
+    "allRuleSelectsIncludingVerification" : 1,
+    "equal" : true,
+    "action" : "WARM_RECOVERY",
+    "elapsedNs" : 1451334
+  } ],
+  "note" : "Actual RuleIndex.changed and ThresholdIndex MISS/rebuild; only experimental tables/Redis"
+}
