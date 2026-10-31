@@ -4,6 +4,7 @@ import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
 import com.ezra.pricepulse.matching.MatchingResult;
 import com.ezra.pricepulse.matching.RuleIndex;
+import com.ezra.pricepulse.market.QuoteTiming;
 import com.ezra.pricepulse.outbox.OutboxWriter;
 import com.ezra.pricepulse.stock.Stock;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -73,12 +74,16 @@ public class AlertEvaluationService {
                 if (previous == null) {
                     continue;
                 }
+                long decisionStarted = QuoteTiming.start();
                 var decision = RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),
                         rule.getStatus(), previous, price);
+                QuoteTiming.finish("rule_decision", decisionStarted);
                 if (decision.kind() == RuleTransitionEngine.Kind.TRIGGERED) {
                     AlertRuleStatus target = decision.target();
                     requireTransition(rule, target, eventTime);
-                    recordTrigger(rule, quoteId, price, eventTime, opening);
+                    long triggerStarted = QuoteTiming.start();
+                    try { recordTrigger(rule, quoteId, price, eventTime, opening); }
+                    finally { QuoteTiming.finish("trigger_outbox_write", triggerStarted); }
                     rule.setStatus(target);
                     rule.setLastTriggeredAt(eventTime);
                     rule.setVersion(rule.getVersion() + 1);
