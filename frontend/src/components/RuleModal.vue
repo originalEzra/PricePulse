@@ -104,6 +104,7 @@ async function submit() {
               <option value="ONCE">仅提醒一次</option><option value="REPEAT">离开区间后可再次提醒</option>
             </select>
           </label>
+          <p v-if="form.triggerMode === 'ONCE'" class="muted">一次性规则：可信价格上破方向 ≥ 目标、下破方向 ≤ 目标即完成。创建时已达到会立即确认；行情未确认或不新鲜时等待下一笔合格成交。</p>
           <label v-if="form.triggerMode === 'REPEAT'">重新激活价
             <input v-model.number="form.rearmPrice" min="0.0001" step="0.0001" type="number" required />
             <small>{{ rearmHint }}</small>

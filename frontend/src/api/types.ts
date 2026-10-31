@@ -106,7 +106,7 @@ export interface AlertTrigger {
   triggerPrice: number
   eventTime: string
   ruleSnapshot: AlertRule
-  triggerContext?: OpeningGapContext | null
+  triggerContext?: OpeningGapContext | TargetReachContext | null
   createdAt: string
 }
 
@@ -189,7 +189,11 @@ export interface TimelinePoint {
 export interface TimelineEvent {
   triggerId: number; quoteId: number; eventTime: string; epochNanos: string; price: string
   ruleSnapshot: AlertRule; notificationStatus: 'PENDING' | 'UNREAD' | 'READ' | 'FAILED'
-  triggerContext?: OpeningGapContext | null
+  triggerContext?: OpeningGapContext | TargetReachContext | null
+}
+export interface TargetReachContext {
+  kind: 'TARGET_REACHED'; confirmation: 'LIVE' | 'RECOVERY' | 'RULE_CREATED' | 'RULE_ACTIVATED'
+  confirmedAt: string; quoteEventTime: string; baselineReason: string | null
 }
 export interface OpeningGapContext {
   kind: 'OPENING_GAP'; referencePrice: string; referenceTime: string; referenceEpochNanos: string

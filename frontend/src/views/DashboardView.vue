@@ -12,7 +12,7 @@ import { completeStockRules, reconcileShownRules, ruleLineColor, shownRuleThresh
 import '../styles/ruleTable.css'
 import { compactNewYorkTime } from '../utils/chartInspection'
 import { applyWatchlistQuote, refreshWatchlistQuotes, type WatchlistQuote } from '../utils/watchlistPrices'
-import { openingGapDetail } from '../utils/openingGap'
+import { openingGapDetail, targetReachLabel, targetReachDetail } from '../utils/openingGap'
 import StockMonitoringPanel from '../components/StockMonitoringPanel.vue'
 import { confirmedMonitoring, subscriptionLabels } from '../utils/monitoring'
 import { useAuthStore } from '../stores/auth'
@@ -20,7 +20,7 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const monitoringManaged = ref(false), monitoringPage = ref<MonitoringPage | null>(null)
 const selectedMonitoring = computed(() => monitoringPage.value?.subscriptions.find(row => row.stock.id === selectedId.value))
-const canCreateRule = computed(() => !monitoringManaged.value || confirmedMonitoring(selectedMonitoring.value?.state))
+const canCreateRule = computed(() => !monitoringManaged.value || selectedMonitoring.value?.state === 'CONFIRMED' || selectedMonitoring.value?.state === 'PENDING')
 let loadGeneration = 0
 const stocks = ref<Stock[]>([])
 const rules = ref<AlertRule[]>([])
@@ -65,11 +65,11 @@ const allEvents = computed(() => [...(timeline.value?.events ?? []), ...extraEve
 const deliveryLabel = { PENDING: '通知待生成', UNREAD: '通知未读', READ: '通知已读', FAILED: '通知投递异常' }
 const chartAnnotations = computed<TimedChartAnnotation[]>(() => allEvents.value.map(event => ({
   id: event.triggerId, eventTime: event.eventTime, price: Number(event.price), kind: event.ruleSnapshot.direction,
-  label: openingGapDetail(event, compactNewYorkTime) ? '开盘跳空' : event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发',
+  label: targetReachLabel(event) ?? (openingGapDetail(event, compactNewYorkTime) ? '开盘跳空' : event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发'),
   ruleName: event.ruleSnapshot.name, threshold: event.ruleSnapshot.thresholdPrice,
   result: `${openingGapDetail(event, compactNewYorkTime) ? '开盘跳空 · ' : ''}已触发 · ${deliveryLabel[event.notificationStatus]}`, rawPrice: event.price,
   ruleSnapshot: event.ruleSnapshot,
-  detail: `${openingGapDetail(event, compactNewYorkTime) ? openingGapDetail(event, compactNewYorkTime) + ' · ' : ''}${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
+  detail: `${targetReachDetail(event, compactNewYorkTime) ?? openingGapDetail(event, compactNewYorkTime) ?? ''} · ${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
 })))
 const connectionLabel: Record<string, string> = { DISABLED: '未连接行情源', CONNECTING: '连接中', SUBSCRIBED: '行情已连接', NOT_SUBSCRIBED: '该股票未订阅', RECONNECTING: '正在重连', REJECTED: '认证或订阅被拒绝', STOPPED: '行情已停止' }
 const freshnessLabel: Record<string, string> = { MARKET_CLOSED: '正常交易时段已休市', NO_DATA: '尚未收到成交', DELAYED: '成交数据延迟', RECENT_IEX_TRADE: '近期 IEX 成交' }
@@ -334,7 +334,7 @@ onMounted(() => {
           <template #heading><div v-if="selectedStock" class="stock-chart-heading"><h2>{{ selectedStock.name }}</h2><span class="stock-symbol">{{ selectedStock.symbol }}</span>
             <div class="window-tabs" aria-label="行情时间窗口"><button v-for="item in (['1H', '1D', '1W', '1M'] as const)" :key="item" :class="{ active: timelineWindow === item }" @click="timelineWindow = item">{{ item }}</button></div>
             <p v-if="timeline" class="market-status">IEX · {{ shortFreshness[timeline.health.freshness] ?? timeline.health.freshness }} · {{ compactNewYorkTime(selectedStock.latestQuoteAt ?? '').slice(6) }}</p>
-            <p v-if="monitoringManaged" class="monitor-status">{{ selectedMonitoring ? subscriptionLabels[selectedMonitoring.state] : '尚未请求监控' }} · {{ canCreateRule ? '正式提醒可用' : '行情订阅尚未确认' }}</p>
+            <p v-if="monitoringManaged" class="monitor-status">{{ selectedMonitoring ? subscriptionLabels[selectedMonitoring.state] : '尚未请求监控' }} · {{ confirmedMonitoring(selectedMonitoring?.state) ? '正式提醒可用' : '等待合格行情；一次性规则可先创建' }}</p>
             <p v-else-if="timeline" class="monitor-status">{{ connectionLabel[timeline.health.connection] ?? timeline.health.connection }} · {{ timeline.health.businessWritesEnabled && timeline.health.connection !== 'NOT_SUBSCRIBED' ? '正式提醒已启用' : '只读观察，正式提醒未启用' }}</p>
             <p v-if="timeline?.health.lastError" class="market-warning">行情有异常，请查看行情详情</p>
             <p v-if="timeline?.dataQuality && (!timeline.dataQuality.historyCoverageComplete || !timeline.dataQuality.calendarCoverageComplete || timeline.dataQuality.unavailableMinutes > 0)" class="market-warning">历史有缺口，详见行情详情</p>
@@ -362,7 +362,7 @@ onMounted(() => {
             </tr></tbody>
           </table>
         </div>
-        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '选择上破或下破价格，系统会在真正穿越阈值时触发。' : '行情订阅确认后，可以创建该股票的提醒规则。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
+        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '一次性规则在可信价格达到目标时触发；重复规则保留穿越与重新激活。' : '请先申请该股票监控。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
       </section>
     </div>
     <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />

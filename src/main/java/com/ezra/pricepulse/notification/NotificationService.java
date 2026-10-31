@@ -114,6 +114,21 @@ public class NotificationService {
                     delivery.getStockName(), delivery.getStockSymbol(),
                     displayPrice(delivery.getTriggerPrice()), ruleName, verb, displayThreshold);
             if (delivery.getTriggerContext()!=null) {
+                var context=json.readTree(delivery.getTriggerContext());
+                if("TARGET_REACHED".equals(context.path("kind").asText())){
+                    var reach=json.treeToValue(context,com.ezra.pricepulse.alert.TargetReachContext.class);
+                    String label=switch(reach.confirmation()){
+                        case "RECOVERY" -> "恢复后确认达到";
+                        case "RULE_CREATED" -> "创建时确认达到";
+                        case "RULE_ACTIVATED" -> "启用时确认达到";
+                        default -> "已达到";
+                    };
+                    title=delivery.getStockSymbol()+" "+label+" "+verb+"目标 "+displayThreshold;
+                    content="%s（%s）%s目标，确认价格 %s，提醒“%s”（%s %s）。参考真实成交时间 %s；不推断缺口期间的突破时间。".formatted(
+                            delivery.getStockName(),delivery.getStockSymbol(),label,delivery.getTriggerPrice().toPlainString(),ruleName,verb,displayThreshold,
+                            reach.quoteEventTime().atZone(java.time.ZoneId.of("America/New_York")).format(java.time.format.DateTimeFormatter.ofPattern("MM/dd HH:mm:ss z")));
+                    return new NotificationText(title,content);
+                }
                 OpeningGapContext opening=json.readValue(delivery.getTriggerContext(),OpeningGapContext.class);
                 if (opening.ruleEffectiveAt()==null || !opening.ruleEffectiveAt().isBefore(opening.sessionOpen()))
                     throw new IllegalStateException("Opening trigger has no eligible rule activation");

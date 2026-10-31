@@ -35,4 +35,23 @@ class RuleTransitionEngineTest {
                 new BigDecimal("99"), new BigDecimal("100")).target()).isEqualTo(AlertRuleStatus.COMPLETED);
         assertThat(new RuleIndexEntry(1, d, AlertRuleStatus.COMPLETED).score()).isNull();
     }
+
+    @ParameterizedTest @CsvSource({"ABOVE,205,210,true","ABOVE,205,205,true","ABOVE,205,200,false","BELOW,205,200,true","BELOW,205,205,true","BELOW,205,210,false"})
+    void realOnceReachesWithoutAPreviousPointButSimulationRetainsCrossing(String direction,String threshold,String price,boolean hit){
+        var d=new Definition(AlertDirection.valueOf(direction),new BigDecimal(threshold),AlertTriggerMode.ONCE,null);
+        var current=new BigDecimal(price);
+        assertThat(RuleTransitionEngine.evaluateReal(d,AlertRuleStatus.ACTIVE,null,current).kind()).isEqualTo(hit?Kind.TRIGGERED:Kind.NONE);
+        assertThat(RuleTransitionEngine.evaluateReal(d,AlertRuleStatus.ACTIVE,current,current).kind()).isEqualTo(hit?Kind.TRIGGERED:Kind.NONE);
+        assertThat(RuleTransitionEngine.evaluate(d,AlertRuleStatus.ACTIVE,current,current).kind()).isEqualTo(Kind.NONE);
+        assertThat(RuleTransitionEngine.evaluateReal(d,AlertRuleStatus.COMPLETED,null,current).kind()).isEqualTo(Kind.NONE);
+    }
+
+    @Test void realOnceBandIsExactAndSeparateFromRepeatAndSimulation(){
+        var rule=new AlertRule();rule.setId(1L);rule.setDirection(AlertDirection.BELOW);rule.setTriggerMode(AlertTriggerMode.ONCE);
+        rule.setThresholdPrice(com.ezra.pricepulse.common.PriceTicks.MAX_PRICE);rule.setStatus(AlertRuleStatus.ACTIVE);
+        long score=RuleIndexEntry.from(rule).score();
+        assertThat(score).isEqualTo(5_999_999_999_999_999L).isLessThan(1L<<53);
+        assertThat((long)(double)score).isEqualTo(score);
+        assertThat(new RuleIndexEntry(1,Definition.from(rule),rule.getStatus()).score()).isLessThan(2_000_000_000_000_000L);
+    }
 }

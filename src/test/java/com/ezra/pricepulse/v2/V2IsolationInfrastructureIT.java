@@ -354,9 +354,9 @@ class V2IsolationInfrastructureIT {
     }
     private long rule(long owner, long stock, String mode, String status) {
         jdbc.update("""
-                INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status)
-                VALUES(?,?,'original','ABOVE',100,?,?,?)
-                """, owner, stock, mode, mode.equals("REPEAT") ? new BigDecimal("95") : null, status);
+                INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status,effective_at)
+                VALUES(?,?,'original','ABOVE',100,?,?,?,?)
+                """, owner, stock, mode, mode.equals("REPEAT") ? new BigDecimal("95") : null, status,LocalDateTime.ofInstant(T.minusSeconds(1),ZoneOffset.UTC));
         return jdbc.queryForObject("SELECT MAX(id) FROM alert_rules WHERE user_id=? AND stock_id=?", Long.class, owner, stock);
     }
     private long count(String sql, Object... args) { return jdbc.queryForObject(sql, Long.class, args); }

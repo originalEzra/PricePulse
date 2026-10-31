@@ -39,8 +39,8 @@ public class RuleIndex {
     public List<Long> candidates(Stock stock, BigDecimal previous, BigDecimal current) {
         Timer.Sample sample = Timer.start();
         try {
-            List<Long> ids = cache.candidates(key(stock.id()), stock.ruleIndexToken(), previous, current,
-                    () -> rules.listIndexable(stock.id()).stream().map(RuleIndexEntry::from).toList(), rebuildTimer);
+            List<Long> ids = cache.candidates(key(stock.id()), cacheToken(stock.ruleIndexToken()), previous, current,
+                    () -> rules.listIndexable(stock.id()).stream().map(RuleIndexEntry::from).toList(), rebuildTimer,true);
             candidateCounts.record(ids.size());
             return ids;
         } finally { sample.stop(lookupTimer); }
@@ -54,8 +54,9 @@ public class RuleIndex {
         List<RuleIndexEntry> entries = changedRules.stream().map(rule ->
                 rule.getStockId() == stock.id() ? RuleIndexEntry.from(rule)
                         : new RuleIndexEntry(rule.getId(), null, AlertRuleStatus.DELETED)).toList();
-        cache.changed(key(stock.id()), stock.ruleIndexToken(), next, entries);
+        cache.changed(key(stock.id()), cacheToken(stock.ruleIndexToken()), cacheToken(next), entries);
     }
 
     public static String key(long stockId) { return "pricepulse:v2:real:rules:{stock:" + stockId + "}"; }
+    public static String cacheToken(String token) { return "reachable-once-v1:"+token; }
 }

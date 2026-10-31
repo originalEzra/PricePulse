@@ -66,6 +66,7 @@ final class MarketQuoteLane implements AutoCloseable {
         long oldest=first instanceof Task task && task.enqueuedAt!=0?Math.max(0,System.nanoTime()-task.enqueuedAt):0;
         return new QueueSample(worker.getQueue().size(),oldest,worker.getActiveCount());
     }
+    synchronized String continuityId(){return continuity;}
     private void observe(Runnable event){if(observer!=Observer.NONE)try{event.run();}catch(RuntimeException ignored){ }}
     @Override public synchronized void close(){
         stopped=true;var discarded=worker.shutdownNow();

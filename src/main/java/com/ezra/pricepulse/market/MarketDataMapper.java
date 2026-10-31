@@ -55,8 +55,10 @@ public interface MarketDataMapper {
           AND q.provider='ALPACA' AND q.feed='iex'
         """)
     long eventWatermark(@Param("userId") long userId, @Param("stockId") long stockId);
-    @Select("""
-        SELECT t.id AS trigger_id,q.id AS quote_id,q.event_time_ns,t.trigger_price AS price,t.rule_snapshot,
+    // Creation/activation confirms an existing quote at a new time; do not backdate its marker to the quote.
+    String TRIGGER_TIME_NS = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(t.trigger_context,'$.confirmation')) IN ('RULE_CREATED','RULE_ACTIVATED') "
+            + "THEN TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',t.event_time)*1000 ELSE q.event_time_ns END";
+    @Select("SELECT t.id AS trigger_id,q.id AS quote_id,"+TRIGGER_TIME_NS+" AS event_time_ns,t.trigger_price AS price,t.rule_snapshot,"+"""
           CASE WHEN n.id IS NOT NULL THEN n.status
                WHEN o.status IN ('FAILED','QUARANTINED') THEN 'FAILED' ELSE 'PENDING' END AS notification_status,t.trigger_context
         FROM alert_triggers t JOIN alert_rules r ON r.id=t.rule_id
@@ -65,7 +67,7 @@ public interface MarketDataMapper {
         LEFT JOIN outbox_events o ON o.aggregate_type='ALERT_TRIGGER' AND o.aggregate_id=t.id AND o.event_type='ALERT_TRIGGERED'
         WHERE r.user_id=#{userId} AND q.stock_id=#{stockId} AND q.origin_type='REAL'
           AND q.provider='ALPACA' AND q.feed='iex'
-          AND q.event_time_ns>=#{fromNs} AND q.event_time_ns<=#{toNs}
+        """+" AND ("+TRIGGER_TIME_NS+")>=#{fromNs} AND ("+TRIGGER_TIME_NS+")<=#{toNs} "+"""
           AND t.id>#{afterId} AND t.id<=#{watermark}
         ORDER BY t.id LIMIT 101
         """)

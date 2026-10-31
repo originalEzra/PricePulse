@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 /** One upstream instance. Persistent demand may change; WS callbacks never access MySQL. */
 @Component
 @Profile("!standalone & !mq-it")
-public class RealMarketRuntime {
+public class RealMarketRuntime implements QuoteReadiness {
     private final AlpacaProperties properties;
     private final MarketDataMapper data;
     private final StockMapper stocks;
@@ -106,6 +106,15 @@ public class RealMarketRuntime {
         return changed;
     }
     public record SubscriptionObservation(String state,String epoch,String errorCode,long intentVersion,boolean absent){}
+    @Override public synchronized boolean canConfirmLatest(com.ezra.pricepulse.stock.Stock stock,MarketDataModels.StreamState state){
+        var lane=lanes.get(stock.symbol());
+        if(stopped||!properties.isBusinessWritesEnabled()||stream==null||!stream.healthyConnection()
+                ||!health.confirms(stock.symbol())||!Objects.equals(stockIds.get(stock.symbol()),stock.id())||lane==null)return false;
+        if(monitoring.isDynamicSubscriptionsEnabled()&&!subscription(stock.symbol()).state().equals("CONFIRMED"))return false;
+        String continuity=lane.continuityId()+":"+MarketTime.instant(state.eventTimeNs()).atZone(MarketTime.NEW_YORK).toLocalDate();
+        var queue=lane.sample();
+        return continuity.equals(state.continuityId())&&queue.depth()==0&&queue.active()==0;
+    }
     public synchronized SubscriptionObservation subscription(String symbol){
         var view=stream==null?null:stream.subscriptions();
         if(view==null)return new SubscriptionObservation("PENDING",null,"AWAITING_UPSTREAM_CONFIRMATION",-1,false);

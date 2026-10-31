@@ -56,7 +56,17 @@ public class ThresholdIndex {
 
     public List<Long> candidates(String key, String token, BigDecimal previous, BigDecimal current,
             Supplier<List<RuleIndexEntry>> load, Timer rebuildTimer) {
+        return candidates(key,token,previous,current,load,rebuildTimer,false);
+    }
+
+    public List<Long> candidates(String key, String token, BigDecimal previous, BigDecimal current,
+            Supplier<List<RuleIndexEntry>> load, Timer rebuildTimer, boolean reachableOnce) {
         List<String> args = new ArrayList<>(List.of(token));
+        if(reachableOnce){
+            long tick=PriceTicks.ticks(current);
+            range(args,4,0,true,tick,true);
+            range(args,5,tick,true,PriceTicks.BAND-1,true);
+        }
         if (previous != null && current.compareTo(previous) != 0) {
             long oldTick = PriceTicks.ticks(previous), newTick = PriceTicks.ticks(current);
             if (newTick > oldTick) {

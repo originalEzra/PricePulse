@@ -46,6 +46,11 @@ public final class AlpacaStream implements AutoCloseable {
         dynamic.desire(desired);sendNextSubscription();
     }
     synchronized AlpacaSubscriptions.View subscriptions(){return dynamic==null?null:dynamic.view();}
+    public synchronized boolean healthyConnection(){
+        long now=ticker.getAsLong(),drift=clockDrift(now);
+        return running&&socket!=null&&subscribed&&now-lastReceivedNanos<=SILENCE_NANOS
+                &&now-lastHeartbeatNanos<=SILENCE_NANOS&&Math.abs(drift)<=CLOCK_DRIFT_MILLIS;
+    }
     private void sendNextSubscription(){
         if(!running||socket==null||dynamic==null)return;
         var command=dynamic.next();if(command==null)return;

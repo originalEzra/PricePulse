@@ -143,10 +143,10 @@ class OpeningGapInfrastructureIT {
     @Test void firstSessionOnlyTriggersEligibleActiveRulesAndNeverRevivesCompletedPausedOrDeletedRules() {
         var f=fixture();
         long valid=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().minusMinutes(1));
-        long newAtOpen=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt());
-        long editedAfterOpen=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().plusMinutes(1));
+        long newAtOpen=rule(f,"ABOVE","ACTIVE","REPEAT","105","100",CURRENT.opensAt());
+        long editedAfterOpen=rule(f,"ABOVE","ACTIVE","REPEAT","105","100",CURRENT.opensAt().plusMinutes(1));
         List<Long> unchanged=new ArrayList<>(List.of(newAtOpen,editedAfterOpen));
-        long badCreationTime=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().minusMinutes(1));
+        long badCreationTime=rule(f,"ABOVE","ACTIVE","REPEAT","105","100",CURRENT.opensAt().minusMinutes(1));
         jdbc.update("UPDATE alert_rules SET created_at=? WHERE id=?",CURRENT.opensAt().plusMinutes(1),badCreationTime);
         unchanged.add(badCreationTime);
         for(String status:List.of("COMPLETED","PAUSED","DELETED"))unchanged.add(rule(f,"ABOVE",status,"ONCE","105",null,CURRENT.opensAt().minusHours(1)));
@@ -164,7 +164,7 @@ class OpeningGapInfrastructureIT {
 
     @ParameterizedTest @ValueSource(strings={"STARTUP","RECONNECT","QUEUE_OVERFLOW","PROCESSING_FAILURE","STALE_OR_FUTURE","CORRECTION_OR_CANCEL"})
     void aChangedLaneGenerationProtectsTheFirstTradeEvenAcrossTheOpeningBoundary(String reason) {
-        var f=fixture();long rule=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().minusHours(1));
+        var f=fixture();long rule=rule(f,"ABOVE","ACTIVE","REPEAT","105","100",CURRENT.opensAt().minusHours(1));
         ingest(f,"previous",PRIOR.close().minusSeconds(30),"100",GENERATION,"STARTUP");
         var result=ingest(f,"recovery",OPEN,"110","00000000-0000-4000-8000-000000000002",reason);
         assertThat(result.matching().triggered()).isZero();
@@ -175,7 +175,7 @@ class OpeningGapInfrastructureIT {
 
     @ParameterizedTest @ValueSource(strings={"missing","wrong-feed","wrong-adjustment","old-minute","incomplete-coverage"})
     void unavailableOrUntrustedClosingDataFallsBackToOneBaselineAndCannotBeFilledInLater(String kind) {
-        var f=fixture();long rule=rule(f,"ABOVE","ACTIVE","ONCE","105",null,CURRENT.opensAt().minusHours(1));
+        var f=fixture();long rule=rule(f,"ABOVE","ACTIVE","REPEAT","105","100",CURRENT.opensAt().minusHours(1));
         if(kind.equals("missing"))jdbc.update("DELETE FROM market_price_bars WHERE stock_id=?",f.stock);
         if(kind.equals("wrong-feed"))jdbc.update("UPDATE market_price_bars SET feed='sip' WHERE stock_id=?",f.stock);
         if(kind.equals("wrong-adjustment"))jdbc.update("UPDATE market_price_bars SET adjustment='split' WHERE stock_id=?",f.stock);
@@ -223,7 +223,7 @@ class OpeningGapInfrastructureIT {
 
     @Test void rulesCreatedAfterOpeningCannotUseTheEarlierCloseForALateFirstTrade() {
         var f=fixture();ingest(f,"previous",PRIOR.close().minusSeconds(90),"100",GENERATION,"STARTUP");
-        var rule=rules.create(f.user,new SaveAlertRuleRequest(f.stock,"Created after open",null,AlertDirection.ABOVE,new BigDecimal("105"),AlertTriggerMode.ONCE,null));
+        var rule=rules.create(f.user,new SaveAlertRuleRequest(f.stock,"Created after open",null,AlertDirection.ABOVE,new BigDecimal("105"),AlertTriggerMode.REPEAT,new BigDecimal("100")));
         assertThat(rule.createdAt()).isAfter(CURRENT.opensAt());
         assertThat(ingest(f,"late-first",OPEN.plusSeconds(300),"110",GENERATION,"STARTUP").matching().triggered()).isZero();
         assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",rule.id())).isZero();

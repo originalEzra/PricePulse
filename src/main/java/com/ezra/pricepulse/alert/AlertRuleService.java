@@ -27,6 +27,10 @@ public class AlertRuleService {
     private final UserMapper userMapper;
     private final RuleIndex index;
     private final com.ezra.pricepulse.monitoring.MonitoringAccess monitoring;
+    private java.time.Clock clock=java.time.Clock.systemUTC();
+    private OnceRuleActivation activation;
+    @org.springframework.beans.factory.annotation.Autowired void clock(java.time.Clock clock){this.clock=clock;}
+    @org.springframework.beans.factory.annotation.Autowired void activation(OnceRuleActivation activation){this.activation=activation;}
 
     public AlertRuleService(AlertRuleMapper alertRuleMapper, StockMapper stockMapper,
             UserMapper userMapper, RuleIndex index, com.ezra.pricepulse.monitoring.MonitoringAccess monitoring) {
@@ -41,10 +45,12 @@ public class AlertRuleService {
     public AlertRuleResponse create(long userId, SaveAlertRuleRequest request) {
         requireActiveUser(userId);
         Stock stock = lockStock(request.stockId());
-        monitoring.requireConfirmed(userId, stock);
+        requireMonitoring(userId,stock,request.triggerMode());
         AlertRule rule = buildRule(userId, null, request);
+        rule.setCreatedAt(com.ezra.pricepulse.market.MarketTime.utc(clock.instant()));rule.setEffectiveAt(rule.getCreatedAt());
         alertRuleMapper.insert(rule);
         AlertRule saved = requireOwnedRule(userId, rule.getId());
+        if(activation!=null)activation.confirm(stock,saved,true);
         index.changed(stock, List.of(saved));
         return AlertRuleResponse.from(saved);
     }
@@ -77,12 +83,13 @@ public class AlertRuleService {
             throw stateConflict("Only active or paused rules can be edited");
         }
         if (current.getStatus() == AlertRuleStatus.ACTIVE)
-            monitoring.requireConfirmed(userId, locked.stocks().stream().filter(s -> s.id() == request.rule().stockId()).findFirst().orElseThrow());
+            requireMonitoring(userId, locked.stocks().stream().filter(s -> s.id() == request.rule().stockId()).findFirst().orElseThrow(),request.rule().triggerMode());
         AlertRule replacement = buildRule(userId, ruleId, request.rule());
         int updated = alertRuleMapper.updateDetails(
                 replacement, request.version(), EDITABLE_STATUSES);
         requireUpdated(updated);
         AlertRule saved = requireOwnedRule(userId, ruleId);
+        if(activation!=null)activation.confirm(locked.stocks().stream().filter(s->s.id()==saved.getStockId()).findFirst().orElseThrow(),saved,false);
         locked.stocks().forEach(stock -> index.changed(stock, List.of(saved)));
         return AlertRuleResponse.from(saved);
     }
@@ -121,13 +128,14 @@ public class AlertRuleService {
         requireActiveUser(userId);
         LockedRule locked = lockOwnedRule(userId, ruleId, version, null);
         AlertRule current = locked.rule();
-        if (target == AlertRuleStatus.ACTIVE) monitoring.requireConfirmed(userId, locked.stocks().getFirst());
+        if (target == AlertRuleStatus.ACTIVE) requireMonitoring(userId, locked.stocks().getFirst(),current.getTriggerMode());
         if (!allowed.contains(current.getStatus())) {
             throw stateConflict(invalidStateMessage);
         }
         int updated = alertRuleMapper.updateStatus(ruleId, userId, version, target, allowed);
         requireUpdated(updated);
         AlertRule saved = requireOwnedRule(userId, ruleId);
+        if(target==AlertRuleStatus.ACTIVE&&activation!=null)activation.confirm(locked.stocks().getFirst(),saved,false);
         index.changed(locked.stocks().getFirst(), List.of(saved));
         return AlertRuleResponse.from(saved);
     }
@@ -150,6 +158,10 @@ public class AlertRuleService {
         rule.setTriggerMode(request.triggerMode());
         rule.setRearmPrice(rearm);
         return rule;
+    }
+
+    private void requireMonitoring(long user,Stock stock,AlertTriggerMode mode){
+        if(mode==AlertTriggerMode.ONCE)monitoring.requireDesired(user,stock);else monitoring.requireConfirmed(user,stock);
     }
 
     private void validateRearm(

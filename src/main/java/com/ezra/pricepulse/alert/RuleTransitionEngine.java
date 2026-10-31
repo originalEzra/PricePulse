@@ -18,6 +18,16 @@ public final class RuleTransitionEngine {
 
     public record Decision(Kind kind, AlertRuleStatus target) { }
 
+    /** REAL ONCE rules confirm reachability; historical simulation keeps evaluate() crossing semantics. */
+    public static Decision evaluateReal(Definition rule, AlertRuleStatus state,
+            BigDecimal previous, BigDecimal current) {
+        if (state == AlertRuleStatus.ACTIVE && rule.triggerMode() == AlertTriggerMode.ONCE
+                && (rule.direction() == AlertDirection.ABOVE
+                    ? current.compareTo(rule.thresholdPrice()) >= 0 : current.compareTo(rule.thresholdPrice()) <= 0))
+            return new Decision(Kind.TRIGGERED, AlertRuleStatus.COMPLETED);
+        return evaluate(rule, state, previous, current);
+    }
+
     public static Decision evaluate(Definition rule, AlertRuleStatus state,
             BigDecimal previous, BigDecimal current) {
         if (previous == null) return new Decision(Kind.NONE, state);

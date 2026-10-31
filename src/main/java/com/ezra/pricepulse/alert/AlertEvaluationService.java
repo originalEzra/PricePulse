@@ -49,12 +49,19 @@ public class AlertEvaluationService {
     @Transactional(propagation = Propagation.MANDATORY)
     public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime,
             boolean baseline, OpeningGapContext opening) {
+        return evaluate(stock,quoteId,price,eventTime,baseline,opening,
+                new TargetReachContext("TARGET_REACHED",baseline?"RECOVERY":"LIVE",eventTime.toInstant(java.time.ZoneOffset.UTC),eventTime.toInstant(java.time.ZoneOffset.UTC),baseline?"STARTUP_OR_RECONNECT":null));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public MatchingResult evaluate(Stock stock, long quoteId, BigDecimal price, LocalDateTime eventTime,
+            boolean baseline, OpeningGapContext opening, TargetReachContext confirmation) {
         BigDecimal previous = stock.latestQuoteAt() == null ? null : stock.latestPrice();
-        // Baselines cannot trigger ACTIVE rules. Cooldown rearming only needs the new price.
+        // REPEAT baselines cannot cross; ONCE reachability and cooldown rearming need only the current price.
         if (baseline) previous = price;
         if (opening!=null) previous = new BigDecimal(opening.referencePrice());
-        List<Long> ids = baseline ? rules.cooldownIds(stock.id()) : index.candidates(stock, previous, price);
-        if (opening!=null) {
+        List<Long> ids = index.candidates(stock, previous, price);
+        if (baseline || opening!=null) {
             var firstSessionIds=new java.util.LinkedHashSet<>(ids);
             firstSessionIds.addAll(rules.cooldownIds(stock.id()));
             ids=List.copyOf(firstSessionIds);
@@ -70,20 +77,19 @@ public class AlertEvaluationService {
             List<Long> page = ids.subList(offset, Math.min(offset + 500, ids.size()));
             List<OutboxWriter.PendingAlert> pending = new ArrayList<>();
             for (AlertRule rule : rules.findCandidates(stock.id(), page)) {
-                if (opening!=null && rule.getStatus()==AlertRuleStatus.ACTIVE
+                if(rule.getTriggerMode()==AlertTriggerMode.ONCE && rule.getStatus()==AlertRuleStatus.ACTIVE
+                        && rule.getEffectiveAt()!=null && confirmation.confirmedAt().isBefore(rule.getEffectiveAt().toInstant(java.time.ZoneOffset.UTC)))continue;
+                if (opening!=null && rule.getTriggerMode()!=AlertTriggerMode.ONCE && rule.getStatus()==AlertRuleStatus.ACTIVE
                         && (!opening.eligible(rule.getEffectiveAt()) || !opening.eligible(rule.getCreatedAt()))) continue;
-                if (previous == null) {
-                    continue;
-                }
                 long decisionStarted = QuoteTiming.start();
-                var decision = RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),
+                var decision = RuleTransitionEngine.evaluateReal(RuleTransitionEngine.Definition.from(rule),
                         rule.getStatus(), previous, price);
                 QuoteTiming.finish("rule_decision", decisionStarted);
                 if (decision.kind() == RuleTransitionEngine.Kind.TRIGGERED) {
                     AlertRuleStatus target = decision.target();
                     requireTransition(rule, target, eventTime);
                     long triggerStarted = QuoteTiming.start();
-                    try { pending.add(recordTrigger(rule, quoteId, price, eventTime, opening)); }
+                    try { pending.add(recordTrigger(rule, quoteId, price, eventTime, opening,confirmation)); }
                     finally { QuoteTiming.finish("trigger_outbox_write", triggerStarted); }
                     rule.setStatus(target);
                     rule.setLastTriggeredAt(eventTime);
@@ -108,6 +114,17 @@ public class AlertEvaluationService {
             index.changed(stock, changed);
         }
         return new MatchingResult(ids.size(), triggered, rearmed);
+    }
+
+    /** Caller holds the stock row lock and updates the derived index once with the final rule state. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean confirmOnceRule(Stock stock,AlertRule rule,long quoteId,BigDecimal price,LocalDateTime confirmedAt,TargetReachContext confirmation){
+        if(rule.getStockId()!=stock.id()||rule.getTriggerMode()!=AlertTriggerMode.ONCE
+                ||RuleTransitionEngine.evaluateReal(RuleTransitionEngine.Definition.from(rule),rule.getStatus(),price,price).kind()!=RuleTransitionEngine.Kind.TRIGGERED)return false;
+        requireTransition(rule,AlertRuleStatus.COMPLETED,confirmedAt);
+        outbox.alertTriggeredBatch(List.of(recordTrigger(rule,quoteId,price,confirmedAt,null,confirmation)));
+        rule.setStatus(AlertRuleStatus.COMPLETED);rule.setLastTriggeredAt(confirmedAt);rule.setVersion(rule.getVersion()+1);
+        return true;
     }
 
     @Transactional(readOnly = true)
@@ -163,7 +180,7 @@ public class AlertEvaluationService {
         }
     }
 
-    private OutboxWriter.PendingAlert recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime, OpeningGapContext opening) {
+    private OutboxWriter.PendingAlert recordTrigger(AlertRule rule, long quoteId, BigDecimal price, LocalDateTime eventTime, OpeningGapContext opening,TargetReachContext confirmation) {
         AlertTrigger trigger = new AlertTrigger();
         trigger.setTriggerKey("rule:" + rule.getId() + ":version:" + rule.getVersion());
         trigger.setRuleId(rule.getId());
@@ -172,7 +189,10 @@ public class AlertEvaluationService {
         trigger.setEventTime(eventTime);
         try {
             trigger.setRuleSnapshot(json.writeValueAsString(AlertRuleResponse.from(rule)));
-            if (opening!=null) trigger.setTriggerContext(json.writeValueAsString(opening.forRule(rule.getEffectiveAt())));
+            boolean openingCross=opening!=null && opening.eligible(rule.getEffectiveAt()) && opening.eligible(rule.getCreatedAt())
+                    && RuleTransitionEngine.evaluate(RuleTransitionEngine.Definition.from(rule),rule.getStatus(),new BigDecimal(opening.referencePrice()),price).kind()==RuleTransitionEngine.Kind.TRIGGERED;
+            if(openingCross)trigger.setTriggerContext(json.writeValueAsString(opening.forRule(rule.getEffectiveAt())));
+            else if(rule.getTriggerMode()==AlertTriggerMode.ONCE)trigger.setTriggerContext(json.writeValueAsString(confirmation));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot serialize rule snapshot", exception);
         }

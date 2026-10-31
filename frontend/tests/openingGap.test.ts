@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { OpeningGapContext } from '../src/api/types.ts'
-import { openingGapDetail } from '../src/utils/openingGap.ts'
+import { openingGapDetail, targetReachDetail, targetReachLabel } from '../src/utils/openingGap.ts'
 import { compactNewYorkTime } from '../src/utils/chartInspection.ts'
 
 test('opening gap details retain the actual reference precision and use New York time', () => {
@@ -23,4 +23,14 @@ test('opening gap details retain the actual reference precision and use New York
 test('existing events without opening provenance retain their ordinary presentation', () => {
   assert.equal(openingGapDetail({}, compactNewYorkTime), null)
   assert.equal(openingGapDetail({ triggerContext: null }, compactNewYorkTime), null)
+})
+
+test('reachable confirmations distinguish recovery and creation from a historical crossing', () => {
+  const context = { kind: 'TARGET_REACHED' as const, confirmation: 'RECOVERY' as const,
+    confirmedAt: '2026-11-02T15:00:20Z', quoteEventTime: '2026-11-02T15:00:19Z', baselineReason: 'RECONNECT' }
+  assert.equal(targetReachLabel({ triggerContext: context }), '恢复后确认达到')
+  assert.match(targetReachDetail({ triggerContext: context }, compactNewYorkTime)!, /未推断缺口期间的突破/)
+  assert.match(targetReachDetail({ triggerContext: context }, compactNewYorkTime)!, /11\/02 10:00/)
+  assert.equal(targetReachLabel({ triggerContext: { ...context, confirmation: 'RULE_CREATED' } }), '创建时确认达到')
+  assert.equal(openingGapDetail({ triggerContext: context }, compactNewYorkTime), null)
 })

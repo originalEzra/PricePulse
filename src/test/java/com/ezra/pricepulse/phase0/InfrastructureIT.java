@@ -544,7 +544,7 @@ class InfrastructureIT {
     }
 
     @Test
-    void crossingBoundariesCreateOneTimeTriggersAndPendingOutboxAtomically() throws Exception {
+    void reachableTargetsCreateOneTimeTriggersAndPendingOutboxAtomically() throws Exception {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         String outsider = matchingToken(testSuffix());
@@ -554,15 +554,15 @@ class InfrastructureIT {
         long outsideRangeId = createMatchingRule(token, stockId, "ABOVE", "1000", "ONCE", null);
         long belowId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
 
-        // A first quote is a baseline, even when already beyond an active threshold.
+        // ONCE confirms already reached targets on the first accepted point, without inventing a crossing.
         assertThat(replayQuote(token, stockId, suffix, 1, "105").path("matching").path("triggered").asInt())
-                .isZero();
+                .isEqualTo(2);
         assertThat(replayQuote(token, stockId, suffix, 2, "95").path("matching").path("triggered").asInt())
                 .isZero();
         JsonNode exactUpperBoundary = replayQuote(token, stockId, suffix, 3, "100").path("matching");
-        assertThat(exactUpperBoundary.path("triggered").asInt()).isEqualTo(1);
-        assertThat(exactUpperBoundary.path("candidates").asInt()).isEqualTo(1);
-        assertThat(ruleStatus(oldUpperBoundaryId)).isEqualTo("ACTIVE");
+        assertThat(exactUpperBoundary.path("triggered").asInt()).isZero();
+        assertThat(exactUpperBoundary.path("candidates").asInt()).isZero();
+        assertThat(ruleStatus(oldUpperBoundaryId)).isEqualTo("COMPLETED");
         assertThat(ruleStatus(outsideRangeId)).isEqualTo("ACTIVE");
         assertThat(ruleStatus(aboveId)).isEqualTo("COMPLETED");
         assertThat(replayQuote(token, stockId, suffix, 4, "100").path("matching").path("triggered").asInt())
@@ -571,9 +571,9 @@ class InfrastructureIT {
                 .isEqualTo("DUPLICATE");
         long oldLowerBoundaryId = createMatchingRule(token, stockId, "BELOW", "100", "ONCE", null);
         assertThat(replayQuote(token, stockId, suffix, 5, "90").path("matching").path("triggered").asInt())
-                .isEqualTo(1);
+                .isEqualTo(2);
         assertThat(ruleStatus(belowId)).isEqualTo("COMPLETED");
-        assertThat(ruleStatus(oldLowerBoundaryId)).isEqualTo("ACTIVE");
+        assertThat(ruleStatus(oldLowerBoundaryId)).isEqualTo("COMPLETED");
 
         assertThat(triggerCount(aboveId)).isEqualTo(1);
         assertThat(triggerCount(belowId)).isEqualTo(1);
@@ -758,6 +758,8 @@ class InfrastructureIT {
                 .andExpect(status().isOk());
         replayQuote(token, originalStock, suffix, 3, "120");
         assertThat(triggerCount(movedRule)).isZero();
+        // The controlled 2024 feed must run after this rule's test-only activation time.
+        jdbc.update("UPDATE alert_rules SET effective_at='2024-06-01 09:59:00' WHERE id=?",movedRule);
         replayQuote(token, newStock, suffix, 1, "100");
         replayQuote(token, newStock, suffix, 2, "110");
         assertThat(triggerCount(movedRule)).isEqualTo(1);
@@ -787,7 +789,7 @@ class InfrastructureIT {
         String tokenInDatabase = jdbc.queryForObject(
                 "SELECT rule_index_token FROM stocks WHERE id = ?", String.class, stockId);
         assertThat(redis.opsForZSet().rangeByScore(ruleIndexKey(stockId), -1, -1))
-                .containsExactly("@" + tokenInDatabase);
+                .containsExactly("@" + com.ezra.pricepulse.matching.RuleIndex.cacheToken(tokenInDatabase));
     }
 
     @Test
@@ -1016,8 +1018,8 @@ class InfrastructureIT {
                 .andExpect(jsonPath("$.data[0].ruleId").value(ruleId))
                 .andExpect(jsonPath("$.data[0].stockId").value(stockId))
                 .andExpect(jsonPath("$.data[0].status").value("UNREAD"))
-                .andExpect(jsonPath("$.data[0].title").value("D" + suffix + " 已下破 90.00"))
-                .andExpect(jsonPath("$.data[0].content").value(org.hamcrest.Matchers.containsString("价格 90.00，")));
+                .andExpect(jsonPath("$.data[0].title").value("D" + suffix + " 已达到 下破目标 90.00"))
+                .andExpect(jsonPath("$.data[0].content").value(org.hamcrest.Matchers.containsString("确认价格 90.0000，")));
         mvc.perform(get("/api/notifications")
                         .header("Authorization", "Bearer " + outsider))
                 .andExpect(status().isOk())
@@ -1197,7 +1199,9 @@ class InfrastructureIT {
                         .content(json(body)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response).path("data").path("id").asLong();
+        long id=objectMapper.readTree(response).path("data").path("id").asLong();
+        jdbc.update("UPDATE alert_rules SET effective_at='2024-06-01 09:59:00' WHERE id=?",id);
+        return id;
     }
 
     private JsonNode replayQuote(String token, long stockId, String run, int step, String price) throws Exception {

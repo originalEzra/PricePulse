@@ -32,10 +32,11 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="rule.id">
         INSERT INTO alert_rules (
             user_id, stock_id, name, note, direction, threshold_price,
-            trigger_mode, rearm_price, status, version
+            trigger_mode, rearm_price, status, version,created_at,effective_at
         ) VALUES (
             #{rule.userId}, #{rule.stockId}, #{rule.name}, #{rule.note}, #{rule.direction},
-            #{rule.thresholdPrice}, #{rule.triggerMode}, #{rule.rearmPrice}, 'ACTIVE', 0
+            #{rule.thresholdPrice}, #{rule.triggerMode}, #{rule.rearmPrice}, 'ACTIVE', 0,
+            COALESCE(#{rule.createdAt},CURRENT_TIMESTAMP(6)),COALESCE(#{rule.effectiveAt},CURRENT_TIMESTAMP(6))
         )
     </insert>
 
