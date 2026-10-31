@@ -305,8 +305,8 @@ onMounted(() => {
     <p v-if="error" class="page-error">{{ error }} <button @click="load">重试</button></p>
     <p v-if="!loading && !monitoringManaged" class="muted">当前显示原有共享监控，个人监控管理尚未启用。</p>
     <div class="dashboard-grid">
-      <StockMonitoringPanel v-if="monitoringManaged && monitoringPage" :key="auth.session?.user.id" :page="monitoringPage" :selected-id="selectedId" @select="selectStock" @changed="load" />
-      <section v-else class="panel stock-panel">
+      <StockMonitoringPanel v-if="monitoringManaged && monitoringPage" :key="auth.session?.user.id" class="dashboard-watchlist" :page="monitoringPage" :selected-id="selectedId" @select="selectStock" @changed="load" />
+      <section v-else class="panel stock-panel dashboard-watchlist">
         <div class="panel-head"><div><p class="eyebrow">MONITORING</p><h2>股票监控</h2></div><input v-model="search" class="compact-input" placeholder="筛选当前股票" /></div>
         <div v-if="loading" class="loading-block">加载行情中…</div>
         <div class="stock-list" role="region" aria-label="股票报价列表" tabindex="0">
@@ -343,8 +343,7 @@ onMounted(() => {
         </PriceSparkline>
         <div class="market-bottom-tools"><details v-if="timeline" class="market-data-details"><summary>行情详情</summary><p>Alpaca · IEX 单一交易所 · 未复权 · {{ freshnessLabel[timeline.health.freshness] }}</p><p>{{ date(selectedStock?.latestQuoteAt ?? null) }} · {{ prices.length }} 个绘图点</p><p v-if="timeline.dataQuality">分钟点 {{ timeline.dataQuality.displayedBars }} / {{ timeline.dataQuality.availableBars }} · 预期区间 {{ timeline.dataQuality.expectedMinutes }} · 暂无分钟线 {{ timeline.dataQuality.unavailableMinutes }}</p><p v-if="timeline.dataQuality && !timeline.dataQuality.historyCoverageComplete">历史下载未覆盖完整范围。</p><p v-if="timeline.dataQuality && !timeline.dataQuality.calendarCoverageComplete">交易日历未覆盖完整范围，未知时段未压缩。</p><p v-if="timeline.gaps.length">有稀疏成交、缓存或实时基线缺口；不补造价格和提醒。</p><p v-if="timeline.health.lastError">最近安全错误：{{ timeline.health.lastError }}</p><p>{{ allEvents.length }} 条已加载历史触发，独立于阈值线勾选。</p></details><button v-if="nextCursor" class="text-button" :disabled="eventsLoading" @click="moreEvents">{{ eventsLoading ? '读取中…' : '加载更多触发' }}</button><button class="text-button" :disabled="chartLoading" @click="loadQuotes()">{{ chartLoading ? '读取中…' : '刷新行情' }}</button></div>
       </section>
-    </div>
-    <section class="panel rules-panel">
+      <section class="panel rules-panel">
         <div class="rule-section-head"><h2>{{ selectedStock?.symbol }} 的提醒规则 <small>（{{ selectedRules.length }}）</small></h2><button class="text-button" :disabled="!selectedStock || !canCreateRule" @click="openCreate">添加规则 ＋</button></div>
         <p v-if="rulesLoading" class="rule-display-hint" role="status">正在同步完整规则列表…</p>
         <p v-if="rulesError" class="page-error" role="alert">{{ rulesError }} <button @click="loadQuotes()">重试</button></p>
@@ -365,6 +364,7 @@ onMounted(() => {
         </div>
         <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '选择上破或下破价格，系统会在真正穿越阈值时触发。' : '行情订阅确认后，可以创建该股票的提醒规则。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
       </section>
+    </div>
     <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />
     <RuleModal :open="modalOpen" :stock="selectedStock" :rule="editingRule" :initial-draft="initialDraft" @close="modalOpen = false" @saved="replaceRule" />
   </div>
@@ -375,7 +375,12 @@ onMounted(() => {
 .page-head { margin-bottom: 18px; align-items: center; }
 .page-head h1 { font-size: 32px; }
 .dashboard-counts { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
-.dashboard-grid { grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: start; }
+.dashboard-grid { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto auto; gap: 14px; align-items: start; }
+/* Let the chart and rules set the height; the stock list scrolls within both rows. */
+.dashboard-watchlist { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; contain: size; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.dashboard-watchlist :deep(.monitor-list), .stock-list { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.dashboard-watchlist :deep(.panel-head), .dashboard-watchlist :deep(.asset-search), .dashboard-watchlist :deep(.message), .dashboard-watchlist :deep(.asset-results) { flex-shrink: 0; }
+.market-panel { grid-column: 2; grid-row: 1; min-width: 0; }
 .stock-panel .panel-head { padding: 16px; gap: 10px; }
 .stock-panel .panel-head h2 { font-size: 17px; }
 .stock-panel .compact-input { width: 122px; font-size: 11px; }
@@ -387,13 +392,19 @@ onMounted(() => {
 .window-tabs button.active { background: white; color: #23785b; box-shadow: 0 1px 5px #193b2310; }
 .market-status, .monitor-status, .market-warning { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .watchlist-warning { margin: 12px 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.stock-list { max-height: 490px; overflow-y: auto; }
 .monitor-status, .market-warning { color: #946a2f; }
 .market-bottom-tools { display: flex; gap: 16px; align-items: start; padding: 0 20px 12px; font-size: 11px; }
 .market-data-details { margin-right: auto; min-width: 0; color: var(--muted); }
 .market-data-details p { font-size: 11px; line-height: 1.6; margin: 7px 0 0; }
-.rules-panel { margin-top: 14px; }
+.rules-panel { grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; }
 .rules-panel .rule-section-head { border-top: 0; padding: 16px 20px 12px; }
+.rules-panel .rule-table-scroll { max-height: 280px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.rules-panel .rule-table th { position: sticky; top: 0; z-index: 1; background: var(--paper); }
 .positive { color: #20815d; } .negative { color: #c45a53; }
-@media (max-width: 980px) { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } .stock-list { max-height: 280px; } }
+@media (max-width: 980px) {
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .dashboard-watchlist, .market-panel, .rules-panel { grid-column: auto; grid-row: auto; }
+  .dashboard-watchlist { contain: none; }
+  .dashboard-watchlist :deep(.monitor-list), .stock-list { flex: 0 1 auto; max-height: 280px; }
+}
 </style>

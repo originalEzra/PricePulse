@@ -1,0 +1,1399 @@
+{
+  "environment" : {
+    "syntheticOnly" : true,
+    "maxHeapBytes" : 805306368,
+    "commit" : "01fec921ab5f0548e4c8ebdc86cbb24f61bf193e",
+    "startedAtUtc" : "2026-10-30T15:00:52.945221Z",
+    "java" : "25.0.1+8-27",
+    "eachContainerMemoryLimitBytes" : 805306368,
+    "redisImage" : "redis:7.4.6-alpine",
+    "mysqlBufferPoolBytes" : 134217728,
+    "eachContainerCpuLimit" : 1,
+    "mysql" : "8.4.7",
+    "smoke" : false,
+    "performanceSchema" : "1",
+    "arch" : "aarch64",
+    "seed" : 20261031,
+    "innodbFlushLogAtTrxCommit" : "1",
+    "visibleProcessors" : 2,
+    "os" : "Mac OS X"
+  },
+  "jdbcDriver" : "mysql-connector-j-9.7.0 (Revision: 0aade1f13bcc98faf7dda5c02e782481eb291f62)",
+  "sourceSha256" : {
+    "src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java" : "38f20974ad86dcc2a9102d5c147d4da47ae56c73b92cca97b1d4e89db391d776",
+    "src/main/java/com/ezra/pricepulse/matching/RuleIndex.java" : "07aad77feae9785eeccebdbd6c0514c3da7fbcfe2cc12903740ab13cd05239f5",
+    "src/test/java/com/ezra/pricepulse/performance/RuleSelectionExperiment.java" : "225bccfecf354cbb521848f3e1b4091edfdd288d6f190ee4c544fe6bf9394e5c"
+  },
+  "replay" : {
+    "rules" : 10000,
+    "events" : 100000,
+    "seed" : 20261031,
+    "categories" : {
+      "JUMP" : 5000,
+      "SMALL" : 60000,
+      "NORMAL" : 15000,
+      "UNCHANGED" : 20000
+    },
+    "windowStartUtc" : "2026-10-30T15:02:52.812071Z",
+    "windowEndUtc" : "2026-10-30T15:18:07.051558Z",
+    "commonWindowSeconds" : 914.267194875,
+    "schemes" : [ {
+      "scheme" : "MYSQL_DIRECT",
+      "events" : 100000,
+      "nonemptyEvents" : 78956,
+      "candidateRows" : 1680235,
+      "nonemptyRatio" : 0.78956,
+      "selectorTotalNs" : 39861342029,
+      "guardedTotalNs" : 274191673071,
+      "sql" : {
+        "STOCK_LOCK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28398805685
+        },
+        "WATERMARK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 26999544526
+        },
+        "RULE_RANGE_HYDRATE" : {
+          "executions" : 100000,
+          "rows" : 1680235,
+          "nanos" : 39616681539
+        },
+        "STOCK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 27947285624
+        },
+        "WATERMARK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28092566277
+        },
+        "SETUP" : {
+          "executions" : 8,
+          "rows" : 14,
+          "nanos" : 12046084
+        },
+        "RULE_REBUILD_OR_SCAN" : {
+          "executions" : 4,
+          "rows" : 40000,
+          "nanos" : 57102749
+        }
+      },
+      "ruleSelects" : 100000,
+      "ruleSelectsPerCommonWindowSecond" : 109.37721550172448,
+      "databaseVerifiedRuleSelects" : 100000
+    }, {
+      "scheme" : "REDIS_PREFILTER",
+      "events" : 100000,
+      "nonemptyEvents" : 78956,
+      "candidateRows" : 1680235,
+      "nonemptyRatio" : 0.78956,
+      "selectorTotalNs" : 58907797683,
+      "guardedTotalNs" : 292697462146,
+      "sql" : {
+        "STOCK_LOCK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28395947361
+        },
+        "WATERMARK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 27036761234
+        },
+        "RULE_HYDRATE" : {
+          "executions" : 78956,
+          "rows" : 1680235,
+          "nanos" : 30066419298
+        },
+        "STOCK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28033830532
+        },
+        "WATERMARK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 27831694351
+        }
+      },
+      "ruleSelects" : 78956,
+      "ruleSelectsPerCommonWindowSecond" : 86.35987427154157,
+      "databaseVerifiedRuleSelects" : 78956
+    }, {
+      "scheme" : "MYSQL_EQUAL_PRICE_FASTPATH",
+      "events" : 100000,
+      "nonemptyEvents" : 78956,
+      "candidateRows" : 1680235,
+      "nonemptyRatio" : 0.78956,
+      "selectorTotalNs" : 33408565458,
+      "guardedTotalNs" : 268568150512,
+      "sql" : {
+        "STOCK_LOCK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28500366418
+        },
+        "WATERMARK_SELECT" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 27088274963
+        },
+        "RULE_RANGE_HYDRATE" : {
+          "executions" : 80000,
+          "rows" : 1680235,
+          "nanos" : 33208519767
+        },
+        "STOCK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 27918778669
+        },
+        "WATERMARK_UPDATE" : {
+          "executions" : 100000,
+          "rows" : 100000,
+          "nanos" : 28115451952
+        }
+      },
+      "ruleSelects" : 80000,
+      "ruleSelectsPerCommonWindowSecond" : 87.50177240137958,
+      "databaseVerifiedRuleSelects" : 80000
+    } ],
+    "redisQueries" : 100000,
+    "redisRebuilds" : 0,
+    "mismatches" : 0,
+    "databaseDigestDeltas" : [ {
+      "sql" : "SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `direct_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `threshold_price` >= ? AND `threshold_price` < ? UNION ALL SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `direct_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `rearm_price` >= ? AND `rearm_price` < ?",
+      "count" : 60222,
+      "returnedRows" : 831906,
+      "examinedRows" : 831906,
+      "serverPicoseconds" : 9480789605000
+    }, {
+      "sql" : "SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `prefiltered_rules` WHERE `stock_id` = ? AND `id` IN (...)",
+      "count" : 78956,
+      "returnedRows" : 1680235,
+      "examinedRows" : 1680235,
+      "serverPicoseconds" : 10874807467000
+    }, {
+      "sql" : "SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `fast_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `threshold_price` >= ? AND `threshold_price` < ? UNION ALL SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `fast_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `rearm_price` >= ? AND `rearm_price` < ?",
+      "count" : 40222,
+      "returnedRows" : 831906,
+      "examinedRows" : 831906,
+      "serverPicoseconds" : 7299787288000
+    }, {
+      "sql" : "SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `fast_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `threshold_price` > ? AND `threshold_price` <= ? UNION ALL SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `fast_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `rearm_price` > ? AND `rearm_price` <= ?",
+      "count" : 39778,
+      "returnedRows" : 848329,
+      "examinedRows" : 848329,
+      "serverPicoseconds" : 7317470301000
+    }, {
+      "sql" : "SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `direct_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `threshold_price` > ? AND `threshold_price` <= ? UNION ALL SELECT `id` , `stock_id` , STATUS , `direction` , `threshold_price` , `rearm_price` FROM `bench_rules` AS `direct_rules` WHERE `stock_id` = ? AND STATUS = ? AND `direction` = ? AND `rearm_price` > ? AND `rearm_price` <= ?",
+      "count" : 39778,
+      "returnedRows" : 848329,
+      "examinedRows" : 848329,
+      "serverPicoseconds" : 7324439459000
+    } ],
+    "sqlTenSecondBins" : {
+      "MYSQL_DIRECT" : {
+        "0" : 1103,
+        "1" : 1141,
+        "2" : 1102,
+        "3" : 1187,
+        "4" : 1120,
+        "5" : 1202,
+        "6" : 1124,
+        "7" : 1043,
+        "8" : 1131,
+        "9" : 1024,
+        "10" : 970,
+        "11" : 1167,
+        "12" : 1122,
+        "13" : 1207,
+        "14" : 1103,
+        "15" : 1085,
+        "16" : 1207,
+        "17" : 1124,
+        "18" : 1115,
+        "19" : 1146,
+        "20" : 1124,
+        "21" : 1179,
+        "22" : 1102,
+        "23" : 1157,
+        "24" : 1164,
+        "25" : 1120,
+        "26" : 1126,
+        "27" : 1109,
+        "28" : 1125,
+        "29" : 641,
+        "30" : 1147,
+        "31" : 1161,
+        "32" : 1165,
+        "33" : 1165,
+        "34" : 1199,
+        "35" : 1116,
+        "36" : 1184,
+        "37" : 1153,
+        "38" : 1146,
+        "39" : 1197,
+        "40" : 1169,
+        "41" : 1091,
+        "42" : 1177,
+        "43" : 1159,
+        "44" : 1124,
+        "45" : 1146,
+        "46" : 1163,
+        "47" : 1161,
+        "48" : 1163,
+        "49" : 1081,
+        "50" : 1068,
+        "51" : 1084,
+        "52" : 1109,
+        "53" : 1167,
+        "54" : 1102,
+        "55" : 1150,
+        "56" : 1103,
+        "57" : 1085,
+        "58" : 1162,
+        "59" : 1056,
+        "60" : 1104,
+        "61" : 1128,
+        "62" : 1105,
+        "63" : 775,
+        "64" : 953,
+        "65" : 1011,
+        "66" : 1123,
+        "67" : 1105,
+        "68" : 1152,
+        "69" : 1196,
+        "70" : 1134,
+        "71" : 1202,
+        "72" : 1108,
+        "73" : 1053,
+        "74" : 1155,
+        "75" : 858,
+        "76" : 999,
+        "77" : 979,
+        "78" : 866,
+        "79" : 1004,
+        "80" : 943,
+        "81" : 961,
+        "82" : 1019,
+        "83" : 1044,
+        "84" : 1027,
+        "85" : 1061,
+        "86" : 1101,
+        "87" : 987,
+        "88" : 895,
+        "89" : 1051,
+        "90" : 1096,
+        "91" : 382
+      },
+      "REDIS_PREFILTER" : {
+        "0" : 875,
+        "1" : 899,
+        "2" : 898,
+        "3" : 913,
+        "4" : 883,
+        "5" : 961,
+        "6" : 875,
+        "7" : 842,
+        "8" : 886,
+        "9" : 815,
+        "10" : 775,
+        "11" : 933,
+        "12" : 862,
+        "13" : 959,
+        "14" : 889,
+        "15" : 875,
+        "16" : 962,
+        "17" : 914,
+        "18" : 888,
+        "19" : 904,
+        "20" : 864,
+        "21" : 908,
+        "22" : 877,
+        "23" : 931,
+        "24" : 912,
+        "25" : 891,
+        "26" : 890,
+        "27" : 848,
+        "28" : 886,
+        "29" : 489,
+        "30" : 927,
+        "31" : 902,
+        "32" : 906,
+        "33" : 916,
+        "34" : 964,
+        "35" : 866,
+        "36" : 934,
+        "37" : 902,
+        "38" : 910,
+        "39" : 936,
+        "40" : 946,
+        "41" : 852,
+        "42" : 899,
+        "43" : 892,
+        "44" : 888,
+        "45" : 901,
+        "46" : 924,
+        "47" : 935,
+        "48" : 934,
+        "49" : 866,
+        "50" : 842,
+        "51" : 822,
+        "52" : 885,
+        "53" : 923,
+        "54" : 861,
+        "55" : 890,
+        "56" : 844,
+        "57" : 852,
+        "58" : 924,
+        "59" : 839,
+        "60" : 859,
+        "61" : 884,
+        "62" : 888,
+        "63" : 612,
+        "64" : 744,
+        "65" : 818,
+        "66" : 878,
+        "67" : 878,
+        "68" : 893,
+        "69" : 947,
+        "70" : 943,
+        "71" : 963,
+        "72" : 877,
+        "73" : 821,
+        "74" : 942,
+        "75" : 661,
+        "76" : 797,
+        "77" : 782,
+        "78" : 657,
+        "79" : 788,
+        "80" : 726,
+        "81" : 773,
+        "82" : 794,
+        "83" : 818,
+        "84" : 825,
+        "85" : 846,
+        "86" : 880,
+        "87" : 777,
+        "88" : 714,
+        "89" : 808,
+        "90" : 871,
+        "91" : 306
+      },
+      "MYSQL_EQUAL_PRICE_FASTPATH" : {
+        "0" : 880,
+        "1" : 915,
+        "2" : 911,
+        "3" : 930,
+        "4" : 893,
+        "5" : 973,
+        "6" : 883,
+        "7" : 853,
+        "8" : 894,
+        "9" : 825,
+        "10" : 780,
+        "11" : 938,
+        "12" : 875,
+        "13" : 969,
+        "14" : 906,
+        "15" : 891,
+        "16" : 973,
+        "17" : 925,
+        "18" : 906,
+        "19" : 916,
+        "20" : 877,
+        "21" : 916,
+        "22" : 896,
+        "23" : 936,
+        "24" : 926,
+        "25" : 896,
+        "26" : 896,
+        "27" : 859,
+        "28" : 892,
+        "29" : 493,
+        "30" : 938,
+        "31" : 909,
+        "32" : 925,
+        "33" : 932,
+        "34" : 979,
+        "35" : 881,
+        "36" : 941,
+        "37" : 911,
+        "38" : 923,
+        "39" : 948,
+        "40" : 957,
+        "41" : 862,
+        "42" : 911,
+        "43" : 908,
+        "44" : 901,
+        "45" : 918,
+        "46" : 940,
+        "47" : 945,
+        "48" : 946,
+        "49" : 880,
+        "50" : 859,
+        "51" : 834,
+        "52" : 898,
+        "53" : 940,
+        "54" : 879,
+        "55" : 901,
+        "56" : 859,
+        "57" : 872,
+        "58" : 934,
+        "59" : 851,
+        "60" : 876,
+        "61" : 895,
+        "62" : 895,
+        "63" : 619,
+        "64" : 758,
+        "65" : 821,
+        "66" : 890,
+        "67" : 886,
+        "68" : 904,
+        "69" : 961,
+        "70" : 949,
+        "71" : 976,
+        "72" : 893,
+        "73" : 830,
+        "74" : 959,
+        "75" : 668,
+        "76" : 808,
+        "77" : 791,
+        "78" : 664,
+        "79" : 803,
+        "80" : 737,
+        "81" : 779,
+        "82" : 810,
+        "83" : 826,
+        "84" : 833,
+        "85" : 857,
+        "86" : 892,
+        "87" : 787,
+        "88" : 719,
+        "89" : 814,
+        "90" : 886,
+        "91" : 309
+      }
+    },
+    "fixedRuleStates" : true,
+    "guardSelectorsPerEvent" : 2,
+    "guardUpdatesPerEvent" : 2,
+    "fullFormalPipeline" : false
+  },
+  "maintenance" : {
+    "sql" : {
+      "MAINTENANCE" : {
+        "SETUP" : {
+          "executions" : 8,
+          "rows" : 8,
+          "nanos" : 2883667
+        },
+        "MAINTENANCE_TOKEN_SELECT" : {
+          "executions" : 12,
+          "rows" : 12,
+          "nanos" : 4415625
+        },
+        "MUTATION_RULE_WRITE" : {
+          "executions" : 4,
+          "rows" : 4,
+          "nanos" : 3643124
+        },
+        "RULE_MAINTENANCE_READ" : {
+          "executions" : 4,
+          "rows" : 4,
+          "nanos" : 1653377
+        },
+        "TOKEN_WRITE" : {
+          "executions" : 4,
+          "rows" : 4,
+          "nanos" : 1685666
+        },
+        "RULE_RANGE_IDS" : {
+          "executions" : 6,
+          "rows" : 174,
+          "nanos" : 3554126
+        },
+        "RULE_REBUILD_OR_SCAN" : {
+          "executions" : 2,
+          "rows" : 19998,
+          "nanos" : 21126458
+        }
+      }
+    },
+    "steps" : [ {
+      "rebuilds" : 0,
+      "allRuleSelectsIncludingVerification" : 2,
+      "equal" : true,
+      "action" : "ADD",
+      "elapsedNs" : 18815042
+    }, {
+      "rebuilds" : 0,
+      "allRuleSelectsIncludingVerification" : 2,
+      "equal" : true,
+      "action" : "PAUSE",
+      "elapsedNs" : 5288166
+    }, {
+      "rebuilds" : 0,
+      "allRuleSelectsIncludingVerification" : 2,
+      "equal" : true,
+      "action" : "DELETE",
+      "elapsedNs" : 6160292
+    }, {
+      "rebuilds" : 1,
+      "allRuleSelectsIncludingVerification" : 2,
+      "equal" : true,
+      "action" : "CACHE_MISSING",
+      "elapsedNs" : 35839541
+    }, {
+      "rebuilds" : 1,
+      "allRuleSelectsIncludingVerification" : 3,
+      "equal" : true,
+      "action" : "ROLLBACK_TOKEN_MISMATCH",
+      "elapsedNs" : 35907208
+    }, {
+      "rebuilds" : 0,
+      "allRuleSelectsIncludingVerification" : 1,
+      "equal" : true,
+      "action" : "WARM_RECOVERY",
+      "elapsedNs" : 1451334
+    } ],
+    "note" : "Actual RuleIndex.changed and ThresholdIndex MISS/rebuild; only experimental tables/Redis"
+  },
+  "latency" : [ {
+    "rules" : 1000,
+    "scenario" : "dense-UP",
+    "previous" : "100.0000",
+    "current" : "108.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 214.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 106,
+      "COOLDOWN_BELOW" : 108
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 3542209,
+      "p50Ns" : 2031584,
+      "p95Ns" : 2525958,
+      "meanNs" : 2100445.1666666665
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1706834,
+      "p50Ns" : 893292,
+      "p95Ns" : 1341959,
+      "meanNs" : 943485.1
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1497709,
+      "p50Ns" : 908958,
+      "p95Ns" : 1195417,
+      "meanNs" : 948570.525
+    }
+  }, {
+    "rules" : 1000,
+    "scenario" : "dense-DOWN",
+    "previous" : "100.0000",
+    "current" : "92.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 197.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 94,
+      "COOLDOWN_ABOVE" : 103
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 4578500,
+      "p50Ns" : 2093917,
+      "p95Ns" : 3471791,
+      "meanNs" : 2316315.2583333333
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 3713209,
+      "p50Ns" : 905834,
+      "p95Ns" : 1562250,
+      "meanNs" : 1082866.9833333334
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2101625,
+      "p50Ns" : 758792,
+      "p95Ns" : 1308500,
+      "meanNs" : 842187.8333333334
+    }
+  }, {
+    "rules" : 1000,
+    "scenario" : "medium-UP",
+    "previous" : "100.0000",
+    "current" : "101.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 28.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 15,
+      "COOLDOWN_BELOW" : 13
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 4242000,
+      "p50Ns" : 1932125,
+      "p95Ns" : 2330000,
+      "meanNs" : 2040773.575
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1381584,
+      "p50Ns" : 630292,
+      "p95Ns" : 928084,
+      "meanNs" : 668603.4416666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 986750,
+      "p50Ns" : 473125,
+      "p95Ns" : 705125,
+      "meanNs" : 503081.625
+    }
+  }, {
+    "rules" : 1000,
+    "scenario" : "medium-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 26.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 15,
+      "COOLDOWN_ABOVE" : 11
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 3542709,
+      "p50Ns" : 1979750,
+      "p95Ns" : 2634000,
+      "meanNs" : 2097717.7333333334
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1435792,
+      "p50Ns" : 645458,
+      "p95Ns" : 1095042,
+      "meanNs" : 692828.0916666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1094250,
+      "p50Ns" : 484583,
+      "p95Ns" : 724208,
+      "meanNs" : 521875.375
+    }
+  }, {
+    "rules" : 1000,
+    "scenario" : "sparse-UP",
+    "previous" : "100.0000",
+    "current" : "100.0100",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "COOLDOWN_BELOW" : 1
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 7679333,
+      "p50Ns" : 2625250,
+      "p95Ns" : 5036875,
+      "meanNs" : 2923712.5
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 2852375,
+      "p50Ns" : 941875,
+      "p95Ns" : 1821000,
+      "meanNs" : 1059020.175
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2288791,
+      "p50Ns" : 759833,
+      "p95Ns" : 1442875,
+      "meanNs" : 822488.225
+    }
+  }, {
+    "rules" : 1000,
+    "scenario" : "sparse-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.9900",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 0.0,
+    "mismatches" : 0,
+    "candidateGroups" : { },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 4300625,
+      "p50Ns" : 2262792,
+      "p95Ns" : 3056000,
+      "meanNs" : 2373333.058333333
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1854917,
+      "p50Ns" : 692208,
+      "p95Ns" : 1247708,
+      "meanNs" : 771144.8
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1003541,
+      "p50Ns" : 568625,
+      "p95Ns" : 850292,
+      "meanNs" : 589728.7833333333
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "dense-UP",
+    "previous" : "100.0000",
+    "current" : "108.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1979.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 983,
+      "COOLDOWN_BELOW" : 996
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 19650333,
+      "p50Ns" : 13457958,
+      "p95Ns" : 17616000,
+      "meanNs" : 1.3972714583333334E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 4144750,
+      "p50Ns" : 2347875,
+      "p95Ns" : 3079083,
+      "meanNs" : 2475037.841666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2948500,
+      "p50Ns" : 1643042,
+      "p95Ns" : 2037625,
+      "meanNs" : 1677039.9583333333
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "dense-DOWN",
+    "previous" : "100.0000",
+    "current" : "92.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 2019.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 1008,
+      "COOLDOWN_ABOVE" : 1011
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 19026500,
+      "p50Ns" : 12760583,
+      "p95Ns" : 17664792,
+      "meanNs" : 1.3387316625E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 4041000,
+      "p50Ns" : 2342708,
+      "p95Ns" : 2957000,
+      "meanNs" : 2479422.9
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2176292,
+      "p50Ns" : 1578417,
+      "p95Ns" : 2030083,
+      "meanNs" : 1633771.8833333333
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "medium-UP",
+    "previous" : "100.0000",
+    "current" : "101.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 245.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 117,
+      "COOLDOWN_BELOW" : 128
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 16784500,
+      "p50Ns" : 13635167,
+      "p95Ns" : 15064792,
+      "meanNs" : 1.3454991033333333E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1586042,
+      "p50Ns" : 926958,
+      "p95Ns" : 1324125,
+      "meanNs" : 975964.8916666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1717375,
+      "p50Ns" : 713666,
+      "p95Ns" : 1048625,
+      "meanNs" : 760311.7416666667
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "medium-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 239.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 124,
+      "COOLDOWN_ABOVE" : 115
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 20052458,
+      "p50Ns" : 13946333,
+      "p95Ns" : 17971458,
+      "meanNs" : 1.4251181233333332E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1947875,
+      "p50Ns" : 947125,
+      "p95Ns" : 1479458,
+      "meanNs" : 993796.5333333333
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1461250,
+      "p50Ns" : 697791,
+      "p95Ns" : 1014416,
+      "meanNs" : 748991.95
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "sparse-UP",
+    "previous" : "100.0000",
+    "current" : "100.0100",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 1
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 21551250,
+      "p50Ns" : 15630209,
+      "p95Ns" : 19902208,
+      "meanNs" : 1.60854948E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1369084,
+      "p50Ns" : 831208,
+      "p95Ns" : 1213125,
+      "meanNs" : 864297.9083333333
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1109375,
+      "p50Ns" : 659958,
+      "p95Ns" : 988583,
+      "meanNs" : 710706.6333333333
+    }
+  }, {
+    "rules" : 10000,
+    "scenario" : "sparse-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.9900",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "COOLDOWN_ABOVE" : 1
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 21017250,
+      "p50Ns" : 15327500,
+      "p95Ns" : 19514291,
+      "meanNs" : 1.570562325E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1910708,
+      "p50Ns" : 834917,
+      "p95Ns" : 1316792,
+      "meanNs" : 936176.3416666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1861417,
+      "p50Ns" : 673625,
+      "p95Ns" : 1023375,
+      "meanNs" : 731586.425
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "dense-UP",
+    "previous" : "100.0000",
+    "current" : "108.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 9890.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 4917,
+      "COOLDOWN_BELOW" : 4973
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 102704584,
+      "p50Ns" : 59609583,
+      "p95Ns" : 95304333,
+      "meanNs" : 6.532290415833333E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 16262375,
+      "p50Ns" : 9103750,
+      "p95Ns" : 14014542,
+      "meanNs" : 9885225.958333334
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 11193875,
+      "p50Ns" : 6578583,
+      "p95Ns" : 9920542,
+      "meanNs" : 7125112.1
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "dense-DOWN",
+    "previous" : "100.0000",
+    "current" : "92.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 9969.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 4973,
+      "COOLDOWN_ABOVE" : 4996
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 98974750,
+      "p50Ns" : 71086292,
+      "p95Ns" : 93145208,
+      "meanNs" : 7.2983940975E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 16418709,
+      "p50Ns" : 10519292,
+      "p95Ns" : 13335791,
+      "meanNs" : 1.0837848591666667E7
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 12197333,
+      "p50Ns" : 7614791,
+      "p95Ns" : 9550208,
+      "meanNs" : 7733318.716666667
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "medium-UP",
+    "previous" : "100.0000",
+    "current" : "101.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1232.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 619,
+      "COOLDOWN_BELOW" : 613
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 93660041,
+      "p50Ns" : 69045250,
+      "p95Ns" : 83054416,
+      "meanNs" : 7.0024300375E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 2874542,
+      "p50Ns" : 2000958,
+      "p95Ns" : 2418541,
+      "meanNs" : 2049505.1833333333
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2451958,
+      "p50Ns" : 1523500,
+      "p95Ns" : 2038459,
+      "meanNs" : 1534353.7666666666
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "medium-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.0000",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 1211.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 614,
+      "COOLDOWN_ABOVE" : 597
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 91965333,
+      "p50Ns" : 69301542,
+      "p95Ns" : 89377834,
+      "meanNs" : 7.1115548275E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 2517750,
+      "p50Ns" : 2017125,
+      "p95Ns" : 2387792,
+      "meanNs" : 2028397.9083333334
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 2471542,
+      "p50Ns" : 1476000,
+      "p95Ns" : 1856083,
+      "meanNs" : 1509629.1333333333
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "sparse-UP",
+    "previous" : "100.0000",
+    "current" : "100.0100",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 16.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_ABOVE" : 9,
+      "COOLDOWN_BELOW" : 7
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 86269709,
+      "p50Ns" : 68994833,
+      "p95Ns" : 82716459,
+      "meanNs" : 7.094293955833334E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1447125,
+      "p50Ns" : 966209,
+      "p95Ns" : 1323875,
+      "meanNs" : 954938.5416666666
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1112584,
+      "p50Ns" : 725167,
+      "p95Ns" : 940000,
+      "meanNs" : 730439.25
+    }
+  }, {
+    "rules" : 50000,
+    "scenario" : "sparse-DOWN",
+    "previous" : "100.0000",
+    "current" : "99.9900",
+    "samples" : 120,
+    "warmup" : 30,
+    "averageCandidates" : 10.0,
+    "mismatches" : 0,
+    "candidateGroups" : {
+      "ACTIVE_BELOW" : 3,
+      "COOLDOWN_ABOVE" : 7
+    },
+    "MYSQL_FULL_JAVA" : {
+      "p99Ns" : 101908500,
+      "p50Ns" : 67932709,
+      "p95Ns" : 81666416,
+      "meanNs" : 6.972043819166666E7
+    },
+    "MYSQL_BTREE_IDS" : {
+      "p99Ns" : 1470375,
+      "p50Ns" : 947625,
+      "p95Ns" : 1236250,
+      "meanNs" : 935217.3666666667
+    },
+    "PRODUCTION_REDIS_IDS" : {
+      "p99Ns" : 1493292,
+      "p50Ns" : 712709,
+      "p95Ns" : 933500,
+      "meanNs" : 715514.8916666667
+    }
+  } ],
+  "builds" : [ {
+    "nanos" : 15022583,
+    "kind" : "MYSQL_INDEX_trigger",
+    "rules" : 1000
+  }, {
+    "nanos" : 13625542,
+    "kind" : "MYSQL_INDEX_rearm",
+    "rules" : 1000
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 0,
+    "rules" : 1000,
+    "nanos" : 62650458,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 1,
+    "rules" : 1000,
+    "nanos" : 8534084,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 2,
+    "rules" : 1000,
+    "nanos" : 8732459,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "rules" : 1000,
+    "redisKeyBytes" : 84291,
+    "mysql" : [ {
+      "DATA_LENGTH" : 98304,
+      "INDEX_LENGTH" : 131072
+    } ],
+    "kind" : "STORAGE"
+  }, {
+    "nanos" : 33768291,
+    "kind" : "MYSQL_INDEX_trigger",
+    "rules" : 10000
+  }, {
+    "nanos" : 34825209,
+    "kind" : "MYSQL_INDEX_rearm",
+    "rules" : 10000
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 0,
+    "rules" : 10000,
+    "nanos" : 54819208,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 1,
+    "rules" : 10000,
+    "nanos" : 31082416,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 2,
+    "rules" : 10000,
+    "nanos" : 29591041,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "rules" : 10000,
+    "redisKeyBytes" : 949507,
+    "mysql" : [ {
+      "DATA_LENGTH" : 1589248,
+      "INDEX_LENGTH" : 950272
+    } ],
+    "kind" : "STORAGE"
+  }, {
+    "nanos" : 211382417,
+    "kind" : "MYSQL_INDEX_trigger",
+    "rules" : 50000
+  }, {
+    "nanos" : 188231958,
+    "kind" : "MYSQL_INDEX_rearm",
+    "rules" : 50000
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 0,
+    "rules" : 50000,
+    "nanos" : 180546250,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 1,
+    "rules" : 50000,
+    "nanos" : 158928959,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 2,
+    "rules" : 50000,
+    "nanos" : 156968125,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "rules" : 50000,
+    "redisKeyBytes" : 4285187,
+    "mysql" : [ {
+      "DATA_LENGTH" : 3686400,
+      "INDEX_LENGTH" : 5275648
+    } ],
+    "kind" : "STORAGE"
+  }, {
+    "nanos" : 35212791,
+    "kind" : "MYSQL_INDEX_trigger",
+    "rules" : 10000
+  }, {
+    "nanos" : 29495333,
+    "kind" : "MYSQL_INDEX_rearm",
+    "rules" : 10000
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 0,
+    "rules" : 10000,
+    "nanos" : 38696166,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 1,
+    "rules" : 10000,
+    "nanos" : 32471708,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 2,
+    "rules" : 10000,
+    "nanos" : 29164000,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "rules" : 10000,
+    "redisKeyBytes" : 949507,
+    "mysql" : [ {
+      "DATA_LENGTH" : 1589248,
+      "INDEX_LENGTH" : 950272
+    } ],
+    "kind" : "STORAGE"
+  }, {
+    "nanos" : 52407625,
+    "kind" : "MYSQL_INDEX_trigger",
+    "rules" : 10000
+  }, {
+    "nanos" : 36675625,
+    "kind" : "MYSQL_INDEX_rearm",
+    "rules" : 10000
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 0,
+    "rules" : 10000,
+    "nanos" : 39588000,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 1,
+    "rules" : 10000,
+    "nanos" : 44578625,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "kind" : "REDIS_COLD_WITH_DB_LOAD",
+    "sample" : 2,
+    "rules" : 10000,
+    "nanos" : 36850375,
+    "rebuilds" : 1,
+    "ruleSelects" : 1
+  }, {
+    "rules" : 10000,
+    "redisKeyBytes" : 1029515,
+    "mysql" : [ {
+      "DATA_LENGTH" : 1589248,
+      "INDEX_LENGTH" : 950272
+    } ],
+    "kind" : "STORAGE"
+  } ],
+  "plans" : [ {
+    "rules" : 1000,
+    "scenario" : "dense-UP",
+    "idPlan" : "-> Append  (cost=46.7 rows=214) (actual time=0.0351..0.183 rows=214 loops=1)\n    -> Stream results  (cost=23.2 rows=106) (actual time=0.0214..0.0909 rows=106 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=23.2 rows=106) (actual time=0.0197..0.083 rows=106 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=23.2 rows=106) (actual time=0.018..0.0575 rows=106 loops=1)\n    -> Stream results  (cost=23.6 rows=108) (actual time=0.0125..0.068 rows=108 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=23.6 rows=108) (actual time=0.0122..0.0615 rows=108 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=23.6 rows=108) (actual time=0.0118..0.0367 rows=108 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=14.6 rows=55.5) (actual time=0.128..0.518 rows=214 loops=1)\n    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.127..0.253 rows=106 loops=1)\n        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=7.28 rows=27.8) (actual time=0.126..0.234 rows=106 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=7.28 rows=250) (actual time=0.0367..0.212 rows=250 loops=1)\n    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.127..0.254 rows=108 loops=1)\n        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=7.28 rows=27.8) (actual time=0.126..0.236 rows=108 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=7.28 rows=250) (actual time=0.0277..0.215 rows=250 loops=1)\n"
+  }, {
+    "rules" : 1000,
+    "scenario" : "dense-DOWN",
+    "idPlan" : "-> Append  (cost=43.1 rows=197) (actual time=0.0258..0.199 rows=197 loops=1)\n    -> Stream results  (cost=20.6 rows=94) (actual time=0.0252..0.0931 rows=94 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=20.6 rows=94) (actual time=0.0233..0.0835 rows=94 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=20.6 rows=94) (actual time=0.0209..0.0522 rows=94 loops=1)\n    -> Stream results  (cost=22.5 rows=103) (actual time=0.0154..0.0909 rows=103 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=22.5 rows=103) (actual time=0.0151..0.0821 rows=103 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=22.5 rows=103) (actual time=0.0145..0.0477 rows=103 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=14.6 rows=55.5) (actual time=0.0684..0.818 rows=197 loops=1)\n    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.0679..0.386 rows=94 loops=1)\n        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=7.28 rows=27.8) (actual time=0.064..0.358 rows=94 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=7.28 rows=250) (actual time=0.055..0.319 rows=250 loops=1)\n    -> Stream results  (cost=7.28 rows=27.8) (actual time=0.0582..0.415 rows=103 loops=1)\n        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=7.28 rows=27.8) (actual time=0.0563..0.388 rows=103 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=7.28 rows=250) (actual time=0.0505..0.318 rows=250 loops=1)\n"
+  }, {
+    "rules" : 1000,
+    "scenario" : "medium-UP",
+    "idPlan" : "-> Append  (cost=7.42 rows=28) (actual time=0.0196..0.0514 rows=28 loops=1)\n    -> Stream results  (cost=3.92 rows=15) (actual time=0.019..0.029 rows=15 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=3.92 rows=15) (actual time=0.0175..0.026 rows=15 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=3.92 rows=15) (actual time=0.0154..0.0183 rows=15 loops=1)\n    -> Stream results  (cost=3.5 rows=13) (actual time=0.011..0.0188 rows=13 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=3.5 rows=13) (actual time=0.0106..0.0173 rows=13 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=3.5 rows=13) (actual time=0.01..0.0117 rows=13 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=13.1 rows=28) (actual time=0.05..0.0995 rows=28 loops=1)\n    -> Stream results  (cost=7.01 rows=15) (actual time=0.0496..0.0578 rows=15 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=7.01 rows=15) (actual time=0.0467..0.0506 rows=15 loops=1)\n    -> Stream results  (cost=6.11 rows=13) (actual time=0.0303..0.038 rows=13 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=6.11 rows=13) (actual time=0.0293..0.0331 rows=13 loops=1)\n"
+  }, {
+    "rules" : 1000,
+    "scenario" : "medium-DOWN",
+    "idPlan" : "-> Append  (cost=6.99 rows=26) (actual time=0.0162..0.0411 rows=26 loops=1)\n    -> Stream results  (cost=3.92 rows=15) (actual time=0.0155..0.024 rows=15 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=3.92 rows=15) (actual time=0.014..0.0212 rows=15 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=3.92 rows=15) (actual time=0.0122..0.0143 rows=15 loops=1)\n    -> Stream results  (cost=3.07 rows=11) (actual time=0.00817..0.0138 rows=11 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=3.07 rows=11) (actual time=0.00788..0.0126 rows=11 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=3.07 rows=11) (actual time=0.00733..0.00854 rows=11 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=12.2 rows=26) (actual time=0.0398..0.0752 rows=26 loops=1)\n    -> Stream results  (cost=7.01 rows=15) (actual time=0.0395..0.0462 rows=15 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=7.01 rows=15) (actual time=0.037..0.0399 rows=15 loops=1)\n    -> Stream results  (cost=5.21 rows=11) (actual time=0.0218..0.0262 rows=11 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=5.21 rows=11) (actual time=0.0209..0.0227 rows=11 loops=1)\n"
+  }, {
+    "rules" : 1000,
+    "scenario" : "sparse-UP",
+    "idPlan" : "-> Append  (cost=1.92 rows=2) (actual time=0.0138..0.0176 rows=1 loops=1)\n    -> Stream results  (cost=0.96 rows=1) (actual time=0.00762..0.00762 rows=0 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.96 rows=1) (actual time=0.00671..0.00671 rows=0 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=0.96 rows=1) (actual time=0.00625..0.00625 rows=0 loops=1)\n    -> Stream results  (cost=0.96 rows=1) (actual time=0.00529..0.00842 rows=1 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.96 rows=1) (actual time=0.00475..0.00775 rows=1 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=0.96 rows=1) (actual time=0.00333..0.00617 rows=1 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=1.42 rows=2) (actual time=0.0198..0.0215 rows=1 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.00788..0.00788 rows=0 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.00746..0.00746 rows=0 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.0114..0.0129 rows=1 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.00933..0.0108 rows=1 loops=1)\n"
+  }, {
+    "rules" : 1000,
+    "scenario" : "sparse-DOWN",
+    "idPlan" : "-> Append  (cost=1.92 rows=2) (actual time=0.0288..0.0288 rows=0 loops=1)\n    -> Stream results  (cost=0.96 rows=1) (actual time=0.0202..0.0202 rows=0 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.96 rows=1) (actual time=0.0183..0.0183 rows=0 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=0.96 rows=1) (actual time=0.0175..0.0175 rows=0 loops=1)\n    -> Stream results  (cost=0.96 rows=1) (actual time=0.00646..0.00646 rows=0 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.96 rows=1) (actual time=0.00596..0.00596 rows=0 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=0.96 rows=1) (actual time=0.00575..0.00575 rows=0 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=1.42 rows=2) (actual time=0.0203..0.0203 rows=0 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.0133..0.0133 rows=0 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.0126..0.0126 rows=0 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.00608..0.00608 rows=0 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00592..0.00592 rows=0 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "dense-UP",
+    "idPlan" : "-> Append  (cost=427 rows=1979) (actual time=0.0475..1.26 rows=1979 loops=1)\n    -> Stream results  (cost=212 rows=983) (actual time=0.0469..0.584 rows=983 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=212 rows=983) (actual time=0.0364..0.51 rows=983 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=212 rows=983) (actual time=0.0335..0.296 rows=983 loops=1)\n    -> Stream results  (cost=215 rows=996) (actual time=0.0284..0.582 rows=996 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=215 rows=996) (actual time=0.028..0.528 rows=996 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=215 rows=996) (actual time=0.0275..0.302 rows=996 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=201 rows=555) (actual time=1.43..6.03 rows=1979 loops=1)\n    -> Stream results  (cost=101 rows=278) (actual time=1.42..3.02 rows=983 loops=1)\n        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=101 rows=278) (actual time=1.42..2.85 rows=983 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=101 rows=2500) (actual time=0.292..2.63 rows=2500 loops=1)\n    -> Stream results  (cost=101 rows=278) (actual time=1.42..2.91 rows=996 loops=1)\n        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=101 rows=278) (actual time=1.41..2.74 rows=996 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=101 rows=2500) (actual time=0.229..2.53 rows=2500 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "dense-DOWN",
+    "idPlan" : "-> Append  (cost=436 rows=2019) (actual time=0.055..1.89 rows=2019 loops=1)\n    -> Stream results  (cost=217 rows=1008) (actual time=0.048..0.862 rows=1008 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=217 rows=1008) (actual time=0.0459..0.78 rows=1008 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=217 rows=1008) (actual time=0.0432..0.449 rows=1008 loops=1)\n    -> Stream results  (cost=218 rows=1011) (actual time=0.0407..0.88 rows=1011 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=218 rows=1011) (actual time=0.0403..0.801 rows=1011 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=218 rows=1011) (actual time=0.0395..0.458 rows=1011 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=201 rows=555) (actual time=0.384..7.12 rows=2019 loops=1)\n    -> Stream results  (cost=101 rows=278) (actual time=0.384..3.6 rows=1008 loops=1)\n        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=101 rows=278) (actual time=0.381..3.37 rows=1008 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=101 rows=2500) (actual time=0.346..3.04 rows=2500 loops=1)\n    -> Stream results  (cost=101 rows=278) (actual time=0.606..3.38 rows=1011 loops=1)\n        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=101 rows=278) (actual time=0.605..3.15 rows=1011 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=101 rows=2500) (actual time=0.282..2.84 rows=2500 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "medium-UP",
+    "idPlan" : "-> Append  (cost=54.5 rows=245) (actual time=0.0305..0.253 rows=245 loops=1)\n    -> Stream results  (cost=26.1 rows=117) (actual time=0.0298..0.118 rows=117 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=26.1 rows=117) (actual time=0.0281..0.107 rows=117 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=26.1 rows=117) (actual time=0.0251..0.0662 rows=117 loops=1)\n    -> Stream results  (cost=28.5 rows=128) (actual time=0.0159..0.116 rows=128 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=28.5 rows=128) (actual time=0.0156..0.105 rows=128 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=28.5 rows=128) (actual time=0.0151..0.0615 rows=128 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=111 rows=245) (actual time=0.173..1.19 rows=245 loops=1)\n    -> Stream results  (cost=52.9 rows=117) (actual time=0.173..0.552 rows=117 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=52.9 rows=117) (actual time=0.167..0.505 rows=117 loops=1)\n    -> Stream results  (cost=57.9 rows=128) (actual time=0.143..0.615 rows=128 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=57.9 rows=128) (actual time=0.141..0.555 rows=128 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "medium-DOWN",
+    "idPlan" : "-> Append  (cost=53.3 rows=239) (actual time=0.0242..0.237 rows=239 loops=1)\n    -> Stream results  (cost=27.6 rows=124) (actual time=0.0235..0.116 rows=124 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=27.6 rows=124) (actual time=0.0216..0.104 rows=124 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=27.6 rows=124) (actual time=0.0193..0.062 rows=124 loops=1)\n    -> Stream results  (cost=25.7 rows=115) (actual time=0.0155..0.103 rows=115 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=25.7 rows=115) (actual time=0.0152..0.0935 rows=115 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=25.7 rows=115) (actual time=0.0146..0.0538 rows=115 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=108 rows=239) (actual time=0.0778..0.55 rows=239 loops=1)\n    -> Stream results  (cost=56.1 rows=124) (actual time=0.0774..0.292 rows=124 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=56.1 rows=124) (actual time=0.0752..0.26 rows=124 loops=1)\n    -> Stream results  (cost=52 rows=115) (actual time=0.061..0.24 rows=115 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=52 rows=115) (actual time=0.0601..0.212 rows=115 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "sparse-UP",
+    "idPlan" : "-> Append  (cost=2.37 rows=2) (actual time=0.0124..0.0183 rows=1 loops=1)\n    -> Stream results  (cost=1.18 rows=1) (actual time=0.0118..0.0135 rows=1 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=1.18 rows=1) (actual time=0.0103..0.0118 rows=1 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=1.18 rows=1) (actual time=0.00817..0.00962 rows=1 loops=1)\n    -> Stream results  (cost=1.18 rows=1) (actual time=0.00358..0.00358 rows=0 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=1.18 rows=1) (actual time=0.00342..0.00342 rows=0 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=1.18 rows=1) (actual time=0.00325..0.00325 rows=0 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=1.42 rows=2) (actual time=0.0128..0.0183 rows=1 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.0126..0.0141 rows=1 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.0108..0.0121 rows=1 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.00371..0.00371 rows=0 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=0.71 rows=1) (actual time=0.0035..0.0035 rows=0 loops=1)\n"
+  }, {
+    "rules" : 10000,
+    "scenario" : "sparse-DOWN",
+    "idPlan" : "-> Append  (cost=2.37 rows=2) (actual time=0.0247..0.0265 rows=1 loops=1)\n    -> Stream results  (cost=1.18 rows=1) (actual time=0.0141..0.0141 rows=0 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.18 rows=1) (actual time=0.0131..0.0131 rows=0 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=1.18 rows=1) (actual time=0.0125..0.0125 rows=0 loops=1)\n    -> Stream results  (cost=1.18 rows=1) (actual time=0.00908..0.0107 rows=1 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=1.18 rows=1) (actual time=0.00779..0.00937 rows=1 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=1.18 rows=1) (actual time=0.00479..0.00629 rows=1 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=1.42 rows=2) (actual time=0.0216..0.0231 rows=1 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.00925..0.00925 rows=0 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00888..0.00888 rows=0 loops=1)\n    -> Stream results  (cost=0.71 rows=1) (actual time=0.0116..0.0129 rows=1 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=0.71 rows=1) (actual time=0.00954..0.0108 rows=1 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "dense-UP",
+    "idPlan" : "-> Append  (cost=3900 rows=18116) (actual time=0.357..8.5 rows=9890 loops=1)\n    -> Stream results  (cost=1916 rows=8902) (actual time=0.353..4.6 rows=4917 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=1916 rows=8902) (actual time=0.341..4.11 rows=4917 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 108.0000)  (cost=1916 rows=8902) (actual time=0.337..2.29 rows=4917 loops=1)\n    -> Stream results  (cost=1983 rows=9214) (actual time=0.222..3.28 rows=4973 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=1983 rows=9214) (actual time=0.221..2.97 rows=4973 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 108.0000)  (cost=1983 rows=9214) (actual time=0.22..1.79 rows=4973 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=885 rows=5474) (actual time=7.11..29.4 rows=9890 loops=1)\n    -> Stream results  (cost=446 rows=2774) (actual time=7.11..14.3 rows=4917 loops=1)\n        -> Filter: ((explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 108.0000))  (cost=446 rows=2774) (actual time=7.11..13.5 rows=4917 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='ABOVE')  (cost=446 rows=24970) (actual time=1.09..12.5 rows=12500 loops=1)\n    -> Stream results  (cost=439 rows=2700) (actual time=6.16..14.6 rows=4973 loops=1)\n        -> Filter: ((explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 108.0000))  (cost=439 rows=2700) (actual time=6.16..13.8 rows=4973 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='BELOW')  (cost=439 rows=24302) (actual time=0.873..12.8 rows=12500 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "dense-DOWN",
+    "idPlan" : "-> Append  (cost=3942 rows=18314) (actual time=0.421..12.2 rows=9969 loops=1)\n    -> Stream results  (cost=1947 rows=9044) (actual time=0.42..5.56 rows=4973 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=1947 rows=9044) (actual time=0.417..5.08 rows=4973 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 92.0000 <= threshold_price < 100.0000)  (cost=1947 rows=9044) (actual time=0.412..3.03 rows=4973 loops=1)\n    -> Stream results  (cost=1995 rows=9270) (actual time=0.421..5.81 rows=4996 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=1995 rows=9270) (actual time=0.419..5.32 rows=4996 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 92.0000 <= rearm_price < 100.0000)  (cost=1995 rows=9270) (actual time=0.416..3.18 rows=4996 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=868 rows=5300) (actual time=4.48..65.3 rows=9969 loops=1)\n    -> Stream results  (cost=429 rows=2601) (actual time=4.48..31.9 rows=4973 loops=1)\n        -> Filter: ((explain_rules.threshold_price >= 92.0000) and (explain_rules.threshold_price < 100.0000))  (cost=429 rows=2601) (actual time=4.47..30.6 rows=4973 loops=1)\n            -> Index lookup on explain_rules using idx_bench_rearm (stock_id=1, status='ACTIVE', direction='BELOW')  (cost=429 rows=23410) (actual time=2.24..28.5 rows=12500 loops=1)\n    -> Stream results  (cost=439 rows=2700) (actual time=3.46..32.6 rows=4996 loops=1)\n        -> Filter: ((explain_rules.rearm_price >= 92.0000) and (explain_rules.rearm_price < 100.0000))  (cost=439 rows=2700) (actual time=3.45..31.2 rows=4996 loops=1)\n            -> Index lookup on explain_rules using idx_bench_trigger (stock_id=1, status='COOLDOWN', direction='ABOVE')  (cost=439 rows=24302) (actual time=1.72..29.2 rows=12500 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "medium-UP",
+    "idPlan" : "-> Append  (cost=267 rows=1232) (actual time=0.0431..1.02 rows=1232 loops=1)\n    -> Stream results  (cost=134 rows=619) (actual time=0.0387..0.484 rows=619 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=134 rows=619) (actual time=0.0338..0.43 rows=619 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000)  (cost=134 rows=619) (actual time=0.031..0.239 rows=619 loops=1)\n    -> Stream results  (cost=133 rows=613) (actual time=0.0292..0.46 rows=613 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=133 rows=613) (actual time=0.0281..0.416 rows=613 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000)  (cost=133 rows=613) (actual time=0.0271..0.228 rows=613 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=555 rows=1232) (actual time=0.182..2.79 rows=1232 loops=1)\n    -> Stream results  (cost=279 rows=619) (actual time=0.182..1.39 rows=619 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 101.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 101.0000))  (cost=279 rows=619) (actual time=0.179..1.27 rows=619 loops=1)\n    -> Stream results  (cost=276 rows=613) (actual time=0.107..1.32 rows=613 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 101.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 101.0000))  (cost=276 rows=613) (actual time=0.106..1.19 rows=613 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "medium-DOWN",
+    "idPlan" : "-> Append  (cost=263 rows=1211) (actual time=0.0349..0.973 rows=1211 loops=1)\n    -> Stream results  (cost=133 rows=614) (actual time=0.0342..0.467 rows=614 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=133 rows=614) (actual time=0.0318..0.422 rows=614 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000)  (cost=133 rows=614) (actual time=0.0287..0.254 rows=614 loops=1)\n    -> Stream results  (cost=129 rows=597) (actual time=0.0224..0.429 rows=597 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=129 rows=597) (actual time=0.022..0.388 rows=597 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000)  (cost=129 rows=597) (actual time=0.0214..0.22 rows=597 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=545 rows=1211) (actual time=0.173..2.46 rows=1211 loops=1)\n    -> Stream results  (cost=277 rows=614) (actual time=0.173..1.29 rows=614 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.0000 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.0000) and (explain_rules.threshold_price < 100.0000))  (cost=277 rows=614) (actual time=0.17..1.17 rows=614 loops=1)\n    -> Stream results  (cost=269 rows=597) (actual time=0.101..1.09 rows=597 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.0000 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.0000) and (explain_rules.rearm_price < 100.0000))  (cost=269 rows=597) (actual time=0.0999..0.971 rows=597 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "sparse-UP",
+    "idPlan" : "-> Append  (cost=5.43 rows=16) (actual time=0.0207..0.0378 rows=16 loops=1)\n    -> Stream results  (cost=2.93 rows=9) (actual time=0.0199..0.0252 rows=9 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=2.93 rows=9) (actual time=0.018..0.0227 rows=9 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100)  (cost=2.93 rows=9) (actual time=0.0152..0.0172 rows=9 loops=1)\n    -> Stream results  (cost=2.5 rows=7) (actual time=0.00667..0.00975 rows=7 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=2.5 rows=7) (actual time=0.0065..0.00908 rows=7 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100)  (cost=2.5 rows=7) (actual time=0.006..0.00675 rows=7 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=7.72 rows=16) (actual time=0.0519..0.0855 rows=16 loops=1)\n    -> Stream results  (cost=4.31 rows=9) (actual time=0.0515..0.0559 rows=9 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'ABOVE' AND 100.0000 < threshold_price <= 100.0100), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price > 100.0000) and (explain_rules.threshold_price <= 100.0100))  (cost=4.31 rows=9) (actual time=0.0495..0.0518 rows=9 loops=1)\n    -> Stream results  (cost=3.41 rows=7) (actual time=0.0252..0.0277 rows=7 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'BELOW' AND 100.0000 < rearm_price <= 100.0100), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price > 100.0000) and (explain_rules.rearm_price <= 100.0100))  (cost=3.41 rows=7) (actual time=0.0245..0.0258 rows=7 loops=1)\n"
+  }, {
+    "rules" : 50000,
+    "scenario" : "sparse-DOWN",
+    "idPlan" : "-> Append  (cost=4.14 rows=10) (actual time=0.0294..0.0454 rows=10 loops=1)\n    -> Stream results  (cost=1.64 rows=3) (actual time=0.0254..0.028 rows=3 loops=1)\n        -> Filter: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.64 rows=3) (actual time=0.0192..0.0214 rows=3 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000)  (cost=1.64 rows=3) (actual time=0.016..0.0172 rows=3 loops=1)\n    -> Stream results  (cost=2.5 rows=7) (actual time=0.00838..0.012 rows=7 loops=1)\n        -> Filter: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=2.5 rows=7) (actual time=0.008..0.011 rows=7 loops=1)\n            -> Covering index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000)  (cost=2.5 rows=7) (actual time=0.00737..0.00812 rows=7 loops=1)\n",
+    "hydrationPlan" : "-> Append  (cost=5.02 rows=10) (actual time=0.0232..0.0536 rows=10 loops=1)\n    -> Stream results  (cost=1.61 rows=3) (actual time=0.0229..0.0253 rows=3 loops=1)\n        -> Index range scan on explain_rules using idx_bench_trigger over (stock_id = 1 AND status = 'ACTIVE' AND direction = 'BELOW' AND 99.9900 <= threshold_price < 100.0000), with index condition: ((explain_rules.direction = 'BELOW') and (explain_rules.`status` = 'ACTIVE') and (explain_rules.stock_id = 1) and (explain_rules.threshold_price >= 99.9900) and (explain_rules.threshold_price < 100.0000))  (cost=1.61 rows=3) (actual time=0.0209..0.0225 rows=3 loops=1)\n    -> Stream results  (cost=3.41 rows=7) (actual time=0.0242..0.027 rows=7 loops=1)\n        -> Index range scan on explain_rules using idx_bench_rearm over (stock_id = 1 AND status = 'COOLDOWN' AND direction = 'ABOVE' AND 99.9900 <= rearm_price < 100.0000), with index condition: ((explain_rules.direction = 'ABOVE') and (explain_rules.`status` = 'COOLDOWN') and (explain_rules.stock_id = 1) and (explain_rules.rearm_price >= 99.9900) and (explain_rules.rearm_price < 100.0000))  (cost=3.41 rows=7) (actual time=0.0235..0.0248 rows=7 loops=1)\n"
+  } ],
+  "elapsedSeconds" : 1046.245005541,
+  "finishedAtUtc" : "2026-10-30T15:18:10.806834Z"
+}
