@@ -134,8 +134,7 @@ public class QuoteIngestionService {
             if (cause instanceof SQLException sql) {
                 String message = sql.getMessage();
                 return sql.getErrorCode() == 1062 && "23000".equals(sql.getSQLState()) && message != null
-                        && (message.endsWith("for key 'quote_events.uk_quote_events_event_key'")
-                            || message.endsWith("for key 'uk_quote_events_event_key'"));
+                        && message.endsWith("for key 'quote_events.uk_quote_events_event_key'");
             }
         }
         return false;

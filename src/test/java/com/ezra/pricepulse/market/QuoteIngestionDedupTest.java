@@ -39,7 +39,7 @@ class QuoteIngestionDedupTest {
         assertThat(service.ingest(input,QuoteIngestionPolicy.LIVE).outcome()).isEqualTo(QuoteOutcome.PROCESSED);
         verify(events,never()).findByEventKey(any());
     }
-    @ParameterizedTest @ValueSource(strings={"uk_quote_events_event_key","quote_events.uk_quote_events_event_key"})
+    @ParameterizedTest @ValueSource(strings={"quote_events.uk_quote_events_event_key"})
     void expectedConstraintReadsAndChecksTheExistingPayload(String key){
         doThrow(duplicate(key)).when(events).insert(any());when(events.findByEventKey("identity")).thenReturn(stored());
         assertThat(service.ingest(input,QuoteIngestionPolicy.LIVE).outcome()).isEqualTo(QuoteOutcome.DUPLICATE);
@@ -52,7 +52,7 @@ class QuoteIngestionDedupTest {
         assertThatThrownBy(()->service.ingest(input,QuoteIngestionPolicy.LIVE)).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.errorCode()).isEqualTo(ErrorCode.CONFLICT));
         verifyNoInteractions(evaluation,data);
     }
-    @ParameterizedTest @ValueSource(strings={"PRIMARY","quote_events.other_unique","other_table.uk_quote_events_event_key"})
+    @ParameterizedTest @ValueSource(strings={"PRIMARY","quote_events.other_unique","other_table.uk_quote_events_event_key","uk_quote_events_event_key"})
     void otherConstraintsAreNotHiddenEvenIfAMatchingEventCouldBeRead(String key){
         var failure=duplicate(key);doThrow(failure).when(events).insert(any());
         assertThatThrownBy(()->service.ingest(input,QuoteIngestionPolicy.LIVE)).isSameAs(failure);
