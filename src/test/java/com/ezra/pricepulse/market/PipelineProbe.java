@@ -24,7 +24,7 @@ final class PipelineProbe {
             "trade_processing_lag", "connection_acquire");
     static final class Sample implements QuoteTiming.Sink {
         final String key; final int stock, number; final boolean measured; final long receivedNanos, scheduledNanos;
-        final Map<String, Long> phases = new HashMap<>(), sqlCounts = new TreeMap<>(), sqlNanos = new TreeMap<>();
+        final Map<String, Long> phases = new HashMap<>(), sqlCounts = new TreeMap<>(), sqlNanos = new TreeMap<>(), sqlErrors = new TreeMap<>();
         long enqueuedNanos, startedNanos, completedNanos; volatile String discarded;
         AlpacaProtocol.Trade trade; java.time.Instant wallReceivedAt;
         List<Long> candidateIds=List.of();
@@ -92,7 +92,12 @@ final class PipelineProbe {
         String kind=operation+":"+table;
         return (PreparedStatement)Proxy.newProxyInstance(PipelineProbe.class.getClassLoader(),new Class<?>[]{PreparedStatement.class},(p,m,a)->{
             long start=System.nanoTime();
-            try{return m.invoke(actual,a);}catch(InvocationTargetException e){throw e.getCause();}
+            try{return m.invoke(actual,a);}catch(InvocationTargetException e){
+                Sample sample=CURRENT.get();
+                if(sample!=null&&sample.measured&&m.getName().startsWith("execute")&&e.getCause() instanceof SQLException sqlError)
+                    sample.sqlErrors.merge(kind+"|"+sqlError.getErrorCode()+"|"+sqlError.getSQLState(),1L,Long::sum);
+                throw e.getCause();
+            }
             finally{
                 Sample s=CURRENT.get();
                 if(s!=null && s.measured && m.getName().startsWith("execute"))s.sql(kind,System.nanoTime()-start);

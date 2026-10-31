@@ -37,7 +37,7 @@ public final class RealPipelineExperiment {
     static final long SEED=2026103101L;
     static final Instant EVENT_ORIGIN=Instant.parse("2026-10-30T14:00:00Z");
     static final int CAPACITY=1024;
-    enum Scenario { ZERO_RULES, ZERO_HIT, FEW_HIT, BURST_100, BURST_500, BURST_1000 }
+    enum Scenario { ZERO_RULES, ZERO_HIT, FEW_HIT, MIXED_DUPLICATES, BURST_100, BURST_500, BURST_1000 }
     record Case(String id,Scenario scenario,int stocks,int rate,int seconds,int repeat) { }
     final ObjectMapper json=new ObjectMapper().findAndRegisterModules();
     final Path output; final String suite,path; final int seconds,warmup,repeats,rules,hitRules;final long seed;
@@ -66,7 +66,7 @@ public final class RealPipelineExperiment {
         String instrumentation=options.getOrDefault("instrumentation","full");if(!Set.of("full","boundary").contains(instrumentation))throw new IllegalArgumentException("Unknown instrumentation");PipelineProbe.detailed=instrumentation.equals("full");
         PipelineProbe.captureCandidateIds=Boolean.parseBoolean(options.getOrDefault("capture-candidates","false"));
         if(PipelineProbe.captureCandidateIds&&!PipelineProbe.detailed)throw new IllegalArgumentException("Candidate identity collection needs full instrumentation");
-        if(!Set.of("smoke","baseline","sustain","correctness").contains(suite)||seconds<1||seconds>180||warmup<1||warmup>30||repeats<1||repeats>5||rules<1000||rules>10000)throw new IllegalArgumentException("Out of bounded test scope");
+        if(!Set.of("smoke","baseline","sustain","correctness","dedup-correctness","dedup-benchmark").contains(suite)||seconds<1||seconds>180||warmup<1||warmup>30||repeats<1||repeats>5||rules<1000||rules>10000)throw new IllegalArgumentException("Out of bounded test scope");
         if(hitRules<1||hitRules>rules||!Set.of("mixed","flat","oscillate").contains(path)||Arrays.stream(rates).anyMatch(r->r<1||r>2000)||Arrays.stream(stockCounts).anyMatch(n->n!=1&&n!=5&&n!=15)||1L*Arrays.stream(rates).max().orElse(0)*Arrays.stream(stockCounts).max().orElse(0)*seconds>300000)throw new IllegalArgumentException("Bounded injection configuration required");
         Files.createDirectories(output);
     }
@@ -101,15 +101,20 @@ public final class RealPipelineExperiment {
                 environment.put("durationSeconds",seconds);environment.put("warmupSeconds",warmup);environment.put("repeats",repeats);environment.put("rulesPerStock",rules);
                 environment.put("ratesPerStock",rates);environment.put("stockCounts",stockCounts);environment.put("hitRules",hitRules);environment.put("path",path);environment.put("instrumentation",PipelineProbe.detailed?"full":"boundary");
                 environment.put("candidateIdsCaptured",PipelineProbe.captureCandidateIds);environment.put("evaluatorReference",System.getenv().getOrDefault("PP_PIPELINE_EVALUATION_REF","working-tree"));
+                environment.put("ingestionReference",System.getenv().getOrDefault("PP_PIPELINE_INGESTION_REF","working-tree"));
+                environment.put("mysqlLcMessages",jdbc.queryForObject("SELECT @@lc_messages",String.class));
+                environment.put("quoteUniqueIndexes",jdbc.queryForList("SELECT INDEX_NAME,COLUMN_NAME,SEQ_IN_INDEX FROM information_schema.statistics WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quote_events' AND NON_UNIQUE=0 ORDER BY INDEX_NAME,SEQ_IN_INDEX"));
                 environment.put("commit",System.getenv().getOrDefault("PP_PIPELINE_COMMIT","unknown"));environment.put("sources",sourceHashes());
                 environment.put("entry","Real MarketQuoteLane -> transactional production QuoteIngestionService; no Spring application or provider socket");
                 environment.put("eventOrigin",EVENT_ORIGIN.toString());environment.put("measuredOrigin",EVENT_ORIGIN.plusSeconds(warmup+121).toString());
                 save("environment.json",environment);
-                if(suite.equals("correctness"))correctness();
+                if(suite.equals("dedup-correctness")){new InsertFirstCorrectness(this).run();correctness();}
+                else if(suite.equals("correctness"))correctness();
                 else {
                     List<Case> cases=cases();
                     for(Case c:cases){results.add(trial(c));save("summary.json",Map.of("environment",environment,"cases",results,"checks",checks,"complete",false));}
                     if(suite.equals("smoke"))correctness();
+                    if(suite.equals("dedup-benchmark"))new DedupExceptionPerformance(this).run();
                 }
                 save("summary.json",Map.of("environment",environment,"cases",results,"checks",checks,"complete",true,"elapsedSeconds",(System.nanoTime()-began)/1e9));
                 System.out.println("PIPELINE_COMPLETE cases="+results.size()+" checks="+checks.size()+" seconds="+(System.nanoTime()-began)/1e9);
@@ -168,7 +173,7 @@ public final class RealPipelineExperiment {
                 for(int r=0;r<total;r++){
                     boolean special=r<target,above=r%2==0;String status=r%4<2?"ACTIVE":"COOLDOWN";
                     BigDecimal threshold=above?money("200"):money("50"),rearm=above?money("80"):money("120");String mode="REPEAT";
-                    if(scenario==Scenario.FEW_HIT&&special){threshold=above?money("100.05"):money("99.95");rearm=above?money("99.95"):money("100.05");status="ACTIVE";}
+                    if((scenario==Scenario.FEW_HIT||scenario==Scenario.MIXED_DUPLICATES)&&special){threshold=above?money("100.05"):money("99.95");rearm=above?money("99.95"):money("100.05");status="ACTIVE";}
                     if(scenario.name().startsWith("BURST")&&special){above=true;threshold=money("105");rearm=null;status="ACTIVE";mode="ONCE";}
                     p.setLong(1,s*100000L+r+1);p.setLong(2,id);p.setString(3,"rule-"+r);p.setString(4,above?"ABOVE":"BELOW");p.setBigDecimal(5,threshold);p.setString(6,mode);p.setBigDecimal(7,rearm);p.setString(8,status);p.addBatch();
                 }
@@ -177,7 +182,7 @@ public final class RealPipelineExperiment {
         }
         return ids;
     }
-    int target(Scenario s){return switch(s){case FEW_HIT->hitRules;case BURST_100->100;case BURST_500->500;case BURST_1000->1000;default->0;};}
+    int target(Scenario s){return switch(s){case FEW_HIT,MIXED_DUPLICATES->hitRules;case BURST_100->100;case BURST_500->500;case BURST_1000->1000;default->0;};}
     static BigDecimal money(String p){return new BigDecimal(p).setScale(4);}
     BigDecimal price(Scenario s,int n,int burstAt) {
         if(n==burstAt&&s.name().startsWith("BURST"))return money("110");
@@ -189,21 +194,21 @@ public final class RealPipelineExperiment {
     }
     Map<String,Object> trial(Case c)throws Exception {
         caseNumber++;clock.reset();List<Long> ids=seed(c.scenario,c.stocks);
-        var samples=new ConcurrentHashMap<String,PipelineProbe.Sample>();var overflow=new AtomicInteger();var maxDepth=new AtomicInteger();var maxDiscardWait=new AtomicLong();
+        var samples=new ConcurrentHashMap<AlpacaProtocol.Trade,PipelineProbe.Sample>();var overflow=new AtomicInteger();var maxDepth=new AtomicInteger();var maxDiscardWait=new AtomicLong();
         var laneMap=new LinkedHashMap<Integer,MarketQuoteLane>();var firstError=new AtomicReference<String>();
         var errors=new ConcurrentHashMap<String,Long>();
         int burstAt=Math.max(3,c.rate*c.seconds/3);
         for(int s=0;s<c.stocks;s++) {
             int stock=s;
             var observer=new MarketQuoteLane.Observer(){
-                public void enqueued(MarketQuoteLane.Work w,long at){var v=samples.get(w.trade().eventKey());v.enqueuedNanos=at;if(v.measured)maxDepth.accumulateAndGet(laneMap.get(stock).sample().depth(),Math::max);}
-                public void started(MarketQuoteLane.Work w,long enqueued,long at){var v=samples.get(w.trade().eventKey());v.enqueuedNanos=enqueued;v.startedNanos=at;PipelineProbe.CURRENT.set(v);v.binding=QuoteTiming.bind(PipelineProbe.detailed?v:null);}
+                public void enqueued(MarketQuoteLane.Work w,long at){var v=samples.get(w.trade());v.enqueuedNanos=at;if(v.measured)maxDepth.accumulateAndGet(laneMap.get(stock).sample().depth(),Math::max);}
+                public void started(MarketQuoteLane.Work w,long enqueued,long at){var v=samples.get(w.trade());v.enqueuedNanos=enqueued;v.startedNanos=at;PipelineProbe.CURRENT.set(v);v.binding=QuoteTiming.bind(PipelineProbe.detailed?v:null);}
                 public void completed(MarketQuoteLane.Work w,long at,boolean ok){
-                    var v=samples.get(w.trade().eventKey());v.completedNanos=System.nanoTime();v.failed=!ok;
+                    var v=samples.get(w.trade());v.completedNanos=System.nanoTime();v.failed=!ok;
                     v.record("quote_process_total",v.completedNanos-at);v.record("queue_wait",at-v.enqueuedNanos);v.record("trade_processing_lag",v.completedNanos-v.receivedNanos);
                     try{v.binding.close();}catch(Exception e){throw new IllegalStateException(e);}finally{PipelineProbe.CURRENT.remove();v.finished=true;}
                 }
-                public void discarded(MarketQuoteLane.Work w,String cause){var v=samples.get(w.trade().eventKey());v.discarded=cause;if(v.measured)maxDiscardWait.accumulateAndGet(System.nanoTime()-v.enqueuedNanos,Math::max);}
+                public void discarded(MarketQuoteLane.Work w,String cause){var v=samples.get(w.trade());v.discarded=cause;if(v.measured)maxDiscardWait.accumulateAndGet(System.nanoTime()-v.enqueuedNanos,Math::max);}
             };
             laneMap.put(s,new MarketQuoteLane(ids.get(s),CAPACITY,w->{
                 var t=w.trade();var sample=PipelineProbe.CURRENT.get();
@@ -240,7 +245,7 @@ public final class RealPipelineExperiment {
             result.put("warmupFailedTasks",warmupFailures);result.put("warmupDiscardedTasks",warmupDiscards);result.put("warmupFirstError",warmupFirstError);result.put("warmupErrors",warmupErrors);result.put("errors",new TreeMap<>(errors));
             result.put("initialRulesSha256",ruleInputHash);
             result.put("finalRulesSha256",sha(json.writeValueAsBytes(jdbc.queryForList("SELECT id,stock_id,name,direction,threshold_price,rearm_price,trigger_mode,status,version,last_triggered_at,created_at,effective_at FROM alert_rules ORDER BY id"))));
-            result.put("inputSha256",sha(String.join("\n",samples.values().stream().sorted(Comparator.comparing(v->v.key)).map(v->v.key+","+v.trade.eventTime()+","+v.trade.price()).toList()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            result.put("inputSha256",sha(String.join("\n",samples.values().stream().sorted(Comparator.comparing(v->v.key)).map(v->v.key+","+v.trade.eventKey()+","+v.trade.eventTime()+","+v.trade.price()).toList()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             result.put("maxQueueDepth",maxDepth.get());result.put("maxDiscardedTaskWaitMs",maxDiscardWait.get()/1e6);
             if(complete+discard+failed+rejected!=measured.size())throw new IllegalStateException("Unaccounted input tasks: "+c.id);
             result.put("inputSeconds",(inputEnd-start)/1e9);result.put("drainSeconds",(end-inputEnd)/1e9);result.put("observationSeconds",(end-start)/1e9);
@@ -260,6 +265,9 @@ public final class RealPipelineExperiment {
             result.put("zeroHitProcess",PipelineProbe.distribution(measured.stream().filter(s->s.finished&&!s.failed&&s.triggers==0).map(s->s.phases.get("quote_process_total")).toList()));
             var sql=new TreeMap<String,Long>();var sqlTimes=new TreeMap<String,Long>();for(var s:measured){s.sqlCounts.forEach((k,v)->sql.merge(k,v,Long::sum));s.sqlNanos.forEach((k,v)->sqlTimes.merge(k,v,Long::sum));}
             result.put("jdbcExecutions",sql);result.put("jdbcNanos",sqlTimes);result.put("serverBefore",beforeServer);result.put("serverAfter",serverAfter);
+            var sqlErrors=new TreeMap<String,Long>();for(var sample:measured)sample.sqlErrors.forEach((k,v)->sqlErrors.merge(k,v,Long::sum));
+            result.put("sqlErrors",sqlErrors);result.put("duplicateKeyExceptions",sqlErrors.entrySet().stream().filter(e->e.getKey().equals("insert:quote_events|1062|23000")).mapToLong(Map.Entry::getValue).sum());
+            result.put("callerRetries",0);
             result.put("redisBefore",redisBefore);result.put("redisAfter",afterRedis);result.put("jvmBefore",jvmBefore);result.put("jvmAfter",jvmAfter);
             var writes=new TreeMap<String,Long>();after.forEach((k,v)->writes.put(k,v-before.get(k)));result.put("tableRowDelta",writes);
             var eachStock=new ArrayList<Map<String,Object>>();
@@ -271,16 +279,19 @@ public final class RealPipelineExperiment {
             return result;
         }finally{sampler.shutdownNow();laneMap.values().forEach(MarketQuoteLane::close);}
     }
-    void inject(Case c,Map<Integer,MarketQuoteLane> lanes,Map<String,PipelineProbe.Sample> samples,int from,int count,long start,int burstAt,boolean measured) {
+    void inject(Case c,Map<Integer,MarketQuoteLane> lanes,Map<AlpacaProtocol.Trade,PipelineProbe.Sample> samples,int from,int count,long start,int burstAt,boolean measured) {
         Instant origin=clock.base;
         for(int n=0;n<count;n++){
             long scheduled=start+(long)(n*1e9/c.rate);long remaining;
             while((remaining=scheduled-System.nanoTime())>0)LockSupport.parkNanos(remaining);
             for(int stock=0;stock<c.stocks;stock++){
                 int number=from+n;String key="case"+caseNumber+"-s"+stock+"-n"+number;
-                long received=System.nanoTime();var sample=new PipelineProbe.Sample(key,stock,number,measured,received,scheduled);samples.put(key,sample);
-                var time=origin.plusNanos((long)(n*1e9/c.rate));
-                sample.wallReceivedAt=Instant.now();sample.trade=new AlpacaProtocol.Trade("PPTEST"+stock,key,price(c.scenario,number,measured?burstAt:Integer.MAX_VALUE),time,clock.instant());
+                long received=System.nanoTime();var sample=new PipelineProbe.Sample(key,stock,number,measured,received,scheduled);
+                boolean duplicate=c.scenario==Scenario.MIXED_DUPLICATES&&n%20==19;
+                int original=duplicate?number-1:number;String eventKey="case"+caseNumber+"-s"+stock+"-n"+original;
+                var time=origin.plusNanos((long)((duplicate?n-1:n)*1e9/c.rate));
+                sample.wallReceivedAt=Instant.now();sample.trade=new AlpacaProtocol.Trade("PPTEST"+stock,eventKey,price(c.scenario,original,measured?burstAt:Integer.MAX_VALUE),time,clock.instant());
+                if(samples.putIfAbsent(sample.trade,sample)!=null)throw new IllegalStateException("Probe input identity collision");
                 lanes.get(stock).offer(sample.trade);
             }
         }
@@ -314,12 +325,12 @@ public final class RealPipelineExperiment {
             for(var v:samples.stream().filter(v->v.stock==stock&&v.finished&&!v.failed&&"PROCESSED".equals(v.outcome)).sorted(Comparator.comparingLong(v->v.startedNanos)).toList()){
                 BigDecimal price=v.trade.price();
                 // Read actual committed baseline flags. Generation changes must suppress active triggers.
-                String baseline=baselines.get(v.key);
+                String baseline=baselines.get(v.trade.eventKey());
                 for(int r=0;r<target;r++){
                     boolean burst=scenario.name().startsWith("BURST"),above=burst||r%2==0;
                     var definition=new RuleTransitionEngine.Definition(above?AlertDirection.ABOVE:AlertDirection.BELOW,burst?money("105"):above?money("100.05"):money("99.95"),burst?AlertTriggerMode.ONCE:AlertTriggerMode.REPEAT,burst?null:above?money("99.95"):money("100.05"));
                     var decision=RuleTransitionEngine.evaluate(definition,states[r],baseline.isEmpty()?previous:price,price);
-                    if(decision.kind()==RuleTransitionEngine.Kind.TRIGGERED)expected.add("rule-"+r+"@"+v.key);
+                    if(decision.kind()==RuleTransitionEngine.Kind.TRIGGERED)expected.add("rule-"+r+"@"+v.trade.eventKey());
                     states[r]=decision.target();
                 }
                 previous=price;
@@ -333,15 +344,15 @@ public final class RealPipelineExperiment {
     }
     void raw(Case c,List<PipelineProbe.Sample> samples)throws Exception {
         try(var writer=new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(Files.newOutputStream(output.resolve("samples-"+caseNumber+".csv.gz"))),java.nio.charset.StandardCharsets.UTF_8))){
-            writer.write("key,stock,number,event_time_utc,received_fixture_utc,received_wall_utc,price,received_nanos,scheduled_nanos,enqueued_nanos,started_nanos,completed_nanos,outcome,discarded,failed,candidates,triggers,rearms,candidate_ids_sha256");for(String p:PipelineProbe.PHASES)writer.write(","+p+"_nanos");writer.newLine();
-            for(var s:samples){String idsHash=PipelineProbe.captureCandidateIds?sha(String.join(",",s.candidateIds.stream().sorted().map(Object::toString).toList()).getBytes(java.nio.charset.StandardCharsets.UTF_8)):"";writer.write(s.key+","+s.stock+","+s.number+","+s.trade.eventTime()+","+s.trade.receivedAt()+","+s.wallReceivedAt+","+s.trade.price()+","+s.receivedNanos+","+s.scheduledNanos+","+s.enqueuedNanos+","+s.startedNanos+","+s.completedNanos+","+Objects.toString(s.outcome,"")+","+Objects.toString(s.discarded,"")+","+s.failed+","+s.candidates+","+s.triggers+","+s.rearms+","+idsHash);for(String p:PipelineProbe.PHASES)writer.write(","+s.phases.getOrDefault(p,0L));writer.newLine();}
+            writer.write("key,event_key,stock,number,event_time_utc,received_fixture_utc,received_wall_utc,price,received_nanos,scheduled_nanos,enqueued_nanos,started_nanos,completed_nanos,outcome,discarded,failed,candidates,triggers,rearms,candidate_ids_sha256,duplicate_key_exceptions");for(String p:PipelineProbe.PHASES)writer.write(","+p+"_nanos");writer.newLine();
+            for(var s:samples){String idsHash=PipelineProbe.captureCandidateIds?sha(String.join(",",s.candidateIds.stream().sorted().map(Object::toString).toList()).getBytes(java.nio.charset.StandardCharsets.UTF_8)):"";writer.write(s.key+","+s.trade.eventKey()+","+s.stock+","+s.number+","+s.trade.eventTime()+","+s.trade.receivedAt()+","+s.wallReceivedAt+","+s.trade.price()+","+s.receivedNanos+","+s.scheduledNanos+","+s.enqueuedNanos+","+s.startedNanos+","+s.completedNanos+","+Objects.toString(s.outcome,"")+","+Objects.toString(s.discarded,"")+","+s.failed+","+s.candidates+","+s.triggers+","+s.rearms+","+idsHash+","+s.sqlErrors.getOrDefault("insert:quote_events|1062|23000",0L));for(String p:PipelineProbe.PHASES)writer.write(","+s.phases.getOrDefault(p,0L));writer.newLine();}
         }
     }
     void correctness()throws Exception {
         new PipelineCorrectness(this).run();
     }
     void save(String file,Object data)throws Exception{json.writerWithDefaultPrettyPrinter().writeValue(output.resolve(file).toFile(),data);}
-    Map<String,String> sourceHashes()throws Exception{Path sourceRoot=Path.of(System.getenv().getOrDefault("PP_PIPELINE_SOURCE_ROOT","."));var map=new TreeMap<String,String>();for(String p:List.of("src/main/java/com/ezra/pricepulse/market/MarketQuoteLane.java","src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java","src/main/java/com/ezra/pricepulse/market/QuoteTiming.java","src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java","src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java","src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java","src/test/java/com/ezra/pricepulse/market/PipelineProbe.java"))map.put(p,sha(Files.readAllBytes(sourceRoot.resolve(p))));return map;}
+    Map<String,String> sourceHashes()throws Exception{Path sourceRoot=Path.of(System.getenv().getOrDefault("PP_PIPELINE_SOURCE_ROOT","."));var map=new TreeMap<String,String>();for(String p:List.of("src/main/java/com/ezra/pricepulse/market/MarketQuoteLane.java","src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java","src/main/java/com/ezra/pricepulse/market/QuoteEventMapper.java","src/main/resources/com/ezra/pricepulse/market/QuoteEventMapper.xml","src/main/java/com/ezra/pricepulse/market/QuoteTiming.java","src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java","src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java","src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java","src/test/java/com/ezra/pricepulse/market/PipelineProbe.java","src/test/java/com/ezra/pricepulse/market/DedupExceptionPerformance.java"))map.put(p,sha(Files.readAllBytes(sourceRoot.resolve(p))));return map;}
     static String sha(byte[] data)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));}
     static String diagnostic(Throwable e){var chain=new ArrayList<String>();for(int depth=0;e!=null&&depth<6;depth++,e=e.getCause()){String text=e.getClass().getSimpleName();if(e instanceof SQLException sql)text+="[state="+sql.getSQLState()+",code="+sql.getErrorCode()+"]";chain.add(text);}return String.join("/",chain);}
     static final class EventClock extends Clock {

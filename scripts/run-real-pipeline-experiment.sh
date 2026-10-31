@@ -22,6 +22,12 @@ if reference:
         raise SystemExit('Use an explicit local commit ID for the baseline evaluator')
     name='src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java'
     (target/name).write_bytes(subprocess.check_output(['git','show',reference+':'+name],cwd=source))
+reference=os.environ.get('PP_PIPELINE_INGESTION_REF','')
+if reference:
+    if not re.fullmatch(r'[0-9a-f]{7,40}',reference):
+        raise SystemExit('Use an explicit local commit ID for the ingestion service')
+    name='src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java'
+    (target/name).write_bytes(subprocess.check_output(['git','show',reference+':'+name],cwd=source))
 PY
 (
   cd "$pipeline_build"
