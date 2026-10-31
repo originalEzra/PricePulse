@@ -1,0 +1,14 @@
+{
+  "candidateRef": "2e3112a",
+  "unit": {
+    "tests": 154,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "businessCorrectnessChecksPassed": 17,
+  "quoteServiceSha256": "55c1a8f10eedfc45238b65caf0b4465172e986998bb38cb260af243ab1300ac5",
+  "candidateTestRestoredFromImmutableRef": true,
+  "defaultWorkingTreeStayedAtA": true,
+  "evidence": "target/dedup-candidate-replay-20261101"
+}

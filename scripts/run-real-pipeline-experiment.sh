@@ -28,6 +28,11 @@ if reference:
         raise SystemExit('Use an explicit local commit ID for the ingestion service')
     name='src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java'
     (target/name).write_bytes(subprocess.check_output(['git','show',reference+':'+name],cwd=source))
+    # Rejected candidates remain reproducible without keeping candidate-only tests in the default source tree.
+    name='src/test/java/com/ezra/pricepulse/market/QuoteIngestionDedupTest.java'
+    candidate_test=subprocess.run(['git','show',reference+':'+name],cwd=source,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    if candidate_test.returncode==0:
+        (target/name).write_bytes(candidate_test.stdout)
 PY
 (
   cd "$pipeline_build"

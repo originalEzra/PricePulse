@@ -8,7 +8,6 @@ import com.ezra.pricepulse.common.error.ErrorCode;
 import com.ezra.pricepulse.stock.Stock;
 import com.ezra.pricepulse.stock.StockMapper;
 import java.math.BigDecimal;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -68,12 +67,16 @@ public class QuoteIngestionService {
         }
 
         BigDecimal price = PriceTicks.normalize(candidate.price(), "price");
+        QuoteEvent existing = quoteEventMapper.findByEventKey(candidate.eventKey());
+        if (existing != null) {
+            return duplicate(existing, candidate, price, stock.latestPrice());
+        }
+
         QuoteEvent event = buildEvent(candidate, price);
         event.setReceivedAt(receivedAt);
         try {
             quoteEventMapper.insert(event);
         } catch (DuplicateKeyException exception) {
-            if (!isEventKeyDuplicate(exception)) throw exception;
             QuoteEvent concurrent = quoteEventMapper.findByEventKey(candidate.eventKey());
             if (concurrent != null) {
                 return duplicate(concurrent, candidate, price, stock.latestPrice());
@@ -125,19 +128,6 @@ public class QuoteIngestionService {
         return new QuoteResult(event.getId(), event.getEventKey(), stock.id(), stock.latestPrice(),
                 price, candidate.eventTime(), QuoteOutcome.PROCESSED, null, matched,
                 evaluation.observation(before, event.getId()));
-    }
-
-    private static boolean isEventKeyDuplicate(DuplicateKeyException exception) {
-        // JDBC does not expose the constraint name separately. Fail closed on unknown error formats.
-        // Match the server's final key suffix, never the duplicate value (which can contain arbitrary text).
-        for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
-            if (cause instanceof SQLException sql) {
-                String message = sql.getMessage();
-                return sql.getErrorCode() == 1062 && "23000".equals(sql.getSQLState()) && message != null
-                        && message.endsWith("for key 'quote_events.uk_quote_events_event_key'");
-            }
-        }
-        return false;
     }
 
     private QuoteEvent buildEvent(QuoteCandidate candidate, BigDecimal price) {

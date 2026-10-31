@@ -1,0 +1,36 @@
+{
+  "finalImplementation": "A",
+  "baselineRef": "30df066",
+  "unit": {
+    "tests": 143,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "relatedUnit": {
+    "tests": 44,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "relatedUnitIsSubset": true,
+  "integration": {
+    "tests": 75,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "businessCorrectnessChecksPassed": 8,
+  "allTrackedMainSourcesMatchVerifiedBuildsAndStartingBaseline": true,
+  "quoteServiceSha256": "4c696e00c063e6056df5d7a3fcceed4f52041978f6476d97fdb8e89258e61b24",
+  "pythonReportTests": {
+    "tests": 8,
+    "failures": 0
+  },
+  "evidence": {
+    "unit": "target/real-pipeline-build-TTCc3P",
+    "integration": "target/real-pipeline-checks-oRf8W9",
+    "correctness": "target/dedup-restored-A-final-20261101"
+  },
+  "formalServiceChanged": false
+}

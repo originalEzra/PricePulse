@@ -30,6 +30,7 @@
 
 ## 报告与复现命令
 
+- 后续独立单变量实验：[成交 INSERT 优先对照（未保留，已恢复原去重方案）](dedup-insert-first-2026-10-31/report.md)，不覆盖下列原基线。
 - [优化前基线](baseline.md)、[完整前后对照与局限](report.md)、[最小优化决策](decision.md)。
 - [固定参数](plans.json)、[默认关闭的运行时观测](runtime-metrics.md)、[自然市场待验清单](market-acceptance.md)。
 - `before/`、`after/` 是 84 档短窗口汇总；`before-sustain/`、`after-sustain/` 是每档 60s 的重复观测。逐笔原始文件留在忽略的 `target/`，汇总保存文件摘要；复现须重新运行，不能从汇总反推出逐笔样本。

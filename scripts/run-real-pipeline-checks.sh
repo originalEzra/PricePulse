@@ -31,7 +31,7 @@ env -u APCA_API_KEY_ID -u APCA_API_SECRET_KEY -u PRICEPULSE_ALPACA_ENABLED \
     -Dprice-pulse.market.telemetry-enabled=true \
     -Dprice-pulse.assistant.enabled=false -Dprice-pulse.monitoring.enabled=false \
     -Dprice-pulse.monitoring.dynamic-subscriptions-enabled=false \
-    -Dtest=QuoteIngestionDedupTest,OutboxWriterTest,MarketLaneTelemetryTest,MarketQuoteLaneTest,QuoteTimingTest,AlpacaStreamTest,AlpacaDynamicStreamTest,AlpacaStreamLoopbackTest,MarketFeedHealthTest \
+    -Dtest=OutboxWriterTest,MarketLaneTelemetryTest,MarketQuoteLaneTest,QuoteTimingTest,AlpacaStreamTest,AlpacaDynamicStreamTest,AlpacaStreamLoopbackTest,MarketFeedHealthTest \
     -Dit.test=InfrastructureIT,MarketTimelineInfrastructureIT,V2IsolationInfrastructureIT,OpeningGapInfrastructureIT,DynamicMonitoringInfrastructureIT \
     verify > checks.log 2>&1 || { tail -90 checks.log; exit 1; }
 python3 - <<'PY'
