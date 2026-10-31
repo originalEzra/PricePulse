@@ -8,12 +8,12 @@
     "sha256": "2a8f0ef6dcc1fcca097e524b9d70303c522b4bfd5e6dce24373f17eb536ed6bf"
   },
   "explain-analyze.txt": {
-    "bytes": 45082,
-    "sha256": "700c21fbc59260a03efc62bbfe90fc6dc7f015b089b83f950c890d95951fac38"
+    "bytes": 45081,
+    "sha256": "b24859394d45d76196934641cc46eebca483f879d63bd4de1a8647c47a20f7f6"
   },
   "latency-summary.csv": {
-    "bytes": 3621,
-    "sha256": "0ffe3407db84847b871eed006f429826a654547918b7e68126f839359c376efa"
+    "bytes": 3566,
+    "sha256": "f4615843c737d8ecea9fdd95acda9945c02a02b974629049739b452897b2b29f"
   },
   "latency.csv.gz": {
     "bytes": 44015,
@@ -36,8 +36,8 @@
     "sha256": "8d40c8a03f2a8daf1171296413030138f77326c4056e33e60cc68679c6b6986f"
   },
   "rule-select-qps-10s.csv": {
-    "bytes": 10121,
-    "sha256": "4dd86a64646ac584038a221ac0085dbdf7f495b947717859f97785afb9966e03"
+    "bytes": 9844,
+    "sha256": "244bc8adf3f53179726c37d3bda9005787bcd3d4a7bba42ce7145382db9536ec"
   },
   "rules-1000.csv.gz": {
     "bytes": 10822,

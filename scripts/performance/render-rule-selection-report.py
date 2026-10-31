@@ -107,16 +107,16 @@ def main():
         shutil.copyfile(archived, args.output / archived.name)
     (args.output / "summary.json").write_text(json.dumps(data, indent=2) + "\n")
     explain = "\n\n".join(f"## {row['rules']} / {row['scenario']}\nID covering query:\n{row['idPlan']}\nHydration query:\n{row['hydrationPlan']}" for row in data["plans"])
-    (args.output / "explain-analyze.txt").write_text(explain + "\n")
-    with (args.output / "latency-summary.csv").open("w") as handle:
-        writer = csv.writer(handle)
+    (args.output / "explain-analyze.txt").write_text(explain.rstrip() + "\n")
+    with (args.output / "latency-summary.csv").open("w", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["rules", "scenario", "scheme", "average_candidates", "p50_ms", "p95_ms", "p99_ms", "mean_ms"])
         for row in data["latency"]:
             for name in ["MYSQL_FULL_JAVA", "MYSQL_BTREE_IDS", "PRODUCTION_REDIS_IDS"]:
                 stat = row[name]
                 writer.writerow([row["rules"], row["scenario"], name, row["averageCandidates"], *[ms(stat[key]) for key in ["p50Ns", "p95Ns", "p99Ns", "meanNs"]]])
-    with (args.output / "rule-select-qps-10s.csv").open("w") as handle:
-        writer = csv.writer(handle)
+    with (args.output / "rule-select-qps-10s.csv").open("w", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["scheme", "window_start_seconds", "window_seconds", "actual_rule_selects", "qps"])
         for name, bins in replay["sqlTenSecondBins"].items():
             for number, count in sorted(bins.items(), key=lambda item: int(item[0])):
@@ -141,10 +141,10 @@ def main():
              f"- 选择层累计耗时：逐笔 MySQL {direct['selectorTotalNs']/1e9:.3f}s、Redis＋MySQL 候选回查 {redis['selectorTotalNs']/1e9:.3f}s、MySQL 同价短路 {fast['selectorTotalNs']/1e9:.3f}s。这是选择层，不是正式行情或通知端到端延迟。", "",
              "## 环境与方法", "",
              f"{data['environment']['os']}／{data['environment']['arch']}，Java {data['environment']['java']}，实验 JVM 可见 {data['environment']['visibleProcessors']} CPU、最大堆 {data['environment']['maxHeapBytes']/1024/1024:.0f} MiB。MySQL {data['environment']['mysql']}，JDBC {data['jdbcDriver']}，Redis 7.4.6；两容器各限 1 CPU／768 MiB、仅回环随机端口、MySQL buffer pool 128 MiB。与正式服务共享物理主机，未做机器独占或噪声置信区间分析。", "",
-             "- 只创建 `bench_*` 实验表，无 Spring 应用、Flyway、用户规则、生产备份、供应商或 MQ 连接。MySQL 保留默认持久提交策略，Redis 作为派生缓存关闭持久化。", 
-             "- 规则生成 seed 为 20261031＋规则数；每规模三方案使用完全相同的数据。ACTIVE／COOLDOWN 各 50%，各状态 ABOVE／BELOW 各半；阈值在 90–110 均匀生成至四位小数，重新激活价相对阈值偏移 0.05–0.75。输入 CSV 全部公开，未按测试结果调整分布。", 
-             "- A 从 MySQL 读取该股全部有效规则并转 Java 对象筛选；B 用两个复合 B+ 树做 disjoint UNION ALL，热候选阶段仅返回 ID；C 直接调用生产 `RuleIndex.candidates → ThresholdIndex`，包含 token 检查、Lua、价格编码和生产指标计时，没有替换简化算法。", 
-             "- 实验 JDBC 适配器负责数据加载／SQL 精确计数，没有模拟 JDBC 或 Redis 返回值。候选层三组最终都返回 ID；回放中直接 SQL 与 Redis 回查均加载同一组规则字段并转换同类 Java 对象。", 
+             "- 只创建 `bench_*` 实验表，无 Spring 应用、Flyway、用户规则、生产备份、供应商或 MQ 连接。MySQL 保留默认持久提交策略，Redis 作为派生缓存关闭持久化。",
+             "- 规则生成 seed 为 20261031＋规则数；每规模三方案使用完全相同的数据。ACTIVE／COOLDOWN 各 50%，各状态 ABOVE／BELOW 各半；阈值在 90–110 均匀生成至四位小数，重新激活价相对阈值偏移 0.05–0.75。输入 CSV 全部公开，未按测试结果调整分布。",
+             "- A 从 MySQL 读取该股全部有效规则并转 Java 对象筛选；B 用两个复合 B+ 树做 disjoint UNION ALL，热候选阶段仅返回 ID；C 直接调用生产 `RuleIndex.candidates → ThresholdIndex`，包含 token 检查、Lua、价格编码和生产指标计时，没有替换简化算法。",
+             "- 实验 JDBC 适配器负责数据加载／SQL 精确计数，没有模拟 JDBC 或 Redis 返回值。候选层三组最终都返回 ID；回放中直接 SQL 与 Redis 回查均加载同一组规则字段并转换同类 Java 对象。",
              "- 每场景先预热 30 轮，再测 120 轮，六种执行排列轮换；网络往返、结果读取和 Java 转换在计时内，集合排序／SHA 校验在查询计时外。每次核对 ID 集合与重复 ID，均为零差异。单 JVM 顺序实验，P99 为 nearest-rank 小样本估计。", "",
              "## 热候选查询延迟", "", "单位 ms；每格 P50／P95／P99。UP 同时覆盖 ACTIVE ABOVE／COOLDOWN BELOW，DOWN 覆盖 ACTIVE BELOW／COOLDOWN ABOVE。稀疏 0.01、中等 1.00、密集 8.00 的价格区间均以 100 为前值。", "",
              "| 规则数 | 场景 | 候选数 | A 全读＋Java | B MySQL B+ | C 生产 Redis |", "|---:|---|---:|---:|---:|---:|"]
@@ -182,10 +182,10 @@ def main():
         lines.append(f"| {row['action']} | {ms(row['elapsedNs'])} | {row['rebuilds']} | {row['allRuleSelectsIncludingVerification']} | {row['equal']} |")
     lines += ["", "共用 token 读取、规则变更 DML 和索引 token DML 在 [维护原始记录](maintenance.json) 分项保存。新增／暂停／删除各一次增量缓存更新；缺失及回滚各触发一次全读重建，热恢复无重建。耗时包含场景操作及 MySQL 独立核验，不应当成单次 Lua 写延迟；这是小规模恢复机制验证，没有测长期规则高频变更或多写者竞争。", "",
               "## 成本与架构取舍", "",
-              "1. **延迟优势由规模和密度决定。** 全量扫描对照不是优化后的 MySQL；合理 B+ 树已经避免读整股规则。应比较上面 B／C 的同场景结果，不能沿用旧报告的 30 倍扫描对照当成 B+ 树优势。", 
-              f"2. **规则 SELECT 减少 {direct['ruleSelects']-redis['ruleSelects']} 次，不等于少读同样数量的规则行。** 非空时两方案返回相同候选行；空查询减少可降低解析／索引探测／往返，但没有磁盘物理 I/O 或正式服务器 CPU 对照，不能量化磁盘压力收益。同价 SQL 优化后的额外减少仅 {fast['ruleSelects']-redis['ruleSelects']} 次。", 
-              "3. **MySQL 仍然必需。** 股票行锁、事件去重、正式报价和水位、权威规则／版本再校验、状态转移、触发快照与 Outbox 事务均不能由 Redis 代替；恢复基线／正式开盘路径还会读取 COOLDOWN 规则，本实验只覆盖正常候选路径。本实验未删除这些生产步骤，也不宣称实盘总查询同比例下降。", 
-              "4. **Redis 有额外成本。** 常态每笔一次网络查询，非空再多一次／多批 MySQL 回查；变更需双系统 token／索引维护，失效需全量数据库加载并占用 Lua／网络／内存。当前低规则数或高候选密度、频繁变更、MySQL 已有合适索引时，直接 SQL 更简单且可能更快。", 
+              "1. **延迟优势由规模和密度决定。** 全量扫描对照不是优化后的 MySQL；合理 B+ 树已经避免读整股规则。应比较上面 B／C 的同场景结果，不能沿用旧报告的 30 倍扫描对照当成 B+ 树优势。",
+              f"2. **规则 SELECT 减少 {direct['ruleSelects']-redis['ruleSelects']} 次，不等于少读同样数量的规则行。** 非空时两方案返回相同候选行；空查询减少可降低解析／索引探测／往返，但没有磁盘物理 I/O 或正式服务器 CPU 对照，不能量化磁盘压力收益。同价 SQL 优化后的额外减少仅 {fast['ruleSelects']-redis['ruleSelects']} 次。",
+              "3. **MySQL 仍然必需。** 股票行锁、事件去重、正式报价和水位、权威规则／版本再校验、状态转移、触发快照与 Outbox 事务均不能由 Redis 代替；恢复基线／正式开盘路径还会读取 COOLDOWN 规则，本实验只覆盖正常候选路径。本实验未删除这些生产步骤，也不宣称实盘总查询同比例下降。",
+              "4. **Redis 有额外成本。** 常态每笔一次网络查询，非空再多一次／多批 MySQL 回查；变更需双系统 token／索引维护，失效需全量数据库加载并占用 Lua／网络／内存。当前低规则数或高候选密度、频繁变更、MySQL 已有合适索引时，直接 SQL 更简单且可能更快。",
               "5. **当前架构的理由与限制。** PricePulse 采用派生候选索引，是为了实现内存区间预筛选、共享真实／模拟候选机制及可验证重建；它是可重建的加速层，MySQL 才是事实源。这是工程设计取舍，不代表当前十五股的实际规则量必须用 Redis，也不以本机微基准为架构普适证明。本轮不更换现有业务算法。", "",
               f"**本负载的判断：** {redis['nonemptyRatio']:.2%} 事件非空，Redis＋回查比逐笔 SQL {'多' if selection_delta>0 else '少'} {abs(selection_delta):.3f}s 选择耗时。{'在本次资源和负载下，直接 MySQL 的选择层表现更好。' if selection_delta>0 else '本次选择层观察到收益，仍需另计维护与实际业务成本。'}故障恢复的额外全读和 Redis 内存见上表；注入频率人为设定，不能摊销成真实频率成本或据此宣称维护一定值得。", "",
               "## 可用于简历的表述", "",

@@ -49,4 +49,3 @@ PRICEPULSE_MESSAGING_ENABLED=true
 这些开关会启用真实订阅、规则处理与通知，须在 V10、预算和原规则已核对后使用，Key 不放前端。兼容持有仅在当前连接实际确认且不存在孤立有效规则时接管；不要用第二条 IEX 验证额度。
 
 AI 可选且默认关闭，通过 `PRICEPULSE_AI_ENABLED`、`PRICEPULSE_AI_API_KEY`、`PRICEPULSE_AI_BASE_URL`、`PRICEPULSE_AI_MODEL` 配置支持结构化输出的兼容供应商。模型仅产出草稿，手动规则不依赖模型；未评估自然语言准确率。
-
