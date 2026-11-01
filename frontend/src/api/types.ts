@@ -139,18 +139,19 @@ export interface QuoteResult {
 
 export interface NotificationItem {
   id: number
-  triggerId: number
-  ruleId: number
-  stockId: number
+  triggerId: number | null
+  ruleId: number | null
+  stockId: number | null
   stockSymbol: string
   stockName: string
-  triggerPrice: number
+  triggerPrice: number | null
   eventTime: string
   title: string
   content: string
   status: 'UNREAD' | 'READ'
   readAt: string | null
   createdAt: string
+  eventType?: 'PRICE_ALERT' | 'MONITORING_INTERRUPTED' | 'MONITORING_RECOVERED'
 }
 
 export interface NotificationFeed {

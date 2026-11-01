@@ -31,19 +31,28 @@
         <result property="readAt" column="read_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="eventType" column="event_type"/>
     </resultMap>
+
+    <sql id="sources">
+        FROM notifications n
+        LEFT JOIN alert_triggers t ON t.id=n.trigger_id
+        LEFT JOIN quote_events q ON q.id=t.quote_event_id
+        LEFT JOIN market_monitor_deliveries d ON d.id=n.monitor_delivery_id AND d.user_id=n.user_id
+    </sql>
+    <sql id="visibleSource">
+        (q.origin_type='REAL' OR d.id IS NOT NULL)
+    </sql>
 
     <sql id="selectNotification">
         SELECT n.id, n.user_id, n.trigger_id, t.rule_id,
                CAST(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockId')) AS UNSIGNED) AS stock_id,
-               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')) AS stock_symbol,
-               JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')) AS stock_name,
-               t.trigger_price, t.event_time, n.title, n.content,
-               n.status, n.read_at, n.created_at, n.updated_at
-        FROM notifications n
-        JOIN alert_triggers t ON t.id = n.trigger_id
-        JOIN alert_rules r ON r.id = t.rule_id
-        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+               COALESCE(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockSymbol')),d.symbols) AS stock_symbol,
+               COALESCE(JSON_UNQUOTE(JSON_EXTRACT(t.rule_snapshot, '$.stockName')),'行情监控') AS stock_name,
+               t.trigger_price, COALESCE(t.event_time,d.event_time) event_time, n.title, n.content,
+               n.status, n.read_at, n.created_at, n.updated_at,
+               CASE WHEN d.id IS NULL THEN 'PRICE_ALERT' ELSE CONCAT('MONITORING_',d.kind) END event_type
+        <include refid="sources"/>
     </sql>
 
     <select id="findDelivery" resultMap="deliveryMap">
@@ -66,12 +75,12 @@
 
     <select id="findOwned" resultMap="notificationMap">
         <include refid="selectNotification"/>
-        WHERE n.user_id = #{userId} AND n.id = #{notificationId}
+        WHERE n.user_id = #{userId} AND n.id = #{notificationId} AND <include refid="visibleSource"/>
     </select>
 
     <select id="listOwned" resultMap="notificationMap">
         <include refid="selectNotification"/>
-        WHERE n.user_id = #{userId}
+        WHERE n.user_id = #{userId} AND <include refid="visibleSource"/>
         <if test="status != null">AND n.status = #{status}</if>
         ORDER BY n.id DESC
         LIMIT #{limit}
@@ -80,25 +89,25 @@
     <select id="countOwned" resultType="com.ezra.pricepulse.notification.NotificationCounts">
         SELECT COUNT(*) AS total_count,
                COALESCE(SUM(CASE WHEN n.status = 'UNREAD' THEN 1 ELSE 0 END), 0) AS unread_count
-        FROM notifications n
-        JOIN alert_triggers t ON t.id = n.trigger_id
-        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
-        WHERE n.user_id = #{userId}
+        <include refid="sources"/>
+        WHERE n.user_id = #{userId} AND <include refid="visibleSource"/>
     </select>
 
     <update id="markRead">
         UPDATE notifications n
-        JOIN alert_triggers t ON t.id = n.trigger_id
-        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        LEFT JOIN alert_triggers t ON t.id = n.trigger_id
+        LEFT JOIN quote_events q ON q.id = t.quote_event_id
+        LEFT JOIN market_monitor_deliveries d ON d.id=n.monitor_delivery_id AND d.user_id=n.user_id
         SET n.status = 'READ', n.read_at = COALESCE(n.read_at, #{readAt})
-        WHERE n.id = #{notificationId} AND n.user_id = #{userId}
+        WHERE n.id = #{notificationId} AND n.user_id = #{userId} AND <include refid="visibleSource"/>
     </update>
 
     <update id="markAllRead">
         UPDATE notifications n
-        JOIN alert_triggers t ON t.id = n.trigger_id
-        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        LEFT JOIN alert_triggers t ON t.id = n.trigger_id
+        LEFT JOIN quote_events q ON q.id = t.quote_event_id
+        LEFT JOIN market_monitor_deliveries d ON d.id=n.monitor_delivery_id AND d.user_id=n.user_id
         SET n.status = 'READ', n.read_at = COALESCE(n.read_at, #{readAt})
-        WHERE n.user_id = #{userId} AND n.status = 'UNREAD'
+        WHERE n.user_id = #{userId} AND n.status = 'UNREAD' AND <include refid="visibleSource"/>
     </update>
 </mapper>

@@ -14,6 +14,7 @@ final class MarketQuoteLane implements AutoCloseable {
         default void started(Work work, long enqueuedAt, long startedAt) { }
         default void completed(Work work, long startedAt, boolean success) { }
         default void discarded(Work work, String cause) { }
+        default void invalidated(String cause,long discarded,String continuity) { }
     }
     record QueueSample(int depth, long oldestWaitNanos, int active) { }
     private final ThreadPoolExecutor worker;
@@ -37,6 +38,7 @@ final class MarketQuoteLane implements AutoCloseable {
         else {
             var discarded=new java.util.ArrayList<Runnable>();worker.getQueue().drainTo(discarded);
             for(var task:discarded)observe(()->observer.discarded(((Task)task).work,cause));
+            observe(()->observer.invalidated(cause,discarded.size(),continuity));
         }
     }
     synchronized void offer(AlpacaProtocol.Trade trade) {

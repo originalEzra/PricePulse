@@ -36,6 +36,15 @@ public class OutboxWriter {
         }
     }
 
+    @Transactional(propagation=Propagation.MANDATORY)
+    public void monitoring(long deliveryId,long userId,String incidentKey){
+        try{
+            int inserted=mapper.insertMonitoring(deliveryId,json.writeValueAsString(Map.of("schemaVersion",1,
+                    "eventType","MARKET_MONITORING","deliveryId",deliveryId,"userId",userId,"incidentKey",incidentKey)));
+            if(inserted!=1)throw new IllegalStateException("Monitoring Outbox requires a persisted delivery");
+        }catch(JsonProcessingException error){throw new IllegalStateException("Cannot serialize monitoring notice",error);}
+    }
+
     /** A batching boundary, not a transaction boundary. Single alerts keep the existing SQL path. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void alertTriggeredBatch(List<PendingAlert> alerts) {

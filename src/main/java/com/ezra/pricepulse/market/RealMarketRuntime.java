@@ -35,6 +35,8 @@ public class RealMarketRuntime implements QuoteReadiness {
     private final AlpacaStream.Connector connectorOverride;
     private final Supplier<AlpacaDataClient> clientOverride;
     private final Map<String,MarketQuoteLane> lanes=new ConcurrentHashMap<>();
+    private record LaneProcessing(long intent,boolean healthy){}
+    private final Map<Long,LaneProcessing> processingHealthy=new ConcurrentHashMap<>();
     private final AtomicReference<List<MarketDataModels.Session>> sessions=new AtomicReference<>(List.of());
     private ScheduledExecutorService scheduler;
     private AlpacaStream stream;
@@ -44,6 +46,8 @@ public class RealMarketRuntime implements QuoteReadiness {
     private volatile boolean stopped;
     private MarketLaneTelemetry telemetry;
     @Autowired(required=false) void telemetry(MarketLaneTelemetry telemetry){this.telemetry=telemetry;}
+    private MarketIncidentCoordinator incidents;
+    @Autowired(required=false) void incidents(MarketIncidentCoordinator incidents){this.incidents=incidents;}
     @Autowired public RealMarketRuntime(AlpacaProperties properties,MarketDataMapper data,StockMapper stocks,
             MarketHistoryCache cache,QuoteIngestionService ingestion,MarketFeedHealth health,ObjectMapper json,Clock clock,
             MonitoringProperties monitoring,MonitoringMapper subscriptions) {
@@ -60,6 +64,7 @@ public class RealMarketRuntime implements QuoteReadiness {
     public synchronized void start() {
         if (!properties.isEnabled()||stream!=null||stopped) return;
         properties.validate();
+        if(properties.isBusinessWritesEnabled()&&incidents!=null)incidents.bootstrap();
         var initial=new ArrayList<Demand>();
         if(monitoring.isDynamicSubscriptionsEnabled())initial.addAll(subscriptions.liveDemand());
         else for (String symbol:properties.getSymbols()) {
@@ -92,18 +97,48 @@ public class RealMarketRuntime implements QuoteReadiness {
         for(String symbol:new ArrayList<>(stockIds.keySet())){
             var d=next.get(symbol);
             if(d==null||!Objects.equals(intents.get(symbol),d.intentVersion())||!Objects.equals(stockIds.get(symbol),d.stockId())){
-                var lane=lanes.remove(symbol);if(lane!=null)lane.close();if(telemetry!=null)telemetry.detach(stockIds.get(symbol));stockIds.remove(symbol);intents.remove(symbol);changed=true;
+                var lane=lanes.remove(symbol);if(lane!=null)lane.close();processingHealthy.remove(stockIds.get(symbol));if(telemetry!=null)telemetry.detach(stockIds.get(symbol));stockIds.remove(symbol);intents.remove(symbol);changed=true;
             }
         }
         for(var d:desired)if(!stockIds.containsKey(d.symbol())){
             stockIds.put(d.symbol(),d.stockId());intents.put(d.symbol(),d.intentVersion());changed=true;
-            if(properties.isBusinessWritesEnabled())lanes.put(d.symbol(),new MarketQuoteLane(d.stockId(),properties.getQueueCapacity(),work->process(d.stockId(),work),code->{
+            processingHealthy.put(d.stockId(),new LaneProcessing(d.intentVersion(),true));
+            if(properties.isBusinessWritesEnabled())lanes.put(d.symbol(),new MarketQuoteLane(d.stockId(),properties.getQueueCapacity(),work->process(d.stockId(),d.intentVersion(),work),code->{
                 if(code.equals("QUEUE_OVERFLOW"))health.overflow();else health.error(code);
+                if(code.equals("PROCESSING_FAILED_GAP"))processingHealth(d.stockId(),d.intentVersion(),false);
                 if(telemetry!=null)telemetry.fault(d.stockId(),code);
-            },telemetry==null?MarketQuoteLane.Observer.NONE:telemetry.observer(d.stockId())));
+            },laneObserver(d.stockId())));
             if(telemetry!=null&&lanes.containsKey(d.symbol()))telemetry.attach(d.stockId(),lanes.get(d.symbol())::sample);
         }
         return changed;
+    }
+    private MarketQuoteLane.Observer laneObserver(long stock){
+        var metrics=telemetry==null?MarketQuoteLane.Observer.NONE:telemetry.observer(stock);
+        return new MarketQuoteLane.Observer(){
+            public void offered(AlpacaProtocol.Trade t){metrics.offered(t);}
+            public void enqueued(MarketQuoteLane.Work w,long at){metrics.enqueued(w,at);}
+            public void started(MarketQuoteLane.Work w,long at,long start){metrics.started(w,at,start);}
+            public void completed(MarketQuoteLane.Work w,long start,boolean success){metrics.completed(w,start,success);}
+            public void discarded(MarketQuoteLane.Work w,String cause){metrics.discarded(w,cause);}
+            public void invalidated(String cause,long discarded,String continuity){health.queueGap(stock,cause,discarded,continuity,clock.instant());}
+        };
+    }
+    public synchronized boolean monitoringRunning(){return !stopped&&stream!=null&&properties.isEnabled()&&properties.isBusinessWritesEnabled();}
+    private void processingHealth(long stock,long intent,boolean healthy){
+        // A cancelled lane can finish after its replacement starts; its intent must not change the new lane's health.
+        processingHealthy.computeIfPresent(stock,(id,current)->current.intent()==intent&&current.healthy()!=healthy?new LaneProcessing(intent,healthy):current);
+    }
+    synchronized boolean recoverMonitorConnection(List<Demand> expected,String faultId,Instant now){
+        if(!monitoringRunning()||faultId==null)return false;
+        var required=new HashMap<String,Long>();
+        for(var d:expected){
+            long intent=monitoring.isDynamicSubscriptionsEnabled()?d.intentVersion():0;
+            var processing=processingHealthy.get(d.stockId());
+            if(!Objects.equals(stockIds.get(d.symbol()),d.stockId())||!lanes.containsKey(d.symbol())
+                    ||processing==null||processing.intent()!=intent||!processing.healthy()||health.queueFaultOpen(d.stockId()))return false;
+            required.put(d.symbol(),intent);
+        }
+        return stream.confirmRecovery(required,()->health.recoverConnection(faultId,now));
     }
     public record SubscriptionObservation(String state,String epoch,String errorCode,long intentVersion,boolean absent){}
     @Override public synchronized boolean canConfirmLatest(com.ezra.pricepulse.stock.Stock stock,MarketDataModels.StreamState state){
@@ -163,14 +198,18 @@ public class RealMarketRuntime implements QuoteReadiness {
             MarketQuoteLane lane=lanes.get(item.path("S").asText()); if(lane!=null)lane.gap("INVALID_TRADE");
         }
     }
-    private void process(long stockId,MarketQuoteLane.Work work) {
+    private void process(long stockId,long intent,MarketQuoteLane.Work work) {
         var trade=work.trade();
         var candidate=new QuoteCandidate(trade.eventKey(),stockId,trade.price(),
                 LocalDateTime.ofInstant(trade.eventTime(),ZoneOffset.UTC),"ALPACA_IEX",null,trade.receivedAt(),
                 "ALPACA","iex",work.continuity()+":"+trade.eventTime().atZone(MarketTime.NEW_YORK).toLocalDate(),work.reason());
         var result=telemetry==null?ingestion.ingest(candidate,QuoteIngestionPolicy.LIVE)
                 :telemetry.ingest(stockId,()->ingestion.ingest(candidate,QuoteIngestionPolicy.LIVE));
+        var currentLane=lanes.get(trade.symbol());
+        boolean current=currentLane!=null&&currentLane.continuityId().equals(work.continuity());
+        if(result.outcome()==QuoteOutcome.PROCESSED&&current){processingHealth(stockId,intent,true);health.queueAccepted(stockId,work.continuity(),clock.instant());}
         if (result.outcome()==QuoteOutcome.DISCARDED_STALE || result.outcome()==QuoteOutcome.DISCARDED_FUTURE) {
+            if(current)processingHealth(stockId,intent,false);
             health.reject();var lane=lanes.get(trade.symbol());if(lane!=null)lane.gap("STALE_OR_FUTURE");
         }
     }

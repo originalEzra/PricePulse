@@ -17,6 +17,12 @@ public interface NotificationMapper {
             @Param("title") String title,
             @Param("content") String content);
 
+    @org.apache.ibatis.annotations.Insert("""
+        INSERT INTO notifications(user_id,monitor_delivery_id,title,content) VALUES(#{user},#{delivery},#{title},#{content})
+        ON DUPLICATE KEY UPDATE monitor_delivery_id=notifications.monitor_delivery_id
+        """)
+    int insertMonitoring(@Param("user")long user,@Param("delivery")long delivery,@Param("title")String title,@Param("content")String content);
+
     Notification findOwned(@Param("userId") long userId, @Param("notificationId") long notificationId);
 
     List<Notification> listOwned(

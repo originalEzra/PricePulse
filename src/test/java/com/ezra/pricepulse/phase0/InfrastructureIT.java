@@ -227,7 +227,7 @@ class InfrastructureIT {
                 "alert_rules", 15, // V8 adds effective_at.
                 "alert_triggers", 9, // V8 adds trigger_context.
                 "outbox_events", 13,
-                "notifications", 9);
+                "notifications", 10); // V11 adds the nullable independent incident delivery.
         expectedColumnCounts.forEach((table, expectedCount) -> {
             Integer actualCount = jdbc.queryForObject("""
                     SELECT COUNT(*)
@@ -884,7 +884,7 @@ class InfrastructureIT {
                 "SELECT rule_index_token FROM stocks WHERE id = ?", String.class, stockId))
                 .isEqualTo(committedToken);
         var rolledBackCacheMarker = redis.opsForZSet().rangeByScore(ruleIndexKey(stockId), -1, -1);
-        assertThat(rolledBackCacheMarker).hasSize(1).doesNotContain("@" + committedToken);
+        assertThat(rolledBackCacheMarker).hasSize(1).doesNotContain("@" + com.ezra.pricepulse.matching.RuleIndex.cacheToken(committedToken));
         assertThat(jdbc.queryForObject(
                 "SELECT latest_price FROM stocks WHERE id = ?", BigDecimal.class, stockId))
                 .isEqualByComparingTo("95");

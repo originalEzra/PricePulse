@@ -19,6 +19,9 @@ public class Notification {
     private LocalDateTime readAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String eventType;
+    public String getEventType(){return eventType;}
+    public void setEventType(String eventType){this.eventType=eventType;}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

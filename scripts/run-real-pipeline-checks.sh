@@ -32,7 +32,7 @@ env -u APCA_API_KEY_ID -u APCA_API_SECRET_KEY -u PRICEPULSE_ALPACA_ENABLED \
     -Dprice-pulse.assistant.enabled=false -Dprice-pulse.monitoring.enabled=false \
     -Dprice-pulse.monitoring.dynamic-subscriptions-enabled=false \
     '-Dtest=*Test' \
-    -Dit.test=ReachableOnceInfrastructureIT,InfrastructureIT,MarketTimelineInfrastructureIT,V2IsolationInfrastructureIT,OpeningGapInfrastructureIT,DynamicMonitoringInfrastructureIT \
+    -Dit.test=MonitorIncidentInfrastructureIT,ReachableOnceInfrastructureIT,InfrastructureIT,MarketTimelineInfrastructureIT,V2IsolationInfrastructureIT,OpeningGapInfrastructureIT,DynamicMonitoringInfrastructureIT,SimulationOpeningGapInfrastructureIT,SimulationLifecycleInfrastructureIT,MonitorIncidentMigrationInfrastructureIT,V2CleanMigrationInfrastructureIT,V2MigrationInfrastructureIT,SubscriptionMigrationInfrastructureIT \
     verify > checks.log 2>&1 || { tail -90 checks.log; exit 1; }
 python3 - <<'PY'
 from pathlib import Path
@@ -41,6 +41,11 @@ for kind in ['surefire','failsafe']:
     roots=[E.parse(p).getroot() for p in Path('target',kind+'-reports').glob('TEST-*.xml')]
     totals={key:sum(int(r.get(key,0)) for r in roots) for key in ['tests','failures','errors','skipped']}
     print(kind+': '+json.dumps(totals))
-    assert totals['tests']>0 and not totals['failures'] and not totals['errors'] and not totals['skipped']
+    assert totals['tests']>0 and not totals['failures'] and not totals['errors']
+    for root in roots:
+        for case in root.findall('testcase'):
+            if case.find('skipped') is not None:
+                assert root.get('name')=='com.ezra.pricepulse.simulation.SimulationLifecycleInfrastructureIT' and case.get('name')=='recordsV2LongRunBurstAndReplacementCapacityWithoutFormalSideEffects'
+                print('Not run: existing opt-in P5 capacity/performance experiment (pricepulse.p5.capacity=true)')
 print('Isolated checks passed; logs and XML remain under this ignored build directory')
 PY

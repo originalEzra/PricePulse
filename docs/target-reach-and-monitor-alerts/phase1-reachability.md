@@ -30,6 +30,16 @@
 
 Redis marker 采用 `reachable-once-v1:<MySQL token>`；旧 marker 自动 MISS 并由 MySQL 重建，无须删除正式 Redis。数据库 UUID Token、SQL 权威校验、回滚后 Token 不一致重建保持不变。本阶段不增加迁移。
 
+## 主要改动位置
+
+| 职责 | 源码 |
+| --- | --- |
+| REAL ONCE 判定与原 REPEAT / SIM 判定分离 | [RuleTransitionEngine](../../src/main/java/com/ezra/pricepulse/alert/RuleTransitionEngine.java)、[AlertEvaluationService](../../src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java) |
+| 创建事务与可信报价门槛 | [AlertRuleService](../../src/main/java/com/ezra/pricepulse/alert/AlertRuleService.java)、[OnceRuleActivation](../../src/main/java/com/ezra/pricepulse/alert/OnceRuleActivation.java)、[RealMarketRuntime](../../src/main/java/com/ezra/pricepulse/market/RealMarketRuntime.java) |
+| 派生索引与版本 | [RuleIndex](../../src/main/java/com/ezra/pricepulse/matching/RuleIndex.java)、[RuleIndexEntry](../../src/main/java/com/ezra/pricepulse/matching/RuleIndexEntry.java)、[ThresholdIndex](../../src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java) |
+| 事件时间与展示 | [TargetReachContext](../../src/main/java/com/ezra/pricepulse/alert/TargetReachContext.java)、[MarketDataMapper](../../src/main/java/com/ezra/pricepulse/market/MarketDataMapper.java)、[DashboardView](../../frontend/src/views/DashboardView.vue) |
+| 集成证据 | [ReachableOnceInfrastructureIT](../../src/test/java/com/ezra/pricepulse/market/ReachableOnceInfrastructureIT.java) |
+
 ## 验证
 
 运行入口：`bash scripts/run-real-pipeline-checks.sh`。脚本冻结源码到忽略目录 target，排除 application-local.yml 和凭据，使用 Testcontainers MySQL 8.4.7、Redis 7.4.6、独立 RocketMQ 5.3.2；不覆盖正式 target/classes。

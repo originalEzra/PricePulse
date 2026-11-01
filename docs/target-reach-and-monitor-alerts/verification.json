@@ -1,0 +1,353 @@
+{
+  "date": "2026-11-01",
+  "mode": "OFFLINE_ISOLATED_ONLY",
+  "command": "bash scripts/run-real-pipeline-checks.sh",
+  "public_src_tree_sha256": "cbf88d80849fe8034effe51c619bc76421a5b9033a6e77093f0a62aaf00380c1",
+  "environment": {
+    "java_runtime": "25.0.1",
+    "java_target": 21,
+    "mysql": "8.4.7",
+    "redis": "7.4.6-alpine",
+    "rocketmq": "5.3.2",
+    "time_zone": "Australia/Sydney",
+    "synthetic_clock": "2026-11-02T15:00:00Z"
+  },
+  "suites": {
+    "surefire": {
+      "tests": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 154,
+      "classes": [
+        {
+          "name": "com.ezra.pricepulse.StandaloneApplicationTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.alert.RuleTransitionEngineTest",
+          "tests": 20,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.assistant.AssistantServiceTest",
+          "tests": 17,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.assistant.ModelAlertDraftSchemaTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.assistant.ProviderAlertDraftGeneratorTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.common.api.ApiContractTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.AlpacaDynamicStreamTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.AlpacaProtocolTest",
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.AlpacaStreamLoopbackTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.AlpacaStreamTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.AlpacaSubscriptionsTest",
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MarketDataTest",
+          "tests": 14,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MarketFeedHealthTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MarketLaneTelemetryTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MarketQuoteLaneTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.OpeningGapPolicyTest",
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.QuoteTimingTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.monitoring.AlpacaAssetClientTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.monitoring.LegacySubscriptionTransportTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.monitoring.MonitoringHistoryServiceTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.outbox.OutboxWriterTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.phase0.AiStructuredOutputTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.simulation.SimulationCalendarTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.simulation.SimulationCursorTest",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.simulation.SimulationGeneratorTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "failsafe": {
+      "tests": 128,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 127,
+      "classes": [
+        {
+          "name": "com.ezra.pricepulse.market.DynamicMonitoringInfrastructureIT",
+          "tests": 14,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MarketTimelineInfrastructureIT",
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.MonitorIncidentInfrastructureIT",
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.OpeningGapInfrastructureIT",
+          "tests": 21,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.market.ReachableOnceInfrastructureIT",
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.phase0.InfrastructureIT",
+          "tests": 24,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.simulation.SimulationLifecycleInfrastructureIT",
+          "tests": 13,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 1
+        },
+        {
+          "name": "com.ezra.pricepulse.simulation.SimulationOpeningGapInfrastructureIT",
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.v2.MonitorIncidentMigrationInfrastructureIT",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.v2.SubscriptionMigrationInfrastructureIT",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.v2.V2CleanMigrationInfrastructureIT",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.v2.V2IsolationInfrastructureIT",
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "com.ezra.pricepulse.v2.V2MigrationInfrastructureIT",
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "tests_passed": 51,
+    "failures": 0,
+    "type_check": "PASS",
+    "build": "PASS"
+  },
+  "not_run": [
+    "Existing opt-in P5 long capacity experiment (pricepulse.p5.capacity=true)",
+    "Natural Alpaca IEX market acceptance",
+    "Production V11 migration or rollout"
+  ],
+  "verified_assertions": {
+    "shared_alarm": "one interruption and one recovery per affected user/fault",
+    "queue_capacity": 1024,
+    "queue_actual_discarded_in_fixture": 1024,
+    "queue_recovery_creates_real_once_trigger_in_test_database": true,
+    "isolated_broker_monitor_notifications_after_duplicate_delivery": 2,
+    "monitor_notices_create_price_triggers": false
+  },
+  "production": {
+    "backend_pid_unchanged": 770,
+    "frontend_pid_unchanged": 21134,
+    "restarted": false,
+    "data_changed": false,
+    "migration_executed": false,
+    "additional_iex_connection": false,
+    "pushed": false,
+    "merged": false
+  },
+  "raw_evidence_retained_locally_under_ignored_target": true,
+  "execution_audit": [
+    {
+      "step": "Full isolated matrix with final business source",
+      "unit_passed": 154,
+      "integration_total": 128,
+      "integration_failures": 0,
+      "integration_errors": 2,
+      "integration_skipped": 1,
+      "issue": "Two new fixture cases supplied a synthetic symbol to the existing static symbol allowlist; production validation correctly rejected it."
+    },
+    {
+      "step": "Focused rerun after test-fixture-only correction",
+      "class": "MonitorIncidentInfrastructureIT",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "command": "mvnw -Pintegration -Dtest=NotATest -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=MonitorIncidentInfrastructureIT verify (same isolated mirror, live providers disabled)",
+      "business_source_changed": false
+    }
+  ],
+  "aggregation_note": "Final counts aggregate unchanged passing matrix suites and the fully rerun corrected fixture class; the initial full-run log retains the two fixture errors."
+}

@@ -82,11 +82,32 @@ class OpeningGapInfrastructureIT {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired MonitorIncidentService monitorIncidents;
+    @Autowired com.ezra.pricepulse.monitoring.MonitoringMapper monitored;
     private static final Session PRIOR=new Session(LocalDate.parse("2026-10-28"),LocalDateTime.parse("2026-10-28T13:30:00"),LocalDateTime.parse("2026-10-28T20:00:00"));
     private static final Session CURRENT=new Session(LocalDate.parse("2026-10-29"),LocalDateTime.parse("2026-10-29T13:30:00"),LocalDateTime.parse("2026-10-29T20:00:00"));
     private static final Instant OPEN=CURRENT.open().plusNanos(123456789);
     private static final String GENERATION="00000000-0000-4000-8000-000000000001";
     private record Fixture(long user,long stock) {}
+
+    @Test void independentMonitoringNoticesUseTheExistingRealBrokerAndRemainIdempotent()throws Exception{
+        var f=fixture();monitored.target(f.stock);monitored.subscribe(f.user,f.stock);
+        var fault=new MarketFeedHealth();Instant start=Instant.now().minusSeconds(31);fault.streamFailure("SOCKET_CLOSED_1006",start);
+        var open=fault.faults().getFirst();monitorIncidents.record(open,start.plusSeconds(30));
+        fault.recoverConnection(open.id(),start.plusSeconds(31));monitorIncidents.record(fault.faults().getFirst(),start.plusSeconds(31));
+        var events=jdbc.queryForList("SELECT payload FROM outbox_events WHERE event_type='MARKET_MONITORING' AND JSON_EXTRACT(payload,'$.userId')=? ORDER BY id",String.class,f.user);
+        assertThat(events).hasSize(2);publisher.publishAvailable();
+        long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+        while(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)<2&&System.nanoTime()<deadline)Thread.sleep(50);
+        assertThat(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)).isEqualTo(2);
+        assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE event_type='MARKET_MONITORING' AND JSON_EXTRACT(payload,'$.userId')=? AND status='SENT'",f.user)).isEqualTo(2);
+        for(String payload:events)assertThat(brokerTemplate.syncSend("opening-gap-"+RUN,payload).getSendStatus()).isEqualTo(org.apache.rocketmq.client.producer.SendStatus.SEND_OK);
+        for(String payload:events)org.mockito.Mockito.verify(notifications,org.mockito.Mockito.timeout(15000).atLeast(2)).consume(payload);
+        notifications.consume(events.getLast());notifications.consume(events.getFirst());
+        assertThat(count("SELECT COUNT(*) FROM notifications WHERE user_id=?",f.user)).isEqualTo(2);
+        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id IN(SELECT id FROM alert_rules WHERE user_id=?)",f.user)).isZero();
+        assertThat(notifications.list(f.user,null,10)).allSatisfy(n->assertThat(n.triggerId()).isNull());
+    }
 
     /** Advertise the same free host/container port so native test clients can follow broker routes. */
     private static class TestBroker extends GenericContainer<TestBroker> {

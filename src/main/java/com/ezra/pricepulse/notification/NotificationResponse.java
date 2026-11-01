@@ -5,9 +5,9 @@ import java.time.LocalDateTime;
 
 public record NotificationResponse(
         long id,
-        long triggerId,
-        long ruleId,
-        long stockId,
+        Long triggerId,
+        Long ruleId,
+        Long stockId,
         String stockSymbol,
         String stockName,
         BigDecimal triggerPrice,
@@ -16,7 +16,8 @@ public record NotificationResponse(
         String content,
         NotificationStatus status,
         LocalDateTime readAt,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        String eventType) {
 
     static NotificationResponse from(Notification notification) {
         return new NotificationResponse(
@@ -24,6 +25,6 @@ public record NotificationResponse(
                 notification.getStockId(), notification.getStockSymbol(), notification.getStockName(),
                 notification.getTriggerPrice(), notification.getEventTime(), notification.getTitle(),
                 notification.getContent(), notification.getStatus(), notification.getReadAt(),
-                notification.getCreatedAt());
+                notification.getCreatedAt(),notification.getEventType());
     }
 }

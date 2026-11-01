@@ -38,7 +38,7 @@ class SubscriptionMigrationInfrastructureIT {
             assertThat(value(s,"SELECT desired FROM user_stock_subscriptions WHERE user_id=1 AND stock_id=1")).isEqualTo("0");
             assertThat(value(s,"SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='stocks' AND column_name='name'")).isEqualTo("512");
         }
-        var coordinated=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").load();
+        var coordinated=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").target("10").load();
         assertThat(coordinated.migrate().migrationsExecuted).isEqualTo(1);
         try(var c=connection();var s=c.createStatement()){
             assertThat(facts(s)).isEqualTo(before);

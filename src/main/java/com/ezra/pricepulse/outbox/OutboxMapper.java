@@ -19,6 +19,13 @@ public interface OutboxMapper {
 
     int insertAlertTriggeredBatch(@Param("events") List<OutboxWriter.AlertPayload> events);
 
+    @Insert("""
+        INSERT INTO outbox_events(aggregate_type,aggregate_id,event_type,payload)
+        SELECT 'MONITOR_DELIVERY',d.id,'MARKET_MONITORING',#{payload}
+        FROM market_monitor_deliveries d WHERE d.id=#{id}
+        """)
+    int insertMonitoring(@Param("id")long deliveryId,@Param("payload")String payload);
+
     List<OutboxEvent> selectClaimable(
             @Param("now") LocalDateTime now,
             @Param("leaseCutoff") LocalDateTime leaseCutoff,
