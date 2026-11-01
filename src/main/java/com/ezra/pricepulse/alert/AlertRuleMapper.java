@@ -8,8 +8,6 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface AlertRuleMapper {
-    @org.apache.ibatis.annotations.Select("SELECT id FROM alert_rules WHERE stock_id=#{stockId} AND status='COOLDOWN' ORDER BY id")
-    List<Long> cooldownIds(long stockId);
     List<AlertRule> listSnapshotSource(@Param("userId") long userId, @Param("stockId") long stockId);
     int insert(@Param("rule") AlertRule rule);
 
@@ -23,15 +21,7 @@ public interface AlertRuleMapper {
 
     int updateDetails(
             @Param("rule") AlertRule rule,
-            @Param("expectedVersion") long expectedVersion,
-            @Param("allowedStatuses") Collection<AlertRuleStatus> allowedStatuses);
-
-    int updateStatus(
-            @Param("ruleId") long ruleId,
-            @Param("userId") long userId,
-            @Param("expectedVersion") long expectedVersion,
-            @Param("targetStatus") AlertRuleStatus targetStatus,
-            @Param("allowedStatuses") Collection<AlertRuleStatus> allowedStatuses);
+            @Param("expectedVersion") long expectedVersion);
 
     int softDelete(
             @Param("ruleId") long ruleId,
@@ -43,10 +33,6 @@ public interface AlertRuleMapper {
     List<AlertRule> findCandidates(
             @Param("stockId") long stockId, @Param("ids") Collection<Long> ids);
 
-    int transitionByMatcher(
-            @Param("ruleId") long ruleId,
-            @Param("expectedVersion") long expectedVersion,
-            @Param("expectedStatus") AlertRuleStatus expectedStatus,
-            @Param("targetStatus") AlertRuleStatus targetStatus,
+    int complete(@Param("ruleId") long ruleId,@Param("expectedVersion") long expectedVersion,
             @Param("triggeredAt") LocalDateTime triggeredAt);
 }

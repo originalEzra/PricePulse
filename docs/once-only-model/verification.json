@@ -1,0 +1,417 @@
+{
+  "date": "2026-11-01",
+  "mode": "OFFLINE_ISOLATED_ONLY",
+  "base_commit": "c99377c1cb45ba1df6817928d99918a49c862cc1",
+  "local_branch": "codex/pricepulse-once-only-20261101",
+  "development_copy": "price-pulse-once-only",
+  "runtime_source_sha256": "00dafd6f256e15829f5c76e184936394ef4990ac1fff26cb432d565c9e9474bd",
+  "runtime_source_matches_passing_matrix": true,
+  "environment": {
+    "java_runtime": "25.0.1",
+    "java_target": 21,
+    "spring_boot": "3.5.16",
+    "mysql": "8.4.7",
+    "redis": "7.4.6-alpine",
+    "rocketmq": "5.3.2",
+    "market_clock": "CONTROLLED_SYNTHETIC",
+    "time_zone": "Australia/Sydney"
+  },
+  "commands": [
+    "bash scripts/run-real-pipeline-checks.sh",
+    "mvnw -Pintegration -Dtest=NotATest -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=V21DeliveryRegressionIT verify (providers disabled; self-contained containers)",
+    "node --experimental-strip-types --test frontend/tests/*.test.ts",
+    "npm run type-check",
+    "npm run build",
+    "python3 -m unittest discover -s scripts/tests",
+    "node --test scripts/tests/*.test.mjs"
+  ],
+  "surefire": {
+    "total": {
+      "tests": 144,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": [
+      {
+        "class": "com.ezra.pricepulse.StandaloneApplicationTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.alert.OnceOnlyContractTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.alert.TargetPriceMatcherTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.assistant.AssistantServiceTest",
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.assistant.ModelAlertDraftSchemaTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.assistant.ProviderAlertDraftGeneratorTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.common.api.ApiContractTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.AlpacaDynamicStreamTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.AlpacaProtocolTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.AlpacaStreamLoopbackTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.AlpacaStreamTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.AlpacaSubscriptionsTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MarketDataTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MarketFeedHealthTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MarketLaneTelemetryTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MarketQuoteLaneTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.OpeningGapPolicyTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.QuoteTimingTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.monitoring.AlpacaAssetClientTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.monitoring.LegacySubscriptionTransportTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.monitoring.MonitoringHistoryServiceTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.outbox.OutboxWriterTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.phase0.AiStructuredOutputTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.simulation.SimulationCalendarTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.simulation.SimulationCursorTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.simulation.SimulationGeneratorTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "failsafe_main_matrix": {
+    "total": {
+      "tests": 142,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": [
+      {
+        "class": "com.ezra.pricepulse.market.DynamicMonitoringInfrastructureIT",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MarketTimelineInfrastructureIT",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MonitorIncidentInfrastructureIT",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.MonitoringInfrastructureIT",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.OpeningGapInfrastructureIT",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.market.ReachableOnceInfrastructureIT",
+        "tests": 21,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.phase0.InfrastructureIT",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.simulation.SimulationLifecycleInfrastructureIT",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.simulation.SimulationOpeningGapInfrastructureIT",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.MonitorIncidentMigrationInfrastructureIT",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.OnceOnlyMigrationInfrastructureIT",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.SubscriptionMigrationInfrastructureIT",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.V2CleanMigrationInfrastructureIT",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.V2IsolationInfrastructureIT",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.ezra.pricepulse.v2.V2MigrationInfrastructureIT",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "failsafe_additional_combined": {
+    "class": "com.ezra.pricepulse.market.V21DeliveryRegressionIT",
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "unique_backend_passed": 287,
+  "unique_integration_passed": 143,
+  "frontend": {
+    "tests": 52,
+    "failures": 0,
+    "skipped": 0,
+    "type_check": "PASS",
+    "build": "PASS",
+    "probe_tests": 15
+  },
+  "tooling": {
+    "python_report_tests": 8,
+    "retired_harness_guards": 4,
+    "shell_syntax": "PASS"
+  },
+  "migration": {
+    "production_schema_read_only": 10,
+    "required_sequence": [
+      11,
+      12
+    ],
+    "v11_checksum_unchanged": true,
+    "v10_fixture_rule_rows_preserved": 37,
+    "fixture_quote_trigger_outbox_notification_rows_each": 21,
+    "v12_drops_only_constant_legacy_rule_fields": true,
+    "legacy_active_cooldown_paused_deleted_rows_blocked": true,
+    "simulation_history_preserved_and_read_only": true
+  },
+  "production": {
+    "backend_pid": 770,
+    "backend_started_at": "2026-10-30 23:48:04 +1100",
+    "vite_pid": 21134,
+    "vite_started_at": "2026-10-28 14:49:50 +1100",
+    "restarted": false,
+    "source_checkout_changed": false,
+    "business_data_modified_by_task": false,
+    "migration_executed": false,
+    "additional_iex_connection": false,
+    "pushed": false,
+    "merged": false,
+    "original_ingestion_class_mtime": "2026-10-30 20:07:46 +1100"
+  },
+  "initial_failures_retained": [
+    {
+      "step": "sandbox unit run",
+      "tests": 143,
+      "failures": 0,
+      "errors": 7,
+      "cause": "Sandbox forbids loopback listeners; full matrix rerun with permitted local sockets passed all 144 current unit cases."
+    },
+    {
+      "step": "first full integration matrix",
+      "tests": 142,
+      "failures": 5,
+      "errors": 5,
+      "cause": "Legacy fixture cache token was not invalidated; fixed timestamp fixture preceded effective time; simulation event query passed null bounds; trigger fixture lacked isolated MySQL privilege flag; duplicate result was intentionally nullable; create/edit completion response had stale updatedAt."
+    },
+    {
+      "step": "combined test compilation",
+      "cause": "Missing DirtiesContext import; corrected before executable rerun."
+    },
+    {
+      "step": "combined fixture reruns",
+      "cause": "Synthetic October clock was older than container wall clock; a test fixture initially referenced a wrong retry column. Correct next_retry_at fixture now passes; dispatch business code unchanged."
+    }
+  ],
+  "aggregation_note": "144 unit and 142 integration cases passed together on the final runtime source. The independently rerun combined Broker test adds 1 unique integration case; all 143 integration cases passed, none skipped. The default script now includes that extra class. Initial failures and all passing XML/logs remain locally ignored.",
+  "not_run": [
+    "Production V11/V12 rollout and cutoff backup/restore",
+    "Natural Alpaca market, outage recovery and opening-gap acceptance",
+    "New-model performance benchmarking",
+    "External AI provider",
+    "Legacy standalone externally configured MQ/restart/capacity harnesses; selected self-contained Broker and persistence regressions ran instead"
+  ],
+  "raw_evidence": "target/once-only-audit-20261101 (ignored; not committed)"
+}

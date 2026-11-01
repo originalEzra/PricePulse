@@ -9,8 +9,8 @@ import java.util.*;
 
 /** Versioned per-sequence randomness; persisted price rounding is part of the algorithm. */
 public final class SimulationGenerator {
-    public static final String VERSION="splitmix64-price-v1";
-    public static final String GAP_VERSION="opening-gap-v1";
+    public static final String VERSION="splitmix64-once-v2";
+    public static final String GAP_VERSION="opening-gap-once-v2";
     public static boolean supports(String version){return VERSION.equals(version)||GAP_VERSION.equals(version);}
     public enum Mode { NORMAL, RISE, FALL, OSCILLATE, OPENING_GAP }
     private SimulationGenerator() {}

@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ezra.pricepulse.outbox.OutboxMapper">
+    <!-- One row per persisted REAL trigger, in the same enclosing quote transaction. -->
+    <insert id="insertAlertTriggeredBatch">
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        SELECT 'ALERT_TRIGGER', t.id, 'ALERT_TRIGGERED', incoming.payload
+        FROM (
+            <foreach collection="events" item="event" separator=" UNION ALL ">
+                SELECT #{event.position} AS position_no, #{event.triggerId} AS trigger_id, #{event.payload} AS payload
+            </foreach>
+        ) incoming
+        JOIN alert_triggers t ON t.id = incoming.trigger_id
+        JOIN quote_events q ON q.id = t.quote_event_id AND q.origin_type = 'REAL'
+        ORDER BY incoming.position_no
+    </insert>
+
     <resultMap id="outboxEventMap" type="com.ezra.pricepulse.outbox.OutboxEvent">
         <id property="id" column="id"/>
         <result property="aggregateType" column="aggregate_type"/>

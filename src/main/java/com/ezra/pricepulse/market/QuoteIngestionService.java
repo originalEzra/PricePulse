@@ -118,7 +118,9 @@ public class QuoteIngestionService {
         event.setAcceptedSequence(state == null ? 1L : state.acceptedSequence()+1);
         event.setProcessedAt(MarketTime.utc(clock.instant()));
         event.setBaselineReason(baseline ? baselineReason : null);
-        MatchingResult matched = evaluation.evaluate(stock, event.getId(), price, event.getEventTime(), baseline, opening);
+        var confirmation=new com.ezra.pricepulse.alert.TargetReachContext("TARGET_REACHED",baseline?"RECOVERY":"LIVE",clock.instant(),
+                candidate.eventTime().toInstant(ZoneOffset.UTC),baseline?baselineReason:null);
+        MatchingResult matched = evaluation.evaluate(stock, event.getId(), price, event.getEventTime(), baseline, opening,confirmation);
         data.saveStreamState(new MarketDataModels.StreamState(stock.id(),candidate.provider(),candidate.feed(),eventNs,
                 event.getAcceptedSequence(),candidate.continuityId(),receivedAt,event.getProcessedAt()));
         if (stockMapper.updateLatestQuote(stock.id(), price, event.getEventTime()) != 1

@@ -27,6 +27,8 @@ public class NotificationService {
     private final NotificationMapper mapper;
     private final ObjectMapper json;
     private final Clock clock;
+    private com.ezra.pricepulse.market.MonitorIncidentMapper incidents;
+    @org.springframework.beans.factory.annotation.Autowired void incidents(com.ezra.pricepulse.market.MonitorIncidentMapper incidents){this.incidents=incidents;}
 
     public NotificationService(NotificationMapper mapper, ObjectMapper json, Clock clock) {
         this.mapper = mapper;
@@ -36,6 +38,13 @@ public class NotificationService {
 
     @Transactional
     public void consume(String payload) {
+        try{
+            var envelope=json.readTree(payload);
+            if(envelope==null||!envelope.isObject())throw new IllegalArgumentException("Notification payload must be an object");
+            String type=envelope.path("eventType").asText();
+            if(type.equals("MARKET_MONITORING")){consumeMonitoring(json.readValue(payload,MonitoringNoticeEvent.class));return;}
+            if(!type.isBlank())throw new IllegalArgumentException("Unknown notification event type");
+        }catch(JsonProcessingException error){throw new IllegalArgumentException("Notification payload is malformed",error);}
         AlertTriggeredEvent event = parseEvent(payload);
         event.validate();
         AlertTriggerDelivery delivery = mapper.findDelivery(event.triggerId());
@@ -51,6 +60,28 @@ public class NotificationService {
         }
         NotificationText text = createText(delivery);
         mapper.insertIfAbsent(delivery.getUserId(), delivery.getTriggerId(), text.title(), text.content());
+    }
+
+    private void consumeMonitoring(MonitoringNoticeEvent event){
+        event.validate();var delivery=incidents.delivery(event.deliveryId());
+        if(delivery==null||delivery.userId()!=event.userId()||!delivery.incidentKey().equals(event.incidentKey()))
+            throw new IllegalArgumentException("Monitoring message does not match its persisted delivery");
+        if(delivery.kind().equals("RECOVERED")){
+            Long prior=incidents.deliveryId(delivery.incidentKey(),delivery.userId(),"INTERRUPTED");
+            if(prior==null)throw new IllegalArgumentException("Recovery has no persisted interruption");
+            // Concurrent MQ queues may reorder messages: materialize the prior persisted notice in this transaction.
+            insertMonitoring(incidents.delivery(prior));
+        }
+        insertMonitoring(delivery);
+    }
+    private void insertMonitoring(com.ezra.pricepulse.market.MonitorIncidentMapper.Delivery d){
+        boolean recovered=d.kind().equals("RECOVERED");
+        boolean queue=d.reason().equals("QUEUE_OVERFLOW");
+        String title=recovered?(queue?"行情处理队列已恢复":"实时行情监控已恢复"):queue?"行情处理队列溢出 · 已丢弃成交":"实时行情监控已中断超过 30 秒";
+        String detail=recovered?(queue?"处理链路已从新的可信基线恢复。中断期间可能存在行情缺口，未补偿全部遗漏提醒。":"连接、相关订阅及处理链路已恢复。中断期间可能存在行情缺口，未补偿全部遗漏提醒。")
+                :queue?"处理队列溢出，已确认丢弃 "+d.discardedTotal()+" 笔排队成交；行情连续性已中断，系统将重建基线。"
+                :"行情连接或相关订阅尚未恢复，期间可能存在未检测到的价格提醒。系统按接入策略尝试恢复；若授权被拒绝需检查接入配置。";
+        mapper.insertMonitoring(d.userId(),d.id(),title,d.symbols()+"："+detail+" 故障标识 "+d.incidentKey()+"。");
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +145,22 @@ public class NotificationService {
                     delivery.getStockName(), delivery.getStockSymbol(),
                     displayPrice(delivery.getTriggerPrice()), ruleName, verb, displayThreshold);
             if (delivery.getTriggerContext()!=null) {
+                var context=json.readTree(delivery.getTriggerContext());
+                if("TARGET_REACHED".equals(context.path("kind").asText())){
+                    var reach=json.treeToValue(context,com.ezra.pricepulse.alert.TargetReachContext.class);
+                    String label=switch(reach.confirmation()){
+                        case "RECOVERY" -> "恢复后确认达到";
+                        case "RULE_CREATED" -> "创建时确认达到";
+                        case "RULE_UPDATED" -> "修改时确认达到";
+                        case "RULE_ACTIVATED" -> "旧版启用时确认达到";
+                        default -> "已达到";
+                    };
+                    title=delivery.getStockSymbol()+" "+label+" "+verb+"目标 "+displayThreshold;
+                    content="%s（%s）%s目标，确认价格 %s，提醒“%s”（%s %s）。参考真实成交时间 %s；不推断缺口期间的突破时间。".formatted(
+                            delivery.getStockName(),delivery.getStockSymbol(),label,delivery.getTriggerPrice().toPlainString(),ruleName,verb,displayThreshold,
+                            reach.quoteEventTime().atZone(java.time.ZoneId.of("America/New_York")).format(java.time.format.DateTimeFormatter.ofPattern("MM/dd HH:mm:ss z")));
+                    return new NotificationText(title,content);
+                }
                 OpeningGapContext opening=json.readValue(delivery.getTriggerContext(),OpeningGapContext.class);
                 if (opening.ruleEffectiveAt()==null || !opening.ruleEffectiveAt().isBefore(opening.sessionOpen()))
                     throw new IllegalStateException("Opening trigger has no eligible rule activation");

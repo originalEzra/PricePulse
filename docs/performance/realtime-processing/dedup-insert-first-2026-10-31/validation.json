@@ -1,0 +1,37 @@
+{
+  "candidate": "2e3112a",
+  "before": "30df066",
+  "fullUnit": {
+    "tests": 154,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "relatedUnit": {
+    "tests": 55,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "relatedUnitIsSubset": true,
+  "integration": {
+    "tests": 75,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "businessCorrectnessChecksPassed": 17,
+  "productionChangeFiles": [
+    "src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java"
+  ],
+  "quoteServiceSha256": "55c1a8f10eedfc45238b65caf0b4465172e986998bb38cb260af243ab1300ac5",
+  "allTrackedMainSourcesMatchBothVerifiedBuilds": true,
+  "sourceVersionNote": "Correctness began before the candidate commit; recorded checkout SHA is not a clean-tree assertion. Exact source hash matches immutable candidate.",
+  "evidence": {
+    "unitBuild": "target/real-pipeline-build-nJA9q7",
+    "integrationBuild": "target/real-pipeline-checks-z7Eb3Z",
+    "correctness": "target/dedup-qualified-correctness-20261031"
+  },
+  "formallyLoaded": false,
+  "scope": "Immutable candidate B before restoration; final A validation is separate"
+}

@@ -44,6 +44,19 @@ class AlpacaDynamicStreamTest {
     void auth(){frame("[{\"T\":\"success\",\"msg\":\"authenticated\"}]");}
     void ack(String...symbols){try{frame(json.writeValueAsString(List.of(Map.of("T","subscription","trades",List.of(symbols)))));}catch(Exception e){throw new AssertionError(e);}}
     long sent(String action,String symbol){return commands.stream().filter(s->s.contains("\""+action+"\"")&&s.contains("\""+symbol+"\"")).count();}
+    @Test void incidentRecoveryRequiresEveryCurrentAckAndAHealthyGeneration(){
+        var at=Instant.parse("2026-10-30T14:00:00Z");health.streamFailure("SOCKET_CLOSED_1006",at);String id=health.connectionFaultId();
+        stream.desireSubscriptions(Map.of("AAPL",0L,"PLTR",1L));
+        assertThat(stream.confirmRecovery(Map.of("AAPL",0L,"PLTR",1L),()->health.recoverConnection(id,at.plusSeconds(31)))).isFalse();
+        assertThat(health.connectionFaultId()).isEqualTo(id);
+        ack("AAPL","PLTR");
+        assertThat(stream.confirmRecovery(Map.of("AAPL",0L,"PLTR",2L),()->health.recoverConnection(id,at.plusSeconds(31)))).isFalse();
+        assertThat(stream.confirmRecovery(Map.of("AAPL",0L,"PLTR",1L),()->health.recoverConnection(id,at.plusSeconds(31)))).isTrue();
+        assertThat(health.connectionFaultId()).isNull();
+        health.streamFailure("HEARTBEAT_TIMEOUT",at.plusSeconds(40));String second=health.connectionFaultId();nanos.set(TimeUnit.SECONDS.toNanos(50));
+        assertThat(stream.confirmRecovery(Map.of("AAPL",0L),()->health.recoverConnection(second,at.plusSeconds(51)))).isFalse();
+        assertThat(health.connectionFaultId()).isEqualTo(second);
+    }
     @Test void dynamicAddsShareOneSocketAndDoNotInterruptTheExistingSymbol(){
         stream.desireSubscriptions(Map.of("AAPL",0L,"PLTR",1L));stream.desireSubscriptions(Map.of("AAPL",0L,"PLTR",1L));
         assertThat(sent("subscribe","PLTR")).isEqualTo(1);assertThat(health.confirms("AAPL")).isTrue();assertThat(health.confirms("PLTR")).isFalse();

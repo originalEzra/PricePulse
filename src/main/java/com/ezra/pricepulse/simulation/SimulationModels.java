@@ -23,7 +23,7 @@ public final class SimulationModels {
             String startRequestKey, String startRequestHash) { }
 
     public record Snapshot(long id, String runId, long sourceRuleId, long sourceVersion, String configJson,
-            AlertRuleStatus sourceStatus, AlertRuleStatus initialState, AlertRuleStatus currentState,
+            String sourceStatus, String initialState, String currentState,
             long stateVersion, LocalDateTime lastTriggeredAt) { }
 
     public record Step(long id, String runId, long batchNo, String requestKey, String requestHash,
@@ -32,8 +32,8 @@ public final class SimulationModels {
 
     public record Event(long id, String runId, long stepId, long snapshotRuleId, long pointSeq,
             String eventType, LocalDateTime eventTime, long eventTimeNs, BigDecimal price,
-            AlertRuleStatus fromState, AlertRuleStatus toState) { }
+            String fromState, String toState) { }
 
     public record BatchResult(String runId, long batchNo, long versionAfter,
-            int triggered, int rearmed, List<StoredPoint> points) { }
+            int triggered, List<StoredPoint> points) { }
 }

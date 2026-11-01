@@ -47,7 +47,7 @@ public interface SimulationMapper {
     List<Snapshot> snapshots(String runId);
 
     @Select("SELECT " + SNAP + " FROM simulation_rule_snapshots WHERE run_id=#{runId}"
-            + " AND current_state IN ('ACTIVE','COOLDOWN') ORDER BY id")
+            + " AND current_state='ACTIVE' ORDER BY id")
     List<Snapshot> indexable(String runId);
 
     @Select("""
@@ -55,7 +55,7 @@ public interface SimulationMapper {
             SELECT
             """ + SNAP + " " + """
             FROM simulation_rule_snapshots WHERE run_id=#{runId}
-              AND current_state IN ('ACTIVE','COOLDOWN') AND id IN
+              AND current_state='ACTIVE' AND id IN
             <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
             ORDER BY id
             </script>
@@ -63,11 +63,11 @@ public interface SimulationMapper {
     List<Snapshot> candidates(@Param("runId") String runId, @Param("ids") List<Long> ids);
 
     @Update("""
-            UPDATE simulation_rule_snapshots SET current_state=#{target},state_version=state_version+1,
+            UPDATE simulation_rule_snapshots SET current_state='COMPLETED',state_version=state_version+1,
                 last_triggered_at=COALESCE(#{triggeredAt},last_triggered_at)
-            WHERE run_id=#{s.runId} AND id=#{s.id} AND current_state=#{s.currentState} AND state_version=#{s.stateVersion}
+            WHERE run_id=#{s.runId} AND id=#{s.id} AND current_state='ACTIVE' AND state_version=#{s.stateVersion}
             """)
-    int transition(@Param("s") Snapshot snapshot, @Param("target") AlertRuleStatus target,
+    int complete(@Param("s") Snapshot snapshot,
             @Param("triggeredAt") LocalDateTime triggeredAt);
 
     @Update("UPDATE simulation_runs SET rule_index_token=#{token} WHERE id=#{id}")

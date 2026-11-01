@@ -1,7 +1,6 @@
 package com.ezra.pricepulse.assistant;
 
 import com.ezra.pricepulse.alert.AlertDirection;
-import com.ezra.pricepulse.alert.AlertTriggerMode;
 import java.math.BigDecimal;
 
 public record AlertRuleDraft(
@@ -11,7 +10,5 @@ public record AlertRuleDraft(
         String name,
         String note,
         AlertDirection direction,
-        BigDecimal thresholdPrice,
-        AlertTriggerMode triggerMode,
-        BigDecimal rearmPrice) {
+        BigDecimal thresholdPrice) {
 }

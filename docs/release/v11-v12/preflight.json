@@ -1,0 +1,173 @@
+{
+  "date": "2026-11-01",
+  "scope": "PRE_MERGE_PRE_RELEASE_VERIFICATION_ONLY",
+  "candidate": "6f852ef6c14a5a4e46fb5117a3a9481a17ae51a0",
+  "releaseBranch": "codex/pricepulse-v11-v12-release-20261101",
+  "businessSourceUnchangedFromCandidate": true,
+  "githubBeforeChanges": {
+    "mainSha": "cbee40fca812af7d8c1e057fc1c96e034b32266b",
+    "openPullRequests": 0,
+    "branchProtected": false,
+    "rulesets": 0,
+    "actionsWorkflows": 0,
+    "webhooks": 0,
+    "deployments": 0,
+    "environments": 0,
+    "pages": false
+  },
+  "addedCI": {
+    "purpose": "test-only",
+    "contentsPermission": "read",
+    "deploymentSteps": 0,
+    "externalCredentialsOrSecretsRequired": false,
+    "pinnedOfficialActions": true,
+    "status": "PENDING_GITHUB_EXECUTION"
+  },
+  "localTests": {
+    "surefire": {
+      "tests": 144,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "failsafe": {
+      "tests": 143,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "frontend": 52,
+    "readonlyProbe": 15,
+    "reportTool": 8,
+    "typescript": "PASS",
+    "frontendBuild": "PASS"
+  },
+  "formalPreflight": {
+    "schemaVersion": 10,
+    "ruleCount": 37,
+    "incompatibleRuleCount": 0,
+    "ruleStates": [
+      {
+        "mode": "ONCE",
+        "count": 21,
+        "status": "COMPLETED"
+      },
+      {
+        "mode": "ONCE",
+        "count": 16,
+        "status": "ACTIVE"
+      }
+    ],
+    "triggerCount": 21,
+    "outboxCount": 21,
+    "notificationCount": 21,
+    "outboxStates": [
+      {
+        "count": 21,
+        "status": "SENT"
+      }
+    ],
+    "unsupportedPendingOutbox": 0,
+    "nonRealPriceNotifications": 5,
+    "realQuoteCount": 340020,
+    "legacyQuoteCount": 961,
+    "simulationRuns": 1,
+    "simulationRules": 2,
+    "simulationSteps": 6,
+    "simulationEvents": 2,
+    "targetStates": [
+      {
+        "count": 15,
+        "state": "CONFIRMED"
+      }
+    ],
+    "desiredUserSubscriptions": 45,
+    "reservedSymbols": 15,
+    "budget": 15,
+    "orphanActiveRules": 0,
+    "nonInnoDBTables": 0,
+    "pendingMetadataLocks": 0,
+    "transactionsOver30s": 0,
+    "tableCount": 21
+  },
+  "formalConnection": {
+    "acknowledgedSymbols": 15,
+    "businessWritesEnabled": true,
+    "marketStates": [
+      "CLOSED"
+    ],
+    "newProviderConnectionsOpenedByTask": 0,
+    "oldFailureCodeRetained": "CONNECT_FAILED"
+  },
+  "redis": {
+    "readOnly": true,
+    "currentKeysMissing": 15,
+    "activeRules": 16,
+    "v12FormatForcesMiss": true,
+    "rebuildCasesPassedOffline": true,
+    "formalRebuildExecuted": false
+  },
+  "mq": {
+    "consumeDiffTotal": 0,
+    "inflightTotal": 0,
+    "existingConsumerConnections": 1,
+    "pendingUnsupportedOutbox": 0,
+    "messageBodiesRead": false,
+    "offsetsChangedByTask": false
+  },
+  "backup": {
+    "backupBytes": 124164759,
+    "backupSha256": "4ce6ad89b1431f689c0c076266d6f6c37aeeb45936868b0ee06b1e7e4a4545b9",
+    "dumpCompleted": true,
+    "sqlMode": "600",
+    "directoryMode": "700",
+    "sourceUnchangedAcrossPreparatorySnapshot": true,
+    "actualV10CloneMigratedToV12": true,
+    "rollbackRestoreVerified": true,
+    "tablesVerified": 21,
+    "schemaAndAllOriginalDataVerified": true,
+    "formalDataUnchangedDuringRehearsal": true,
+    "temporaryContainerRemoved": true
+  },
+  "cloneMigration": {
+    "allPreservedRowsAndColumnsEqual": true,
+    "schemaVersion": 12,
+    "formalWritten": false,
+    "repeatedMigrateCount": 0,
+    "originalTablesVerified": 20,
+    "flywayValidate": true,
+    "migrations": [
+      11,
+      12
+    ],
+    "milliseconds": 4023.076042,
+    "springOrProviderOrMqStarted": false,
+    "historyAndSimulationUnchanged": true
+  },
+  "rollback": {
+    "allOriginalRowsAndColumnsEqual": true,
+    "flywayValidate": true,
+    "migrationExecuted": 0,
+    "formalWritten": false,
+    "oldApplicationStarted": false,
+    "allOriginalDDLMatches": true,
+    "allOriginalTables": 21,
+    "schemaVersion": 10
+  },
+  "formalStopMigrationSwitchApprovalReceived": false,
+  "formalStopped": false,
+  "formalMigrated": false,
+  "finalCutoffBackupCompleted": false,
+  "auditNotes": [
+    "Initial clone verifier failed to compile before executing migrations; its local var declaration was corrected. The completed backup was reused only after hash and unchanged source fingerprint checks; private failed log retained.",
+    "All original data/DDL were verified in a restored V10 clone, preserved facts verified through V11/V12, and the V10 backup was independently restored to a second empty schema. No production migration or rollback occurred.",
+    "Current Redis keys are absent; the code sets a 24h TTL, but the exact disappearance cause was not inferred as verified. Missing-index recovery is covered offline; natural rebuild remains pending."
+  ],
+  "releaseGate": "MERGE_AFTER_GITHUB_CI_AND_REVIEW_CHECKS_THEN_WAIT_FOR_EXPLICIT_PRODUCTION_APPROVAL",
+  "notVerified": [
+    "Natural IEX trades, price notifications, opening gap and interruption/recovery after rollout",
+    "IEX 1006 resolution",
+    "Sixteenth-symbol subscription or higher upstream budget",
+    "Production final cutoff snapshot and actual release/rollback switch"
+  ]
+}

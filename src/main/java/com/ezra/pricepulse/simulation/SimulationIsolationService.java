@@ -1,7 +1,7 @@
 package com.ezra.pricepulse.simulation;
 
 import com.ezra.pricepulse.alert.*;
-import com.ezra.pricepulse.alert.RuleTransitionEngine.Definition;
+import com.ezra.pricepulse.alert.TargetPriceMatcher.Definition;
 import com.ezra.pricepulse.common.PriceTicks;
 import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
@@ -64,6 +64,7 @@ public class SimulationIsolationService {
         Stock stock = stocks.findActiveById(stockId);
         if (stock == null) throw missing();
         Seed seed = prepare.apply(stock);
+        if(!SimulationGenerator.supports(seed.generatorVersion()))throw new BusinessException(ErrorCode.CONFLICT,"Only the current once-only simulation model can create experiments");
         BigDecimal price = PriceTicks.normalize(seed.price(), "originPrice");
         long time = nanos(seed.time());
         String id = UUID.randomUUID().toString();
@@ -75,10 +76,8 @@ public class SimulationIsolationService {
         if (old != null && store.deleteOwned(old.id(), userId) != 1) throw conflict();
         store.insertRun(run);
         for (AlertRule source : sources) {
-            AlertRuleStatus initial = source.getStatus() == AlertRuleStatus.PAUSED
-                    ? AlertRuleStatus.PAUSED : AlertRuleStatus.ACTIVE;
             store.insertSnapshot(new Snapshot(0, id, source.getId(), source.getVersion(),
-                    write(AlertRuleResponse.from(source)), source.getStatus(), initial, initial, 0, null));
+                    write(AlertRuleResponse.from(source)), source.getStatus().name(), "ACTIVE", "ACTIVE", 0, null));
         }
         if (old != null) {
             String oldKey = key(old.id());
@@ -94,6 +93,7 @@ public class SimulationIsolationService {
             String requestKey, String requestHash, Function<Run, List<Point>> prepare) {
         validateKey(requestKey, requestHash);
         Run run = requireLocked(userId, runId);
+        if(!SimulationGenerator.supports(run.generatorVersion()))throw new BusinessException(ErrorCode.CONFLICT,"Saved experiment uses the legacy rule model and is read-only; start a new experiment explicitly");
         Step prior = store.byRequest(runId, requestKey);
         if (prior != null) {
             if (!prior.requestHash().equals(requestHash)) throw conflict();
@@ -121,38 +121,33 @@ public class SimulationIsolationService {
         long stepId = store.lastInsertId();
         String token = run.ruleIndexToken();
         BigDecimal previous = run.latestPrice();
-        int triggered = 0, rearmed = 0;
+        int triggered = 0;
         for (StoredPoint point : storedPoints) {
             BigDecimal price = new BigDecimal(point.price());
-            List<Long> ids = index.candidates(key(runId), token, previous, price,
+            List<Long> ids = index.candidates(key(runId), ThresholdIndex.token(token), price,
                     () -> store.indexable(runId).stream().map(this::entry).toList());
             List<RuleIndexEntry> changed = new ArrayList<>();
             for (int offset = 0; offset < ids.size(); offset += 500) {
                 for (Snapshot snapshot : store.candidates(runId, ids.subList(offset, Math.min(offset + 500, ids.size())))) {
                     Definition definition = definition(snapshot);
-                    var decision = RuleTransitionEngine.evaluate(definition, snapshot.currentState(), previous, price);
-                    if (decision.kind() == RuleTransitionEngine.Kind.NONE) continue;
-                    boolean trigger = decision.kind() == RuleTransitionEngine.Kind.TRIGGERED;
-                    if (store.transition(snapshot, decision.target(), trigger ? utc(point.eventTime()) : null) != 1) {
-                        throw conflict();
-                    }
-                    store.insertEvent(new Event(0, runId, stepId, snapshot.id(), point.pointSeq(),
-                            decision.kind().name(), utc(point.eventTime()), nanos(point.eventTime()), price,
-                            snapshot.currentState(), decision.target()));
-                    changed.add(new RuleIndexEntry(snapshot.id(), definition, decision.target()));
-                    if (trigger) triggered++; else rearmed++;
+                    if(!TargetPriceMatcher.matches(definition,AlertRuleStatus.valueOf(snapshot.currentState()),price))continue;
+                    if(store.complete(snapshot,utc(point.eventTime()))!=1)throw conflict();
+                    store.insertEvent(new Event(0,runId,stepId,snapshot.id(),point.pointSeq(),"TRIGGERED",
+                            utc(point.eventTime()),nanos(point.eventTime()),price,"ACTIVE","COMPLETED"));
+                    changed.add(new RuleIndexEntry(snapshot.id(),definition,AlertRuleStatus.COMPLETED));
+                    triggered++;
                 }
             }
             if (!changed.isEmpty()) {
                 String next = UUID.randomUUID().toString();
                 if (store.indexToken(runId, next) != 1) throw conflict();
-                index.changed(key(runId), token, next, changed);
+                index.changed(key(runId), ThresholdIndex.token(token), ThresholdIndex.token(next), changed);
                 token = next;
             }
             previous = price;
         }
         BatchResult result = new BatchResult(runId, step.batchNo(), expectedVersion + 1,
-                triggered, rearmed, List.copyOf(storedPoints));
+                triggered, List.copyOf(storedPoints));
         store.summary(stepId, write(result));
         if (store.finish(step, previous, expectedVersion) != 1) throw conflict();
         return result;
@@ -183,14 +178,13 @@ public class SimulationIsolationService {
     }
 
     private RuleIndexEntry entry(Snapshot snapshot) {
-        return new RuleIndexEntry(snapshot.id(), definition(snapshot), snapshot.currentState());
+        return new RuleIndexEntry(snapshot.id(), definition(snapshot), AlertRuleStatus.valueOf(snapshot.currentState()));
     }
 
     private Definition definition(Snapshot snapshot) {
         var node = read(snapshot.configJson(), com.fasterxml.jackson.databind.JsonNode.class);
         return new Definition(AlertDirection.valueOf(node.path("direction").asText()),
-                node.path("thresholdPrice").decimalValue(), AlertTriggerMode.valueOf(node.path("triggerMode").asText()),
-                node.path("rearmPrice").isNull() ? null : node.path("rearmPrice").decimalValue());
+                node.path("thresholdPrice").decimalValue());
     }
 
     private String write(Object value) {

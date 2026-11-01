@@ -24,4 +24,10 @@ public class MonitoringAccess {
                 ||!transport.observe(stock.symbol(),target.intentVersion()).state().equals("CONFIRMED"))
             throw new BusinessException(ErrorCode.MONITORING_REQUIRED,"请先监控该股票并等待行情订阅确认");
     }
+    public void requireDesired(long user,Stock stock){
+        if(!stock.market().equals("US")||!properties.isEnabled()){requireConfirmed(user,stock);return;}
+        var request=store.subscription(user,stock.id());var target=store.getTarget(stock.id());
+        if(request==null||!request.desired()||target==null||!target.slotReserved()||target.state().equals("CANCELLED"))
+            throw new BusinessException(ErrorCode.MONITORING_REQUIRED,"请先将该股票加入监控；未确认行情时一次性规则等待下一笔合格成交");
+    }
 }

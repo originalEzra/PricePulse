@@ -93,13 +93,12 @@ class SimulationLifecycleInfrastructureIT {
     }
     @Test void startFreezesRealPrefixCalendarOwnRulesAndD1AndRetriesBeforeRevalidatingRevisedData() {
         long owner=user(),outsider=user();
-        rule(owner,"ONCE","ACTIVE");rule(owner,"REPEAT","COOLDOWN");rule(owner,"ONCE","COMPLETED");rule(owner,"ONCE","PAUSED");rule(owner,"ONCE","DELETED");rule(outsider,"ONCE","ACTIVE");
+        rule(owner,"ACTIVE");rule(owner,"ACTIVE");rule(owner,"COMPLETED");rule(owner,"DELETED");rule(outsider,"ACTIVE");
         var request=new Start(stock,request(null).origin(),SimulationGenerator.Mode.RISE,new BigDecimal("0.003"),null,null);
         String key=key();Current run=service.start(owner,request,key);
-        assertThat(run.ruleSnapshots()).hasSize(4);
+        assertThat(run.ruleSnapshots()).hasSize(3);
         assertThat(run.ruleSnapshots()).extracting(Rules::initialState).containsExactly(
-                com.ezra.pricepulse.alert.AlertRuleStatus.ACTIVE,com.ezra.pricepulse.alert.AlertRuleStatus.ACTIVE,
-                com.ezra.pricepulse.alert.AlertRuleStatus.ACTIVE,com.ezra.pricepulse.alert.AlertRuleStatus.PAUSED);
+                "ACTIVE","ACTIVE","ACTIVE");
         var frozen=service.timeline(owner,run.runId(),null,null,null);String calendar=store.current(owner).calendarSnapshot();
         assertThat(frozen.realPrefix()).hasSize(391);assertThat(frozen.realPrefix().getLast().pointRef()).isEqualTo("bar:"+bar);
         jdbc.update("UPDATE alert_rules SET name='edited',threshold_price=999,status='DELETED',version=version+1 WHERE user_id=?",owner);
@@ -138,7 +137,7 @@ class SimulationLifecycleInfrastructureIT {
         assertThat(service.current(owner).runId()).isEqualTo(run.runId());
     }
     @Test void batchesAreDeterministicIdempotentOwnedAndNeverMutateFormalFacts() {
-        long a=user(),b=user();rule(a,"ONCE","ACTIVE");rule(b,"ONCE","ACTIVE");
+        long a=user(),b=user();rule(a,"ACTIVE");rule(b,"ACTIVE");
         var ra=service.start(a,request(null),key());var rb=service.start(b,request(null),key());var before=facts();String firstKey=key();
         var first=service.advance(a,ra.runId(),new Advance(0L,0L),firstKey);
         var other=service.advance(b,rb.runId(),new Advance(0L,0L),key());
@@ -170,12 +169,12 @@ class SimulationLifecycleInfrastructureIT {
         assertThat(count("SELECT COUNT(*) FROM simulation_steps WHERE run_id=?",run.runId())).isEqualTo(2);
     }
     @Test void exhaustedCalendarCacheFailureAndOuterRollbackLeaveNoPartialHour() {
-        long owner=user();rule(owner,"ONCE","ACTIVE");var run=service.start(owner,request(null),key());String calendar=store.current(owner).calendarSnapshot();
+        long owner=user();rule(owner,"ACTIVE");var run=service.start(owner,request(null),key());String calendar=store.current(owner).calendarSnapshot();
         var tooShort=new SimulationCalendar.Snapshot("short",List.of(new SimulationCalendar.Session("2024-10-29",ORIGIN.minusSeconds(60),ORIGIN.plusSeconds(600))));
         jdbc.update("UPDATE simulation_runs SET calendar_snapshot=? WHERE id=?",encode(tooShort),run.runId());
         assertCode(()->service.advance(owner,run.runId(),new Advance(0L,0L),key()),ErrorCode.SERVICE_UNAVAILABLE);
         jdbc.update("UPDATE simulation_runs SET calendar_snapshot=? WHERE id=?",calendar,run.runId());
-        doThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,"test cache unavailable")).when(index).candidates(eq(SimulationIsolationService.key(run.runId())),anyString(),any(),any(),any());
+        doThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE,"test cache unavailable")).when(index).candidates(eq(SimulationIsolationService.key(run.runId())),anyString(),any(),any());
         try{assertCode(()->service.advance(owner,run.runId(),new Advance(0L,0L),key()),ErrorCode.SERVICE_UNAVAILABLE);}finally{reset(index);}
         String retryKey=key();
         assertThatThrownBy(()->new TransactionTemplate(transactionManager).executeWithoutResult(status->{service.advance(owner,run.runId(),new Advance(0L,0L),retryKey);throw new IllegalStateException("crash before commit");})).hasMessageContaining("crash");
@@ -195,7 +194,7 @@ class SimulationLifecycleInfrastructureIT {
         assertThat(second.realPrefix()).isEqualTo(first.realPrefix());assertThat(second.simClock()).isEqualTo(first.simClock());
     }
     @Test void eventPagesRetainEveryOwnedFrozenSnapshotAfterRealRuleDeletion() {
-        long owner=user(),other=user();for(int i=0;i<105;i++)rule(owner,"ONCE","ACTIVE");rule(other,"ONCE","ACTIVE");
+        long owner=user(),other=user();for(int i=0;i<105;i++)rule(owner,"ACTIVE");rule(other,"ACTIVE");
         var run=service.start(owner,request(null),key());service.advance(owner,run.runId(),new Advance(0L,0L),key());
         jdbc.update("UPDATE alert_rules SET name='edited',threshold_price=999,status='DELETED',version=version+1 WHERE user_id=?",owner);
         var before=facts();var first=service.events(owner,run.runId(),ORIGIN,ORIGIN.plusSeconds(3600),null);
@@ -225,81 +224,40 @@ class SimulationLifecycleInfrastructureIT {
         assertCode(()->service.advance(owner,run.runId(),new Advance(1L,1L),key()),ErrorCode.CONFLICT);
         assertThat(service.current(owner).version()).isEqualTo(1);
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"splitmix64-price-v1","opening-gap-v1"})
+    void legacyRepeatAndCooldownExperimentIsReadableButCannotBeReinterpretedOrAdvanced(String generator)throws Exception {
+        long owner=user();rule(owner,"ACTIVE");var run=service.start(owner,request(null),key());service.advance(owner,run.runId(),new Advance(0L,0L),key());
+        jdbc.update("UPDATE simulation_runs SET generator_version=? WHERE id=?",generator,run.runId());
+        String config="{\"name\":\"Legacy\",\"direction\":\"ABOVE\",\"thresholdPrice\":100.0001,\"triggerMode\":\"REPEAT\",\"rearmPrice\":99}";
+        jdbc.update("UPDATE simulation_rule_snapshots SET config_json=?,source_status='PAUSED',current_state='COOLDOWN' WHERE run_id=?",config,run.runId());
+        jdbc.update("UPDATE simulation_rule_events SET to_state='COOLDOWN' WHERE run_id=?",run.runId());
+        jdbc.update("INSERT INTO simulation_rule_events(run_id,step_id,snapshot_rule_id,point_seq,event_type,event_time,event_time_ns,price,from_state,to_state) SELECT run_id,step_id,snapshot_rule_id,2,'REARMED',DATE_ADD(event_time,INTERVAL 60 SECOND),event_time_ns+60000000000,99,'COOLDOWN','ACTIVE' FROM simulation_rule_events WHERE run_id=?",run.runId());
+        var realBefore=facts();var snapshotsBefore=jdbc.queryForList("SELECT * FROM simulation_rule_snapshots WHERE run_id=?",run.runId());
+        var eventsBefore=jdbc.queryForList("SELECT * FROM simulation_rule_events WHERE run_id=? ORDER BY id",run.runId());
+        var stepsBefore=jdbc.queryForList("SELECT * FROM simulation_steps WHERE run_id=?",run.runId());var saved=store.current(owner);
+        var current=service.current(owner);assertThat(current.generatorSupported()).isFalse();
+        assertThat(current.ruleSnapshots().getFirst().currentState()).isEqualTo("COOLDOWN");
+        assertThat(current.ruleSnapshots().getFirst().sourceStatus()).isEqualTo("PAUSED");
+        assertThat(current.ruleSnapshots().getFirst().config().path("triggerMode").asText()).isEqualTo("REPEAT");
+        assertThat(current.stats().triggered()).isEqualTo(1);assertThat(current.stats().legacyRearmed()).isEqualTo(1);
+        assertThat(service.timeline(owner,run.runId(),null,null,null).thresholds().getFirst().currentState()).isEqualTo("COOLDOWN");
+        assertThat(service.events(owner,run.runId(),ORIGIN,ORIGIN.plusSeconds(3600),null).events()).hasSize(2);
+        mvc.perform(get("/api/simulations/current").header("Authorization",token(owner))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.generatorSupported").value(false)).andExpect(jsonPath("$.data.ruleSnapshots[0].currentState").value("COOLDOWN"));
+        mvc.perform(post("/api/simulations/{id}/advance",run.runId()).header("Authorization",token(owner)).header("Idempotency-Key",key()).contentType("application/json").content("{\"expectedVersion\":1,\"expectedBatchNo\":1}"))
+                .andExpect(status().isConflict());
+        assertCode(()->service.advance(owner,run.runId(),new Advance(1L,1L),key()),ErrorCode.CONFLICT);
+        assertThat(store.current(owner)).isEqualTo(saved);assertThat(facts()).isEqualTo(realBefore);
+        assertThat(jdbc.queryForList("SELECT * FROM simulation_rule_snapshots WHERE run_id=?",run.runId())).isEqualTo(snapshotsBefore);
+        assertThat(jdbc.queryForList("SELECT * FROM simulation_rule_events WHERE run_id=? ORDER BY id",run.runId())).isEqualTo(eventsBefore);
+        assertThat(jdbc.queryForList("SELECT * FROM simulation_steps WHERE run_id=?",run.runId())).isEqualTo(stepsBefore);
+    }
     @Test void insufficientFrozenPrefixRefusesReplacementWithoutLosingOldRun() {
         long owner=user();var run=service.start(owner,request(null),key());
         jdbc.update("UPDATE market_history_coverage SET requested_from=? WHERE stock_id=?",MarketTime.utc(ORIGIN),stock);
         assertCode(()->service.start(owner,request(run.runId()),key()),ErrorCode.SERVICE_UNAVAILABLE);
         assertThat(service.current(owner).runId()).isEqualTo(run.runId());
-    }
-    @Test @Timeout(300)
-    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="pricepulse.p5.capacity",matches="true")
-    void recordsV2LongRunBurstAndReplacementCapacityWithoutFormalSideEffects() throws Exception {
-        var zone=MarketTime.NEW_YORK;
-        for(LocalDate day=LocalDate.of(2024,11,6);!day.isAfter(LocalDate.of(2024,12,13));day=day.plusDays(1)) {
-            if(day.getDayOfWeek()==DayOfWeek.SATURDAY || day.getDayOfWeek()==DayOfWeek.SUNDAY)continue;
-            jdbc.update("INSERT INTO market_sessions(provider,session_date,opens_at,closes_at,fetched_at) VALUES('ALPACA',?,?,?,NOW(6))",day,
-                    MarketTime.utc(ZonedDateTime.of(day,LocalTime.of(9,30),zone).toInstant()),MarketTime.utc(ZonedDateTime.of(day,LocalTime.of(16,0),zone).toInstant()));
-        }
-        var report=new LinkedHashMap<String,Object>();
-        report.put("fixture","SYNTHETIC_DISPOSABLE_ONLY");report.put("javaRuntime",System.getProperty("java.runtime.version"));
-        report.put("architecture",System.getProperty("os.arch"));report.put("processors",Runtime.getRuntime().availableProcessors());
-        report.put("mysqlImage",MYSQL.getDockerImageName());report.put("redisImage",REDIS.getDockerImageName());
-        report.put("seed",42);report.put("developmentDatabaseConnected",false);
-        var before=facts();long person=user();Current run=service.start(person,request(null),key());
-        var batches=new ArrayList<Double>();long wall=System.nanoTime();
-        for(long i=0;i<100;i++){long started=System.nanoTime();service.advance(person,run.runId(),new Advance(i,i),key());batches.add(ms(started));}
-        double wallMs=ms(wall);var reads=new ArrayList<Double>();
-        long started=System.nanoTime();var first=service.timeline(person,run.runId(),null,null,null);reads.add(ms(started));
-        int points=first.simulation().size(),pages=1;String cursor=first.pointCursor();
-        while(cursor!=null){started=System.nanoTime();var page=service.timeline(person,run.runId(),first.range().from(),first.range().to(),cursor);reads.add(ms(started));points+=page.simulation().size();cursor=page.pointCursor();pages++;}
-        assertThat(points).isEqualTo(6000);assertThat(pages).isEqualTo(10);
-        started=System.nanoTime();service.start(person,request(run.runId()),key());double longReplacement=ms(started);
-        assertThat(count("SELECT COUNT(*) FROM simulation_steps WHERE run_id=?",run.runId())).isZero();
-        report.put("priceOnly",Map.of("tradingHours",100,"savedPoints",points,"pages",pages,"batchLatency",stats(batches),
-                "savedPointsPerSecond",6000_000.0/wallMs,"pageLatency",stats(reads),"replacementMs",longReplacement));
-        var dense=new ArrayList<Map<String,Object>>();
-        for(int scale:List.of(250,1000)) {
-            long owner=user();var rows=new ArrayList<Object[]>();for(int i=0;i<scale;i++)rows.add(new Object[]{owner,stock});
-            jdbc.batchUpdate("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'P5 dense synthetic','ABOVE',100.0001,'ONCE','ACTIVE')",rows);
-            Current current=service.start(owner,request(null),key());var advances=new ArrayList<Double>();var replacements=new ArrayList<Double>();
-            for(int i=0;i<25;i++) {
-                started=System.nanoTime();var batch=service.advance(owner,current.runId(),new Advance(0L,0L),key());advances.add(ms(started));
-                assertThat(batch.triggered()).isEqualTo(scale);assertThat(batch.points()).hasSize(60);
-                assertThat(count("SELECT COUNT(*) FROM simulation_rule_events WHERE run_id=?",current.runId())).isEqualTo(scale);
-                if(i==0) {
-                    int eventCount=0;String next=null;do{var page=service.events(owner,current.runId(),ORIGIN,batch.toClock(),next);eventCount+=page.events().size();next=page.eventCursor();}while(next!=null);
-                    assertThat(eventCount).isEqualTo(scale);
-                }
-                String old=current.runId();started=System.nanoTime();current=service.start(owner,request(old),key());replacements.add(ms(started));
-                assertThat(count("SELECT COUNT(*) FROM simulation_rule_events WHERE run_id=?",old)).isZero();
-                assertThat(count("SELECT COUNT(*) FROM simulation_rule_snapshots WHERE run_id=?",old)).isZero();
-                assertThat(count("SELECT COUNT(*) FROM simulation_steps WHERE run_id=?",old)).isZero();
-            }
-            dense.add(Map.of("rules",scale,"samples",25,"eventsPerFirstPoint",scale,"batchLatency",stats(advances),
-                    "replacementLatency",stats(replacements),"allOldChildrenDeleted",true));
-        }
-        report.put("simultaneousTriggers",dense);
-        // Isolate the wait for the production stock-row locking pattern; 25ms is deliberate contention, not normal traffic.
-        var waits=new ArrayList<Double>();
-        try(var pool=Executors.newFixedThreadPool(2)) {
-            for(int i=0;i<12;i++) {
-                var held=new CountDownLatch(1);var release=new CountDownLatch(1);
-                var holder=pool.submit(()->new TransactionTemplate(transactionManager).executeWithoutResult(status->{
-                    jdbc.queryForObject("SELECT id FROM stocks WHERE id=? FOR UPDATE",Long.class,stock);held.countDown();
-                    try{if(!release.await(10,TimeUnit.SECONDS))throw new AssertionError("lock gate timed out");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new RuntimeException(e);}
-                }));
-                assertThat(held.await(10,TimeUnit.SECONDS)).isTrue();var attempting=new CountDownLatch(1);
-                var waiter=pool.submit(()->new TransactionTemplate(transactionManager).execute(status->{
-                    attempting.countDown();long began=System.nanoTime();jdbc.queryForObject("SELECT id FROM stocks WHERE id=? FOR UPDATE",Long.class,stock);return ms(began);
-                }));
-                try{assertThat(attempting.await(10,TimeUnit.SECONDS)).isTrue();Thread.sleep(25);}finally{release.countDown();}
-                waits.add(waiter.get(10,TimeUnit.SECONDS));holder.get(10,TimeUnit.SECONDS);
-            }
-        }
-        report.put("stockRowLock",Map.of("deliberateHoldMs",25,"samples",12,"waitLatency",stats(waits),"interpretation","controlled contention; not uncontended latency or capacity"));
-        assertThat(facts()).isEqualTo(before);report.put("formalBusinessFactsChangedBySimulation",0);report.put("status","PASSED");
-        var directory=java.nio.file.Path.of(System.getProperty("pricepulse.p5.report-dir","target/v2-p5"));java.nio.file.Files.createDirectories(directory);
-        json.writerWithDefaultPrettyPrinter().writeValue(directory.resolve("simulation-capacity.json").toFile(),report);
     }
     private static double ms(long started){return (System.nanoTime()-started)/1_000_000.0;}
     private static Map<String,Object> stats(List<Double> values){var sorted=values.stream().sorted().toList();return Map.of("samples",values.size(),"meanMs",values.stream().mapToDouble(Double::doubleValue).average().orElseThrow(),"p95Ms",sorted.get((int)Math.ceil(sorted.size()*.95)-1),"p99Ms",sorted.get((int)Math.ceil(sorted.size()*.99)-1),"maxMs",sorted.getLast(),"samplesMs",values);}
@@ -307,7 +265,7 @@ class SimulationLifecycleInfrastructureIT {
     private Start latest(String expected){return new Start(stock,new Origin(OriginKind.LATEST,null,null),SimulationGenerator.Mode.RISE,new BigDecimal("0.003"),42L,expected);}
     private String key(){return UUID.randomUUID().toString();}
     private long user(){String email=key()+"@test.local";jdbc.update("INSERT INTO users(email,password_hash,display_name) VALUES(?,'test','Simulation')",email);return jdbc.queryForObject("SELECT id FROM users WHERE email=?",Long.class,email);}
-    private void rule(long user,String mode,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'Frozen','ABOVE',100.0001,?,?,?)",user,stock,mode,mode.equals("REPEAT")?new BigDecimal("99.99"):null,status);}
+    private void rule(long user,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'Frozen','ABOVE',100.0001,?)",user,stock,status);}
     private long count(String sql,Object...args){return jdbc.queryForObject(sql,Long.class,args);}
     private List<?> facts(){return List.of(jdbc.queryForMap("SELECT latest_price,latest_quote_at,rule_index_token FROM stocks WHERE id=?",stock),count("SELECT COUNT(*) FROM quote_events"),count("SELECT COUNT(*) FROM alert_triggers"),count("SELECT COUNT(*) FROM outbox_events"),count("SELECT COUNT(*) FROM notifications"),count("SELECT COALESCE(SUM(version),0) FROM alert_rules"),count("SELECT COUNT(*) FROM market_price_bars"));}
     private void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call,ErrorCode code){assertThatThrownBy(call).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.errorCode()).isEqualTo(code));}

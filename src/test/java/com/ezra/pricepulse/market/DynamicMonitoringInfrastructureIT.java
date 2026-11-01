@@ -107,6 +107,24 @@ class DynamicMonitoringInfrastructureIT {
         cancel(b,one.stock().id());service.reconcile();assertThat(wire.sent("unsubscribe","PLTR")).isEqualTo(1);assertThat(store.reserved()).isEqualTo(1);
         wire.ack();service.reconcile();assertThat(store.reserved()).isZero();assertThat(wire.connections).isEqualTo(1);
     }
+    @Test void optInTelemetryObservesTheActualRuntimeLaneAndRetiresCancelledStockMetrics()throws Exception{
+        var registry=new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        try(var telemetry=new MarketLaneTelemetry(registry,clock)){
+            runtime.telemetry(telemetry);
+            long u=user();var row=add(u,"AAPL");service.reconcile();wire.ack();service.reconcile();
+            rule(u,row.stock().id(),"Observed crossing",100);
+            tradeAndAwait("AAPL",row.stock().id(),99);tradeAndAwait("AAPL",row.stock().id(),101);
+            await(()->registry.find("pricepulse.market.processed").counter()!=null&&registry.get("pricepulse.market.processed").counter().count()==2);
+            await(()->registry.get("pricepulse.market.process").timer().count()==2);
+            assertThat(registry.get("pricepulse.market.input").counter().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.transaction").timer().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.queue.wait").timer().count()).isEqualTo(2);
+            assertThat(registry.get("pricepulse.market.phase.trigger_outbox_write").timer().count()).isEqualTo(1);
+            assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",row.stock().id())).isEqualTo(1);
+            cancel(u,row.stock().id());service.reconcile();wire.ack();service.reconcile();
+            assertThat(registry.getMeters()).isEmpty();
+        }finally{runtime.telemetry(null);registry.close();}
+    }
     @Test void delayedSubscribeAfterCancellationCannotConfirmOrFreeCapacityUntilCompensated()throws Exception{
         jdbc.update("UPDATE market_subscription_control SET symbol_limit=1 WHERE id=1");long u=user();var first=add(u,"PLTR");service.reconcile();cancel(u,first.stock().id());service.reconcile();
         assertThatThrownBy(()->add(user(),"SPY")).isInstanceOf(BusinessException.class).hasMessageContaining("名额");
@@ -131,13 +149,26 @@ class DynamicMonitoringInfrastructureIT {
         wire.ack();service.reconcile();assertThat(service.list(u).subscriptions().getFirst().state()).isEqualTo("CONFIRMED");
         assertThat(store.getTarget(row.stock().id()).confirmedEpoch()).isNotEqualTo(old);assertThat(count("SELECT SUM(version) FROM alert_rules WHERE user_id=?",u)).isEqualTo(version);
     }
-    @Test void unrelatedAdditionKeepsOldContinuityAndFirstNewTradeOnlyBuildsBaseline()throws Exception{
+    @Test void creationReadinessRequiresCurrentAckAndAnAcceptedPointFromTheCurrentLane()throws Exception{
+        long u=user();var row=add(u,"AAPL");service.reconcile();
+        var stock=stocks.findActiveById(row.stock().id());
+        assertThat(runtime.canConfirmLatest(stock,new MarketDataModels.StreamState(stock.id(),"ALPACA","iex",MarketTime.nanos(clock.instant()),1,"old",MarketTime.utc(clock.instant()),MarketTime.utc(clock.instant())))).isFalse();
+        wire.ack();service.reconcile();tradeAndAwait("AAPL",stock.id(),210);
+        await(()->runtime.canConfirmLatest(stocks.findActiveById(stock.id()),data.streamState(stock.id())));
+        runtime.stop();boot();
+        assertThat(runtime.canConfirmLatest(stocks.findActiveById(stock.id()),data.streamState(stock.id()))).isFalse();
+        wire.ack();service.reconcile();
+        assertThat(runtime.canConfirmLatest(stocks.findActiveById(stock.id()),data.streamState(stock.id()))).isFalse();
+        tradeAndAwait("AAPL",stock.id(),210);
+        await(()->runtime.canConfirmLatest(stocks.findActiveById(stock.id()),data.streamState(stock.id())));
+    }
+    @Test void unrelatedAdditionKeepsOldContinuityAndFirstNewTradeConfirmsReachedOnceTarget()throws Exception{
         long u=user();var apple=add(u,"AAPL");service.reconcile();wire.ack();service.reconcile();
         var ar=rule(u,apple.stock().id(),"Existing crossing",100);tradeAndAwait("AAPL",apple.stock().id(),99);
         String before=jdbc.queryForObject("SELECT continuity_id FROM market_stream_state WHERE stock_id=?",String.class,apple.stock().id());
         var pltr=add(u,"PLTR");service.reconcile();wire.ack();service.reconcile();var pr=rule(u,pltr.stock().id(),"First must not alert",100);
         tradeAndAwait("PLTR",pltr.stock().id(),101);tradeAndAwait("AAPL",apple.stock().id(),101);await(()->count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",ar.id())==1);
-        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",pr.id())).isZero();
+        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",pr.id())).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT continuity_id FROM market_stream_state WHERE stock_id=?",String.class,apple.stock().id())).isEqualTo(before);
         tradeAndAwait("PLTR",pltr.stock().id(),99);
         tradeAndAwait("PLTR",pltr.stock().id(),101);await(()->count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",pr.id())==1);
@@ -164,12 +195,12 @@ class DynamicMonitoringInfrastructureIT {
         assertThatThrownBy(()->add(user(),"SPY")).isInstanceOf(BusinessException.class).hasMessageContaining("名额");
         boot();service.reconcile();assertThat(store.reserved()).isZero();assertThat(add(user(),"SPY").state()).isEqualTo("PENDING");
     }
-    @Test void runtimeRestartFirstTradeRebuildsBaselineWithoutReplayingCrossing()throws Exception{
+    @Test void runtimeRestartFirstTradeConfirmsReachedTargetOnlyOnce()throws Exception{
         long u=user();var row=add(u,"AAPL");service.reconcile();wire.ack();service.reconcile();var r=rule(u,row.stock().id(),"Recovery",100);
         tradeAndAwait("AAPL",row.stock().id(),99);
         long accepted=count("SELECT accepted_sequence FROM market_stream_state WHERE stock_id=?",row.stock().id());runtime.stop();boot();wire.ack();service.reconcile();
         tradeAndAwait("AAPL",row.stock().id(),101);assertThat(sequence(row.stock().id())).isGreaterThan(accepted);
-        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",r.id())).isZero();
+        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",r.id())).isEqualTo(1);
         tradeAndAwait("AAPL",row.stock().id(),99);
         tradeAndAwait("AAPL",row.stock().id(),101);await(()->count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",r.id())==1);
     }
@@ -205,7 +236,8 @@ class DynamicMonitoringInfrastructureIT {
     long count(String sql,Object...args){return jdbc.queryForObject(sql,Long.class,args);}
     long sequence(long stock){return count("SELECT COALESCE((SELECT accepted_sequence FROM market_stream_state WHERE stock_id=?),0)",stock);}
     void tradeAndAwait(String symbol,long stock,int price)throws Exception{long before=sequence(stock);wire.trade(symbol,price);await(()->sequence(stock)>before);assertThat(jdbc.queryForObject("SELECT latest_price FROM stocks WHERE id=?",BigDecimal.class,stock)).isEqualByComparingTo(BigDecimal.valueOf(price));}
-    AlertRuleResponse rule(long user,long stock,String name,int threshold){var r=rules.create(user,new SaveAlertRuleRequest(stock,name,null,AlertDirection.ABOVE,BigDecimal.valueOf(threshold),AlertTriggerMode.ONCE,null));jdbc.update("UPDATE alert_rules SET effective_at='2026-10-29 00:00:00' WHERE id=?",r.id());return r;}
+    // These subscription tests assert retained crossing/baseline behavior; REAL ONCE reachability has its own suite.
+    AlertRuleResponse rule(long user,long stock,String name,int threshold){var r=rules.create(user,new SaveAlertRuleRequest(stock,name,null,AlertDirection.ABOVE,BigDecimal.valueOf(threshold)));jdbc.update("UPDATE alert_rules SET effective_at='2026-10-29 00:00:00' WHERE id=?",r.id());return r;}
     static void await(BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);while(!condition.getAsBoolean()&&System.nanoTime()<end)Thread.sleep(10);assertThat(condition.getAsBoolean()).as("bounded isolated runtime condition").isTrue();}
     class Wire {
         final BlockingQueue<JsonNode> queue=new LinkedBlockingQueue<>();final List<JsonNode> sent=new CopyOnWriteArrayList<>();final Set<String> actual=new TreeSet<>();

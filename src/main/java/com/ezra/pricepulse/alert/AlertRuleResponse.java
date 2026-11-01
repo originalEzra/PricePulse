@@ -12,8 +12,6 @@ public record AlertRuleResponse(
         String note,
         AlertDirection direction,
         BigDecimal thresholdPrice,
-        AlertTriggerMode triggerMode,
-        BigDecimal rearmPrice,
         AlertRuleStatus status,
         LocalDateTime lastTriggeredAt,
         long version,
@@ -24,7 +22,7 @@ public record AlertRuleResponse(
         return new AlertRuleResponse(
                 rule.getId(), rule.getStockId(), rule.getStockSymbol(), rule.getStockName(),
                 rule.getName(), rule.getNote(), rule.getDirection(), rule.getThresholdPrice(),
-                rule.getTriggerMode(), rule.getRearmPrice(), rule.getStatus(), rule.getLastTriggeredAt(),
+                rule.getStatus(), rule.getLastTriggeredAt(),
                 rule.getVersion(), rule.getCreatedAt(), rule.getUpdatedAt());
     }
 }

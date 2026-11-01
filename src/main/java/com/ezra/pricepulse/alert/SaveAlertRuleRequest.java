@@ -12,7 +12,9 @@ public record SaveAlertRuleRequest(
         @NotBlank @Size(max = 100) String name,
         @Size(max = 500) String note,
         @NotNull AlertDirection direction,
-        @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal thresholdPrice,
-        @NotNull AlertTriggerMode triggerMode,
-        @DecimalMin(value = "0", inclusive = false) BigDecimal rearmPrice) {
+        @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal thresholdPrice) {
+    @com.fasterxml.jackson.annotation.JsonAnySetter
+    public void rejectRemovedField(String name,com.fasterxml.jackson.databind.JsonNode value){
+        throw new IllegalArgumentException("Unsupported rule field: "+name+"; only one-time target rules are supported");
+    }
 }

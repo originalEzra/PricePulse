@@ -5,20 +5,20 @@ import { completeStockRules, reconcileShownRules, ruleLineColor, shownRuleThresh
 
 const rule = (id: number, status: RuleStatus = 'ACTIVE', stockId = 1, version = 0): AlertRule => ({
   id, stockId, status, version, name: `Rule ${id}`, direction: id % 2 ? 'ABOVE' : 'BELOW', thresholdPrice: 100 + id,
-  triggerMode: 'REPEAT', rearmPrice: 99, stockSymbol: 'TEST', stockName: 'Synthetic',
+  stockSymbol: 'TEST', stockName: 'Synthetic',
   lastTriggeredAt: null, createdAt: '', updatedAt: '',
 })
 
-test('initial display chooses at most three ACTIVE or COOLDOWN rules and retains the complete table input', () => {
-  const rules = [rule(1, 'COMPLETED'), rule(2), rule(3, 'COOLDOWN'), rule(4), rule(5), rule(6, 'PAUSED')]
+test('initial display chooses at most three ACTIVE rules and retains completed rules in the table', () => {
+  const rules = [rule(1, 'COMPLETED'), rule(2), rule(3), rule(4), rule(5), rule(6, 'COMPLETED')]
   const before = structuredClone(rules)
   assert.deepEqual([...reconcileShownRules(undefined, rules)], [2, 3, 4])
   assert.deepEqual(rules, before)
-  assert.deepEqual([...reconcileShownRules(undefined, [rule(1, 'COMPLETED'), rule(2, 'PAUSED')])], [])
+  assert.deepEqual([...reconcileShownRules(undefined, [rule(1, 'COMPLETED'), rule(2, 'COMPLETED')])], [])
 })
 
 test('polling preserves explicit hidden and completed selections; deleted or moved rows are pruned', () => {
-  const rules = [rule(1), rule(2, 'COOLDOWN'), rule(3, 'COMPLETED'), rule(4, 'PAUSED')]
+  const rules = [rule(1), rule(2), rule(3, 'COMPLETED'), rule(4, 'COMPLETED')]
   assert.deepEqual([...reconcileShownRules(new Set([3, 4, 90]), rules)], [3, 4])
   assert.deepEqual([...reconcileShownRules(new Set(), rules)], [])
   const byStock = new Map([[1, new Set([3])], [2, new Set([20])]])
@@ -27,7 +27,7 @@ test('polling preserves explicit hidden and completed selections; deleted or mov
 })
 
 test('multiple threshold lines use the same identity colors as the table without changing rule state', () => {
-  const rules = [rule(1), rule(2, 'COOLDOWN'), rule(3, 'COMPLETED')], before = structuredClone(rules)
+  const rules = [rule(1), rule(2), rule(3, 'COMPLETED')], before = structuredClone(rules)
   const lines = shownRuleThresholds(rules, new Set([1, 2, 3]))
   assert.equal(lines.length, 3)
   assert.equal(new Set(lines.map(line => line.color)).size, 3)

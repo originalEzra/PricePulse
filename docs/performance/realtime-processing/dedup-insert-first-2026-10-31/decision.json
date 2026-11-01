@@ -1,0 +1,14 @@
+{
+  "retained": false,
+  "finalImplementation": "A: SELECT before INSERT",
+  "baselineRef": "30df066",
+  "candidateRef": "2e3112a",
+  "productionFilesDifferentFromBaseline": [],
+  "baselineAndCurrentQuoteServiceSha256": "4c696e00c063e6056df5d7a3fcceed4f52041978f6476d97fdb8e89258e61b24",
+  "candidateQuoteServiceSha256": "55c1a8f10eedfc45238b65caf0b4465172e986998bb38cb260af243ab1300ac5",
+  "reason": "Normal path saves one SQL, but five paired repeats did not meet cross-workload latency/backlog and duplicate-path retention criteria. All favorable and adverse runs retained.",
+  "candidateCorrectnessPassed": true,
+  "formalServiceChanged": false,
+  "pushed": false,
+  "deployed": false
+}

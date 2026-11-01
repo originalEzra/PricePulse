@@ -145,7 +145,7 @@ class NotificationPipelineIT {
 
     private long owner(){String email=UUID.randomUUID()+"@p5.test";jdbc.update("INSERT INTO users(email,password_hash,display_name) VALUES(?,'unused','P5 Synthetic')",email);return jdbc.queryForObject("SELECT id FROM users WHERE email=?",Long.class,email);}
     private long stock(long owner){String symbol="P5"+UUID.randomUUID().toString().substring(0,8);jdbc.update("INSERT INTO stocks(symbol,name,market,currency) VALUES(?,'P5 synthetic','SIM','USD')",symbol);long id=jdbc.queryForObject("SELECT id FROM stocks WHERE symbol=?",Long.class,symbol);rule(owner,id);return id;}
-    private void rule(long owner,long stock){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'P5 rule','ABOVE',100,'ONCE','ACTIVE')",owner,stock);}
+    private void rule(long owner,long stock){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'P5 rule','ABOVE',100,'ACTIVE')",owner,stock);}
     private void crossing(long owner,long stock){for(int i=0;i<2;i++)market.replay(owner,new ReplayRequest(List.of(new QuoteInputRequest(UUID.randomUUID().toString(),stock,new BigDecimal(i==0?"95":"101"),LocalDateTime.of(2024,10,29,13,30).plusSeconds(i),"P5_SYNTHETIC",(long)i))));}
     private long trigger(long stock){return jdbc.queryForObject("SELECT t.id FROM alert_triggers t JOIN quote_events q ON q.id=t.quote_event_id WHERE q.stock_id=?",Long.class,stock);}
     private long deliveries(){return (long)metrics.get("pricepulse.notification.deliveries").tag("outcome","success").counter().count();}
@@ -175,15 +175,15 @@ class NotificationPipelineIT {
                 "SELECT id FROM quote_events WHERE event_key = ?", Long.class, "mq-pipeline:" + RUN);
         jdbc.update("""
                 INSERT INTO alert_rules
-                    (user_id, stock_id, name, direction, threshold_price, trigger_mode, status, version)
-                VALUES (?, ?, 'MQ pipeline rule', 'ABOVE', 100.0000, 'ONCE', 'COMPLETED', 1)
+                    (user_id, stock_id, name, direction, threshold_price, status, version)
+                VALUES (?, ?, 'MQ pipeline rule', 'ABOVE', 100.0000, 'COMPLETED', 1)
                 """, userId, stockId);
         long ruleId = jdbc.queryForObject(
                 "SELECT id FROM alert_rules WHERE user_id = ? AND name = 'MQ pipeline rule'", Long.class, userId);
         String snapshot = """
                 {"id":%d,"stockId":%d,"stockSymbol":"MQ%s","stockName":"Pipeline Stock",\
                 "name":"MQ pipeline rule","direction":"ABOVE","thresholdPrice":100.0000,\
-                "triggerMode":"ONCE","status":"ACTIVE","version":0}
+                "status":"ACTIVE","version":0}
                 """.formatted(ruleId, stockId, suffix.toUpperCase()).replace("\n", "");
         jdbc.update("""
                 INSERT INTO alert_triggers

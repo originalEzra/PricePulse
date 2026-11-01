@@ -1,0 +1,326 @@
+{
+  "scope": "Isolated queue-entry transactions, loopback protocol and temporary real Broker; no market acceptance or production rollout",
+  "fullUnit": {
+    "totals": {
+      "tests": 143,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": [
+      {
+        "name": "com.ezra.pricepulse.StandaloneApplicationTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.alert.RuleTransitionEngineTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.assistant.AssistantServiceTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.assistant.ModelAlertDraftSchemaTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.assistant.ProviderAlertDraftGeneratorTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.common.api.ApiContractTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaDynamicStreamTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaProtocolTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaStreamLoopbackTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaStreamTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaSubscriptionsTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketDataTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketFeedHealthTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketLaneTelemetryTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketQuoteLaneTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.OpeningGapPolicyTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.QuoteTimingTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.monitoring.AlpacaAssetClientTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.monitoring.LegacySubscriptionTransportTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.monitoring.MonitoringHistoryServiceTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.outbox.OutboxWriterTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.phase0.AiStructuredOutputTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.simulation.SimulationCalendarTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.simulation.SimulationCursorTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.simulation.SimulationGeneratorTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "relatedUnit": {
+    "totals": {
+      "tests": 44,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": [
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaDynamicStreamTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaStreamLoopbackTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.AlpacaStreamTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketFeedHealthTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketLaneTelemetryTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketQuoteLaneTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.QuoteTimingTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.outbox.OutboxWriterTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "relatedUnitIsSubsetOfFullUnit": true,
+  "integration": {
+    "totals": {
+      "tests": 75,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": [
+      {
+        "name": "com.ezra.pricepulse.market.DynamicMonitoringInfrastructureIT",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.MarketTimelineInfrastructureIT",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.market.OpeningGapInfrastructureIT",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.phase0.InfrastructureIT",
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "com.ezra.pricepulse.v2.V2IsolationInfrastructureIT",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "correctness": {
+    "businessChecksPassed": 8,
+    "sqlCounterDiagnostic": "3000 actual SELECT executions / successful rows, digest count 2967; discrepancy retained, not PASS"
+  },
+  "pythonReportTests": {
+    "tests": 4,
+    "failures": 0
+  },
+  "shellSyntax": "PASS",
+  "pythonCompilation": "PASS",
+  "sourceSha256": {
+    "src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java": "c8092f42585d6ba3722f8c045d21258a258260f961e9b13054c7c395813ae0b4",
+    "src/main/java/com/ezra/pricepulse/market/MarketLaneTelemetry.java": "aa245fd37b3871835eae68822f7adab17f24215a4c12fdea4f39ab95d4977390",
+    "src/main/java/com/ezra/pricepulse/market/MarketQuoteLane.java": "cc5b2bbcb78194407bd36cc58ffd1241cae2e49e53704a8def47d7a203a58436",
+    "src/main/java/com/ezra/pricepulse/market/QuoteTiming.java": "350d09d54f389c74fc8a57579ee2bab14bd56736d46f4ccd63704dce090ca2f1",
+    "src/main/java/com/ezra/pricepulse/market/RealMarketRuntime.java": "fe696053164e74329cc784be7b0a09942f2a2dfb3476e59c51745142c9feed56",
+    "src/main/java/com/ezra/pricepulse/outbox/OutboxMapper.java": "548ac107a1d12aa4ac3d0a51a4722e39c934968067c1c800c890555361f93933",
+    "src/main/java/com/ezra/pricepulse/outbox/OutboxWriter.java": "e7881d8d3f6202e970a49ef8b6e6a999a708231a20ba891ba05eedc01ade7265",
+    "src/main/resources/com/ezra/pricepulse/outbox/OutboxMapper.xml": "795202e4cc5de0d62a759d9c9bee1b1701ab140a0a5e5d4eb730b18f40e069fc"
+  },
+  "evidence": {
+    "fullUnitBuild": "target/real-pipeline-build-65IIIB",
+    "integrationBuild": "target/real-pipeline-checks-aOHmDs",
+    "rawCorrectness": "target/pipeline-final-correctness-20261031"
+  },
+  "loadedIntoFormalService": false
+}

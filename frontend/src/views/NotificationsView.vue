@@ -79,11 +79,11 @@ onBeforeUnmount(() => { requestVersion++; pending?.abort() })
       <div v-if="loading" class="loading-block">加载通知中…</div>
       <button v-for="item in items" :key="item.id" class="notification-row" :class="{ unread: item.status === 'UNREAD' }" :disabled="notifications.markingAll || notifications.reading.has(item.id)" @click="markRead(item)">
         <span class="notice-dot"></span>
-        <span class="notice-symbol">{{ item.stockSymbol.slice(0, 2) }}</span>
-        <span class="notice-copy"><strong>{{ item.title }}</strong><span>{{ item.content }}</span><small>{{ item.stockName }} · 行情时间 {{ date(item.eventTime) }}</small></span>
-        <span class="notice-price"><strong>{{ formatPrice(item.triggerPrice) }}</strong><small>{{ date(item.createdAt) }}</small></span>
+        <span class="notice-symbol">{{ item.eventType?.startsWith('MONITORING_') ? '监控' : item.stockSymbol.slice(0, 2) }}</span>
+        <span class="notice-copy"><strong>{{ item.title }}</strong><span>{{ item.content }}</span><small>{{ item.stockName }} · {{ item.eventType?.startsWith('MONITORING_') ? '故障事件时间' : '行情时间' }} {{ date(item.eventTime) }}</small></span>
+        <span class="notice-price"><strong>{{ item.eventType?.startsWith('MONITORING_') ? (item.eventType === 'MONITORING_RECOVERED' ? '已恢复' : '监控异常') : formatPrice(item.triggerPrice) }}</strong><small>{{ date(item.createdAt) }}</small></span>
       </button>
-      <div v-if="!loading && items.length === 0" class="empty-state roomy"><strong>没有{{ filter === 'UNREAD' ? '未读' : filter === 'READ' ? '已读' : '' }}通知</strong><span>规则被价格真正穿越后，通知会出现在这里。</span></div>
+      <div v-if="!loading && items.length === 0" class="empty-state roomy"><strong>没有{{ filter === 'UNREAD' ? '未读' : filter === 'READ' ? '已读' : '' }}通知</strong><span>价格目标确认、重复规则触发及监控异常通知会出现在这里。</span></div>
     </section>
   </div>
 </template>

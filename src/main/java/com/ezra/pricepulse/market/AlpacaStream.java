@@ -46,6 +46,19 @@ public final class AlpacaStream implements AutoCloseable {
         dynamic.desire(desired);sendNextSubscription();
     }
     synchronized AlpacaSubscriptions.View subscriptions(){return dynamic==null?null:dynamic.view();}
+    public synchronized boolean healthyConnection(){
+        long now=ticker.getAsLong(),drift=clockDrift(now);
+        return running&&socket!=null&&subscribed&&now-lastReceivedNanos<=SILENCE_NANOS
+                &&now-lastHeartbeatNanos<=SILENCE_NANOS&&Math.abs(drift)<=CLOCK_DRIFT_MILLIS;
+    }
+    /** Check ACKs and close a fault under the same connection-generation fence as fail(). */
+    synchronized boolean confirmRecovery(Map<String,Long> expected,Runnable recovered){
+        if(!healthyConnection())return false;
+        if(dynamic!=null){var view=dynamic.view();
+            for(var e:expected.entrySet())if(!view.confirms(e.getKey())||!Objects.equals(view.desired().get(e.getKey()),e.getValue()))return false;
+        }else for(String symbol:expected.keySet())if(!health.confirms(symbol))return false;
+        recovered.run();return true;
+    }
     private void sendNextSubscription(){
         if(!running||socket==null||dynamic==null)return;
         var command=dynamic.next();if(command==null)return;

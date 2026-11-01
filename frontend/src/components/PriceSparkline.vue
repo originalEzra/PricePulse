@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { formatPrice } from '../utils/format'
-import type { RuleStatus } from '../api/types'
-import { ruleStatusLabel, type ChartAnnotation, type ChartThreshold, type TimedChartAnnotation } from '../utils/chart'
+import { type ChartAnnotation, type ChartThreshold, type TimedChartAnnotation } from '../utils/chart'
 import { createTimeAxis, formatNewYorkTimestamp, nearestTimeIndex, segments, type TradingSession } from '../utils/timeAxis'
 import { indexPointEvents, instantKey, previousValidPrice, priceDifference } from '../utils/chartInspection'
 import ChartInfoPanel from './ChartInfoPanel.vue'
@@ -12,7 +11,7 @@ const emit = defineEmits<{ 'event-select': [ids: number[]] }>()
 const props = withDefaults(defineProps<{
   values: number[]; timestamps?: string[]; currency?: string
   annotations?: ChartAnnotation[]; thresholds?: ChartThreshold[]
-  pointStates?: Array<RuleStatus | null>; previousValues?: Array<number | null>
+  previousValues?: Array<number | null>
   timeRange?: { from: string; to: string }; sessionIds?: string[]; breakTimes?: string[]
   temporalAnnotations?: TimedChartAnnotation[]; pointDetails?: string[]; emptyLabel?: string
   pointKinds?: string[]; gapRanges?: Array<{ from: string; to: string }>
@@ -24,7 +23,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   timestamps: () => [],
   currency: '',
-  annotations: () => [], thresholds: () => [], pointStates: () => [], previousValues: () => [],
+  annotations: () => [], thresholds: () => [], previousValues: () => [],
   sessionIds: () => [], breakTimes: () => [], temporalAnnotations: () => [], pointDetails: () => [], emptyLabel: '尚无可用行情',
   pointKinds: () => [], gapRanges: () => [],
   eventScope: 'REAL',
@@ -243,18 +242,6 @@ const markerTags = computed(() => {
   }
   return tags
 })
-const cooldownBands = computed(() => {
-  const bands: Array<{ x: number; width: number }> = []
-  let start: number | null = null
-  for (const point of dataPoints.value) {
-    if (props.pointStates[point.index] === 'COOLDOWN' && start == null) start = point.x
-    if (props.pointStates[point.index] !== 'COOLDOWN' && start != null) {
-      bands.push({ x: start, width: point.x - start }); start = null
-    }
-  }
-  if (start != null) bands.push({ x: start, width: width.value - right - start })
-  return bands
-})
 const color = (kind: ChartAnnotation['kind']) => kind === 'ABOVE' ? '#278b68' : kind === 'BELOW' ? '#d76358' : '#537dad'
 
 function inspect(event: PointerEvent) {
@@ -358,7 +345,6 @@ const rising = computed(() => {
         <rect :x="gap.center - 7" :y="bottom - 7" width="14" height="14" fill="#fafbf7" />
         <path :d="`M ${gap.center - 5} ${bottom + 4} l 4 -8 M ${gap.center + 1} ${bottom + 4} l 4 -8`" fill="none" stroke="#68776e" stroke-width="1.6" />
       </g>
-      <rect v-for="(band, index) in cooldownBands" :key="`cool-${index}`" :x="band.x" :y="top" :width="band.width" :height="bottom - top" fill="#e8bd5b" opacity="0.12" />
       <polyline v-for="(segment, index) in lineSegments" :key="`area-${index}`" :points="segment.area" :fill="`url(#${gradientId})`" stroke="none" />
       <g v-for="(line, index) in thresholds" :key="`threshold-${index}`" class="threshold-line">
         <line :x1="left" :x2="width - right" :y1="y(line.value)" :y2="y(line.value)" :stroke="line.color ?? color(line.kind)" stroke-dasharray="6 5" stroke-width="1.2" :opacity="line.color ? 0.85 : 0.65" />
@@ -406,11 +392,11 @@ const rising = computed(() => {
     <div v-if="selectedMarkers.length" class="temporal-event-details"><button class="text-button" @click="closeEventDetails">收起事件详情 ×</button>
       <article v-for="item in selectedMarkers" :key="item.id"><strong>{{ item.ruleName ?? item.label }} · {{ item.rawPrice ?? formatPrice(item.price) }}</strong><time>{{ formatNewYorkTimestamp(item.eventTime) }}</time><p>{{ item.kind === 'ABOVE' ? '▲ 上破' : '▼ 下破' }} · 阈值 {{ item.threshold ?? '—' }} · {{ item.result ?? item.label }}</p>
         <p v-if="item.label.includes('跳空')">{{ item.detail }}</p>
-        <details v-if="item.ruleSnapshot"><summary>规则快照详情</summary><dl class="event-snapshot"><div><dt>规则名称</dt><dd>{{ item.ruleSnapshot.name }}</dd></div><div><dt>触发方式</dt><dd>{{ item.ruleSnapshot.triggerMode === 'ONCE' ? '一次性' : '重复' }}</dd></div><div><dt>重新激活价</dt><dd>{{ item.ruleSnapshot.rearmPrice ?? '—' }}</dd></div><div><dt>快照状态</dt><dd>{{ item.ruleSnapshot.status }}</dd></div><div><dt>版本</dt><dd>{{ item.ruleSnapshot.version }}</dd></div><div><dt>备注</dt><dd>{{ item.ruleSnapshot.note || '—' }}</dd></div></dl></details>
+        <details v-if="item.ruleSnapshot"><summary>规则快照详情</summary><pre class="snapshot-json">{{ JSON.stringify(item.ruleSnapshot, null, 2) }}</pre></details>
       </article>
     </div>
-    <details v-if="hasChart" class="chart-point-details"><summary>点位详情</summary><dl class="event-snapshot"><div><dt>纽约时间</dt><dd>{{ formatNewYorkTimestamp(inspectedTime) }}</dd></div><div><dt>原始时间</dt><dd>{{ inspectedTime }}</dd></div><div><dt>精确价格</dt><dd>{{ inspectedRawPrice }}</dd></div><template v-if="eventScope === 'SIMULATION'"><div><dt>起点原价</dt><dd>{{ originPrice }}</dd></div><div><dt>较起点偏移</dt><dd>{{ inspectedOffset ? signed(inspectedOffset.value) : '—' }}</dd></div><div><dt>模拟点</dt><dd>{{ inspectedSequence ?? '真实前缀' }}</dd></div></template><div v-if="pointDetails[inspectedPoint?.index ?? -1]"><dt>数据说明</dt><dd>{{ pointDetails[inspectedPoint!.index] }}</dd></div><div v-if="pointStates[inspectedPoint?.index ?? -1]"><dt>规则状态</dt><dd>{{ ruleStatusLabel[pointStates[inspectedPoint!.index]!] }}</dd></div></dl><p v-for="event in inspectedEvents" :key="event.id">{{ event.ruleName ?? event.label }} · {{ event.detail }}</p><p v-for="(annotation, index) in inspectedLegacy" :key="index">{{ annotation.detail }}</p></details>
-    <div v-if="annotations.length || cooldownBands.length" class="chart-legend"><span v-if="annotations.some(item => item.kind !== 'REARMED')"><i :style="{ background: color(annotations.find(item => item.kind !== 'REARMED')!.kind) }"></i>触发点</span><span v-if="annotations.some(item => item.kind === 'REARMED')"><i class="legend-rearm"></i>重新激活</span><span v-if="cooldownBands.length"><i class="legend-cooldown"></i>冷却区间</span></div>
+    <details v-if="hasChart" class="chart-point-details"><summary>点位详情</summary><dl class="event-snapshot"><div><dt>纽约时间</dt><dd>{{ formatNewYorkTimestamp(inspectedTime) }}</dd></div><div><dt>原始时间</dt><dd>{{ inspectedTime }}</dd></div><div><dt>精确价格</dt><dd>{{ inspectedRawPrice }}</dd></div><template v-if="eventScope === 'SIMULATION'"><div><dt>起点原价</dt><dd>{{ originPrice }}</dd></div><div><dt>较起点偏移</dt><dd>{{ inspectedOffset ? signed(inspectedOffset.value) : '—' }}</dd></div><div><dt>模拟点</dt><dd>{{ inspectedSequence ?? '真实前缀' }}</dd></div></template><div v-if="pointDetails[inspectedPoint?.index ?? -1]"><dt>数据说明</dt><dd>{{ pointDetails[inspectedPoint!.index] }}</dd></div></dl><p v-for="event in inspectedEvents" :key="event.id">{{ event.ruleName ?? event.label }} · {{ event.detail }}</p><p v-for="(annotation, index) in inspectedLegacy" :key="index">{{ annotation.detail }}</p></details>
+    <div v-if="annotations.length" class="chart-legend"><span>历史事件标记</span></div>
     <p v-if="values.length" class="chart-hint">悬停查看 · 点击触发标记展开详情 · ← / → 切换点位<template v-if="axisBreaks.length"> · // 省略休市</template></p>
   </div>
 </template>
@@ -444,8 +430,7 @@ const rising = computed(() => {
 .chart-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 7px; font-size: 10px; color: #7d887f; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .chart-legend i { width: 7px; height: 7px; border-radius: 50%; background: #278b68; }
-.chart-legend .legend-rearm { background: #537dad; }
-.chart-legend .legend-cooldown { width: 12px; border-radius: 2px; background: #eddaaa; }
+
 .chart-hint { margin: 7px 0 0; text-align: center; color: #8a938d; font-size: 10px; }
 .chart-empty { height: 272px; }
 .temporal-event-details { margin-top: 12px; padding: 12px; background: #f1f7f1; border-radius: 10px; max-height: 260px; overflow: auto; }
@@ -455,4 +440,5 @@ const rising = computed(() => {
 @container (max-width: 550px) { .chart-heading-grid, .chart-heading-grid.without-latest { grid-template-columns: minmax(0, 1fr) auto; } .chart-heading-context { grid-column: 1 / -1; } }
 @container (max-width: 390px) { .chart-heading-grid, .chart-heading-grid.without-latest { grid-template-columns: minmax(0, 1fr); } .chart-heading-latest { text-align: left; } }
 @media (max-width: 660px) { .price-chart-wrap { padding-right: 12px; padding-left: 12px; } }
+.snapshot-json { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 </style>

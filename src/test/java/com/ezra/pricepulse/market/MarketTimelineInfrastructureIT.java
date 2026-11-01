@@ -56,7 +56,8 @@ class MarketTimelineInfrastructureIT {
         var a=ingest(stock,"second",at,"100","session1");
         assertThat(a.matching().triggered()).isEqualTo(1);
         assertThat(ingest(stock,"second",at,"100","session1").outcome()).isEqualTo(QuoteOutcome.DUPLICATE);
-        assertThat(ingest(stock,"same-time-rearm",at,"95","session1").matching().rearmed()).isEqualTo(1);
+        rule(user,stock,"ACTIVE");
+        assertThat(ingest(stock,"same-time-low",at,"95","session1").matching().triggered()).isZero();
         assertThat(ingest(stock,"same-time-trigger",at,"100","session1").matching().triggered()).isEqualTo(1);
         assertThat(ingest(stock,"older",T,"105","session1").outcome()).isEqualTo(QuoteOutcome.DISCARDED_OUT_OF_ORDER);
         assertThatThrownBy(()->ingest(stock,"second",at,"102","session1")).isInstanceOf(BusinessException.class);
@@ -66,17 +67,15 @@ class MarketTimelineInfrastructureIT {
         assertThat(count("SELECT COUNT(*) FROM outbox_events WHERE JSON_EXTRACT(payload,'$.stockId')=?",stock)).isEqualTo(2);
         assertThat(count("SELECT COUNT(*) FROM quote_events WHERE stock_id=? AND origin_type='REAL' AND event_time_ns IS NOT NULL",stock)).isEqualTo(5);
     }
-    @Test void reconnectBaselineRearmsCooldownButNeverCreatesCrossGapAlerts() {
-        long owner=user(),stock=stock();long rule=rule(owner,stock,"COOLDOWN");
-        var first=ingest(stock,"base",T,"95","connectionA");
-        assertThat(first.matching().rearmed()).isEqualTo(1);assertThat(first.matching().triggered()).isZero();
+    @Test void reconnectConfirmsTargetsWithoutReactivatingCompletedRules() {
+        long owner=user(),stock=stock();long firstRule=rule(owner,stock,"ACTIVE");
+        assertThat(ingest(stock,"base",T,"95","connectionA").matching().triggered()).isZero();
         assertThat(ingest(stock,"trigger",T.plusSeconds(1),"100","connectionA").matching().triggered()).isEqualTo(1);
-        assertThat(ingest(stock,"after-gap",T.plusSeconds(20),"95","connectionB").matching().rearmed()).isEqualTo(1);
+        long secondRule=rule(owner,stock,"ACTIVE");
+        assertThat(ingest(stock,"after-gap",T.plusSeconds(20),"95","connectionB").matching().triggered()).isZero();
         assertThat(ingest(stock,"trigger2",T.plusSeconds(21),"100","connectionB").matching().triggered()).isEqualTo(1);
-        jdbc.update("UPDATE alert_rules SET status='ACTIVE',version=version+1 WHERE id=?",rule);
-        jdbc.update("UPDATE stocks SET rule_index_token=UUID() WHERE id=?",stock);
         assertThat(ingest(stock,"gap2",T.plusSeconds(40),"110","connectionC").matching().triggered()).isZero();
-        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",rule)).isEqualTo(2);
+        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id IN (?,?)",firstRule,secondRule)).isEqualTo(2);
         assertThat(count("SELECT COUNT(*) FROM quote_events WHERE stock_id=? AND baseline_reason IS NOT NULL",stock)).isEqualTo(3);
     }
     @Test void historyCacheRevisionAndCalendarDoNotChangeRealOrSimulationState() {
@@ -107,12 +106,10 @@ class MarketTimelineInfrastructureIT {
     @Test void readOnlyTimelinePaginatesAllOwnedEventsRetainsMovedDeletedRuleSnapshotsAndUsesActualEventTime() {
         long owner=user(),outsider=user(),stock=stock(),other=stock();long rule=rule(owner,stock,"ACTIVE");rule(outsider,stock,"ACTIVE");
         ingest(stock,"base",T,"99","one");
-        for(int i=0;i<105;i++) {
-            ingest(stock,"up-"+i,T.plusSeconds(i*2+1),"100","one");
-            ingest(stock,"down-"+i,T.plusSeconds(i*2+2),"95","one");
-        }
+        for(int i=0;i<104;i++)rule(owner,stock,"ACTIVE");
+        ingest(stock,"up",T.plusSeconds(1),"100","one");
         cache.store(download(stock,"101.0000"),List.of(stock),T.minusSeconds(60),T.plusSeconds(300));
-        jdbc.update("UPDATE alert_rules SET stock_id=?,threshold_price=999,name='edited',status='DELETED',version=version+1 WHERE id=?",other,rule);
+        jdbc.update("UPDATE alert_rules SET stock_id=?,threshold_price=999,name='edited',status='DELETED',version=version+1 WHERE user_id=? AND stock_id=?",other,owner,stock);
         var before=facts(stock);
         var dto=clock.at(LocalDateTime.parse("2026-10-28T14:00:00"),()->timeline.timeline(owner,stock,"1D",null));
         assertThat(dto.events()).hasSize(100);assertThat(dto.eventCursor()).isNotNull();assertThat(dto.thresholds()).isEmpty();
@@ -202,7 +199,7 @@ class MarketTimelineInfrastructureIT {
     }
     private long user(){String email=UUID.randomUUID()+"@test.local";jdbc.update("INSERT INTO users(email,password_hash,display_name) VALUES(?,'test','Timeline')",email);return jdbc.queryForObject("SELECT id FROM users WHERE email=?",Long.class,email);}
     private long stock(){String symbol="T"+UUID.randomUUID().toString().substring(0,15);jdbc.update("INSERT INTO stocks(symbol,name,market,currency) VALUES(?,'Timeline','US','USD')",symbol);return jdbc.queryForObject("SELECT id FROM stocks WHERE symbol=?",Long.class,symbol);}
-    private long rule(long user,long stock,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'Original','ABOVE',100,'REPEAT',95,?)",user,stock,status);return jdbc.queryForObject("SELECT MAX(id) FROM alert_rules WHERE user_id=?",Long.class,user);}
+    private long rule(long user,long stock,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status,effective_at) VALUES(?,?,'Original','ABOVE',100,?,?)",user,stock,status,MarketTime.utc(T.minusSeconds(1)));jdbc.update("UPDATE stocks SET rule_index_token=UUID() WHERE id=?",stock);return jdbc.queryForObject("SELECT MAX(id) FROM alert_rules WHERE user_id=?",Long.class,user);}
     private long count(String sql,Object...args){return jdbc.queryForObject(sql,Long.class,args);}
     private List<?> facts(long stock){return List.of(jdbc.queryForMap("SELECT latest_price,latest_quote_at,rule_index_token FROM stocks WHERE id=?",stock),
         count("SELECT COUNT(*) FROM quote_events"),count("SELECT COUNT(*) FROM alert_triggers"),count("SELECT COUNT(*) FROM outbox_events"),count("SELECT COUNT(*) FROM notifications"),

@@ -10,6 +10,15 @@ public interface QuoteEventMapper {
 
     QuoteEvent findByEventKey(String eventKey);
 
+    @org.apache.ibatis.annotations.Select("""
+        SELECT q.* FROM quote_events q JOIN market_stream_state s ON s.stock_id=q.stock_id
+          AND s.accepted_sequence=q.accepted_sequence AND s.event_time_ns=q.event_time_ns
+        WHERE q.stock_id=#{stockId} AND q.origin_type='REAL' AND q.processing_status='PROCESSED'
+          AND q.provider='ALPACA' AND q.feed='iex' AND s.provider='ALPACA' AND s.feed='iex'
+        ORDER BY q.id DESC LIMIT 1
+        """)
+    QuoteEvent latestAcceptedReal(long stockId);
+
     int markProcessed(long eventId);
 
     @org.apache.ibatis.annotations.Update("""

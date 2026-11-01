@@ -12,7 +12,7 @@ import { completeStockRules, reconcileShownRules, ruleLineColor, shownRuleThresh
 import '../styles/ruleTable.css'
 import { compactNewYorkTime } from '../utils/chartInspection'
 import { applyWatchlistQuote, refreshWatchlistQuotes, type WatchlistQuote } from '../utils/watchlistPrices'
-import { openingGapDetail } from '../utils/openingGap'
+import { openingGapDetail, targetReachLabel, targetReachDetail } from '../utils/openingGap'
 import StockMonitoringPanel from '../components/StockMonitoringPanel.vue'
 import { confirmedMonitoring, subscriptionLabels } from '../utils/monitoring'
 import { useAuthStore } from '../stores/auth'
@@ -20,7 +20,7 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const monitoringManaged = ref(false), monitoringPage = ref<MonitoringPage | null>(null)
 const selectedMonitoring = computed(() => monitoringPage.value?.subscriptions.find(row => row.stock.id === selectedId.value))
-const canCreateRule = computed(() => !monitoringManaged.value || confirmedMonitoring(selectedMonitoring.value?.state))
+const canCreateRule = computed(() => !monitoringManaged.value || selectedMonitoring.value?.state === 'CONFIRMED' || selectedMonitoring.value?.state === 'PENDING')
 let loadGeneration = 0
 const stocks = ref<Stock[]>([])
 const rules = ref<AlertRule[]>([])
@@ -65,11 +65,11 @@ const allEvents = computed(() => [...(timeline.value?.events ?? []), ...extraEve
 const deliveryLabel = { PENDING: '通知待生成', UNREAD: '通知未读', READ: '通知已读', FAILED: '通知投递异常' }
 const chartAnnotations = computed<TimedChartAnnotation[]>(() => allEvents.value.map(event => ({
   id: event.triggerId, eventTime: event.eventTime, price: Number(event.price), kind: event.ruleSnapshot.direction,
-  label: openingGapDetail(event, compactNewYorkTime) ? '开盘跳空' : event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发',
+  label: targetReachLabel(event) ?? (openingGapDetail(event, compactNewYorkTime) ? '开盘跳空' : event.ruleSnapshot.direction === 'ABOVE' ? '上破触发' : '下破触发'),
   ruleName: event.ruleSnapshot.name, threshold: event.ruleSnapshot.thresholdPrice,
   result: `${openingGapDetail(event, compactNewYorkTime) ? '开盘跳空 · ' : ''}已触发 · ${deliveryLabel[event.notificationStatus]}`, rawPrice: event.price,
   ruleSnapshot: event.ruleSnapshot,
-  detail: `${openingGapDetail(event, compactNewYorkTime) ? openingGapDetail(event, compactNewYorkTime) + ' · ' : ''}${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
+  detail: `${targetReachDetail(event, compactNewYorkTime) ?? openingGapDetail(event, compactNewYorkTime) ?? ''} · ${event.ruleSnapshot.name} · 当时阈值 ${money(event.ruleSnapshot.thresholdPrice)} · ${deliveryLabel[event.notificationStatus]} · #${event.triggerId}`,
 })))
 const connectionLabel: Record<string, string> = { DISABLED: '未连接行情源', CONNECTING: '连接中', SUBSCRIBED: '行情已连接', NOT_SUBSCRIBED: '该股票未订阅', RECONNECTING: '正在重连', REJECTED: '认证或订阅被拒绝', STOPPED: '行情已停止' }
 const freshnessLabel: Record<string, string> = { MARKET_CLOSED: '正常交易时段已休市', NO_DATA: '尚未收到成交', DELAYED: '成交数据延迟', RECENT_IEX_TRADE: '近期 IEX 成交' }
@@ -85,7 +85,7 @@ const priceMove = computed(() => {
   const last = prices.value.at(-1)!
   return ((last - first) / first) * 100
 })
-const activeRuleCount = computed(() => rules.value.filter((r) => r.status === 'ACTIVE' || r.status === 'COOLDOWN').length)
+const activeRuleCount = computed(() => rules.value.filter((r) => r.status === 'ACTIVE').length)
 
 async function load() {
   const generation = ++loadGeneration, owner = auth.session?.accessToken
@@ -247,8 +247,6 @@ async function useAiDraft(draft: AlertRuleDraft) {
     note: draft.note ?? undefined,
     direction: draft.direction,
     thresholdPrice: draft.thresholdPrice,
-    triggerMode: draft.triggerMode,
-    rearmPrice: draft.rearmPrice,
   }
   aiModalOpen.value = false
   modalOpen.value = true
@@ -261,12 +259,6 @@ function replaceRule(updated: AlertRule) {
   void loadQuotes()
 }
 
-async function toggleRule(rule: AlertRule) {
-  error.value = ''
-  try { replaceRule(rule.status === 'PAUSED' ? await ruleApi.resume(rule) : await ruleApi.pause(rule)) }
-  catch (cause) { error.value = errorMessage(cause) }
-}
-
 async function removeRule(rule: AlertRule) {
   if (!confirm(`确认删除规则“${rule.name}”？触发历史会保留。`)) return
   error.value = ''
@@ -276,7 +268,7 @@ async function removeRule(rule: AlertRule) {
   } catch (cause) { error.value = errorMessage(cause) }
 }
 
-const statusLabel: Record<string, string> = { ACTIVE: '已启用', COOLDOWN: '冷却中', PAUSED: '已暂停', COMPLETED: '已完成' }
+const statusLabel: Record<string, string> = { ACTIVE: '等待目标价', COMPLETED: '已完成', DELETED: '已取消' }
 async function prepareHistory() {
   if (!selectedId.value) return
   try { const result = await monitoringApi.prepareHistory(selectedId.value); watchlistError.value = result.state === 'FAILED' ? '历史准备失败，请稍后重试' : '历史行情已请求准备，将自动刷新' }
@@ -334,7 +326,7 @@ onMounted(() => {
           <template #heading><div v-if="selectedStock" class="stock-chart-heading"><h2>{{ selectedStock.name }}</h2><span class="stock-symbol">{{ selectedStock.symbol }}</span>
             <div class="window-tabs" aria-label="行情时间窗口"><button v-for="item in (['1H', '1D', '1W', '1M'] as const)" :key="item" :class="{ active: timelineWindow === item }" @click="timelineWindow = item">{{ item }}</button></div>
             <p v-if="timeline" class="market-status">IEX · {{ shortFreshness[timeline.health.freshness] ?? timeline.health.freshness }} · {{ compactNewYorkTime(selectedStock.latestQuoteAt ?? '').slice(6) }}</p>
-            <p v-if="monitoringManaged" class="monitor-status">{{ selectedMonitoring ? subscriptionLabels[selectedMonitoring.state] : '尚未请求监控' }} · {{ canCreateRule ? '正式提醒可用' : '行情订阅尚未确认' }}</p>
+            <p v-if="monitoringManaged" class="monitor-status">{{ selectedMonitoring ? subscriptionLabels[selectedMonitoring.state] : '尚未请求监控' }} · {{ confirmedMonitoring(selectedMonitoring?.state) ? '正式提醒可用' : '等待合格行情；一次性规则可先创建' }}</p>
             <p v-else-if="timeline" class="monitor-status">{{ connectionLabel[timeline.health.connection] ?? timeline.health.connection }} · {{ timeline.health.businessWritesEnabled && timeline.health.connection !== 'NOT_SUBSCRIBED' ? '正式提醒已启用' : '只读观察，正式提醒未启用' }}</p>
             <p v-if="timeline?.health.lastError" class="market-warning">行情有异常，请查看行情详情</p>
             <p v-if="timeline?.dataQuality && (!timeline.dataQuality.historyCoverageComplete || !timeline.dataQuality.calendarCoverageComplete || timeline.dataQuality.unavailableMinutes > 0)" class="market-warning">历史有缺口，详见行情详情</p>
@@ -350,19 +342,18 @@ onMounted(() => {
         <div v-if="selectedRules.length" class="rule-table-scroll" role="region" aria-label="该股票的全部提醒规则" tabindex="0">
           <table class="rule-table">
             <caption>显示 {{ chartThresholds.length }} 条阈值线 · 勾选不改变监控状态，历史触发始终保留。</caption>
-            <thead><tr><th scope="col">显示</th><th scope="col">规则名称</th><th scope="col">方向</th><th scope="col">阈值价格</th><th scope="col">规则状态</th><th scope="col">触发方式</th><th scope="col">操作</th></tr></thead>
+            <thead><tr><th scope="col">显示</th><th scope="col">规则名称</th><th scope="col">方向</th><th scope="col">阈值价格</th><th scope="col">规则状态</th><th scope="col">操作</th></tr></thead>
             <tbody><tr v-for="rule in selectedRules" :key="rule.id">
               <td><input type="checkbox" :checked="shownRuleIds.has(rule.id)" :style="{ accentColor: ruleLineColor(rule.id) }" :aria-label="`显示规则“${rule.name}”的阈值线`" @change="showRule(rule, $event)" /></td>
               <td><span class="rule-name"><i :style="{ background: ruleLineColor(rule.id) }" aria-hidden="true"></i><strong>{{ rule.name }}</strong></span></td>
               <td class="rule-direction">{{ rule.direction === 'ABOVE' ? '↑' : '↓' }} {{ directionLabel[rule.direction] }}</td>
-              <td class="rule-price">{{ money(rule.thresholdPrice) }}<small v-if="rule.rearmPrice != null">再激活 {{ money(rule.rearmPrice) }}</small></td>
+              <td class="rule-price">{{ money(rule.thresholdPrice) }}</td>
               <td><span class="status-pill" :class="rule.status.toLowerCase()"><b>{{ rule.status }}</b><small>{{ statusLabel[rule.status] ?? rule.status }}</small></span></td>
-              <td>{{ rule.triggerMode === 'ONCE' ? '一次性' : '重复' }}</td>
-              <td><div class="row-actions"><button @click="openEdit(rule)">编辑</button><button v-if="rule.status !== 'COMPLETED'" @click="toggleRule(rule)">{{ rule.status === 'PAUSED' ? '启用' : '暂停' }}</button><button class="danger" @click="removeRule(rule)">删除</button></div></td>
+              <td><div class="row-actions"><button v-if="rule.status === 'ACTIVE'" @click="openEdit(rule)">编辑</button><button class="danger" @click="removeRule(rule)">删除</button></div></td>
             </tr></tbody>
           </table>
         </div>
-        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '选择上破或下破价格，系统会在真正穿越阈值时触发。' : '行情订阅确认后，可以创建该股票的提醒规则。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
+        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '可信现价达到目标后结束；再次提醒请新建规则。' : '请先申请该股票监控。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
       </section>
     </div>
     <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />

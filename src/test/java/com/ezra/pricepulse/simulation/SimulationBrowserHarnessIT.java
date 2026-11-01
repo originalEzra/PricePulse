@@ -61,11 +61,11 @@ class SimulationBrowserHarnessIT {
                         utc(ZonedDateTime.of(dates.getFirst(),LocalTime.of(9,30),zone).toInstant()),utc(now));
             }
             long aapl=jdbc.queryForObject("SELECT id FROM stocks WHERE symbol='AAPL' AND market='US'",Long.class);
-            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'合成上破规则','ABOVE',100.2,'ONCE','ACTIVE')",owner,aapl);
-            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'合成重复规则','ABOVE',100.4,'REPEAT',99.8,'COOLDOWN')",owner,aapl);
+            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'合成上破规则','ABOVE',100.2,'ACTIVE')",owner,aapl);
+            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'合成目标规则','ABOVE',100.4,'ACTIVE')",owner,aapl);
             if(gapFixture){
-                jdbc.update("UPDATE alert_rules SET threshold_price=350,rearm_price=IF(trigger_mode='REPEAT',349,NULL) WHERE user_id=?",owner);
-                jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'合成下破规则','BELOW',340,'ONCE','ACTIVE')",owner,aapl);
+                jdbc.update("UPDATE alert_rules SET threshold_price=350 WHERE user_id=?",owner);
+                jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'合成下破规则','BELOW',340,'ACTIVE')",owner,aapl);
             }
             int port;try(var socket=new ServerSocket(0)){port=socket.getLocalPort();}
             var builder=new ProcessBuilder("node","node_modules/vite/bin/vite.js","--host","127.0.0.1","--port",Integer.toString(port),"--strictPort").directory(Path.of("frontend").toFile());

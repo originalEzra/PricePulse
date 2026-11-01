@@ -31,18 +31,18 @@ public final class SimulationApi {
     }
     public record Advance(@NotNull @PositiveOrZero Long expectedVersion,@NotNull @PositiveOrZero Long expectedBatchNo) {}
     public record Rules(long snapshotRuleId,long sourceRuleId,long sourceVersion,JsonNode config,
-            AlertRuleStatus sourceStatus,AlertRuleStatus initialState,AlertRuleStatus currentState,long stateVersion) {}
-    public record Stats(long triggered,long rearmed) {}
+            String sourceStatus,String initialState,String currentState,long stateVersion) {}
+    public record Stats(long triggered,long legacyRearmed) {}
     public record Current(String runId,long stockId,long version,long lastBatchNo,Instant simClock,String latestPrice,
             long nextPointSeq,JsonNode origin,JsonNode parameters,String seed,String generatorVersion,
             boolean generatorSupported,List<Rules> ruleSnapshots,Stats stats) {}
     public record Batch(String runId,long batchNo,long versionAfter,Instant fromClock,Instant toClock,
-            long firstPointSeq,long lastPointSeq,int triggered,int rearmed,List<StoredPoint> points) {}
+            long firstPointSeq,long lastPointSeq,int triggered,List<StoredPoint> points) {}
     public record Range(Instant from,Instant to,String marketTimeZone) {}
     public record Timeline(String scope,String runId,long stockId,long version,Instant simClock,JsonNode origin,
             Range range,List<TradingSession> sessions,List<Point> realPrefix,List<StoredPoint> simulation,List<Rules> thresholds,
             Stats stats,String pointCursor,String watermark) {}
     public record Event(long id,long snapshotRuleId,long pointSeq,String eventType,Instant eventTime,String epochNanos,
-            String price,AlertRuleStatus fromState,AlertRuleStatus toState,JsonNode ruleSnapshot,JsonNode triggerContext) {}
+            String price,String fromState,String toState,JsonNode ruleSnapshot,JsonNode triggerContext) {}
     public record EventPage(List<Event> events,String eventCursor,String watermark) {}
 }

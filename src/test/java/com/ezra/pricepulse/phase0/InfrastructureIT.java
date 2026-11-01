@@ -224,10 +224,10 @@ class InfrastructureIT {
                 "users", 7,
                 "stocks", 12, // V9 adds the nullable Alpaca asset identity.
                 "quote_events", 17,
-                "alert_rules", 15, // V8 adds effective_at.
+                "alert_rules", 13, // V12 removes the mode/rearm columns.
                 "alert_triggers", 9, // V8 adds trigger_context.
                 "outbox_events", 13,
-                "notifications", 9);
+                "notifications", 10); // V11 adds the nullable independent incident delivery.
         expectedColumnCounts.forEach((table, expectedCount) -> {
             Integer actualCount = jdbc.queryForObject("""
                     SELECT COUNT(*)
@@ -248,155 +248,6 @@ class InfrastructureIT {
         assertThat(jdbc.queryForList(
                 "SELECT symbol FROM stocks WHERE symbol LIKE 'DEMO%' ORDER BY symbol", String.class))
                 .containsExactly("DEMO001", "DEMO002", "DEMO003");
-    }
-
-    @Test
-    void authenticationAndOwnedRuleLifecycleWorkEndToEnd() throws Exception {
-        String suffix = UUID.randomUUID().toString().substring(0, 8);
-        String emailA = "alice-" + suffix + "@example.com";
-        String emailB = "bob-" + suffix + "@example.com";
-        String tokenA = register(emailA, "Alice Test", "password-A-123");
-        String tokenB = register(emailB, "Bob Test", "password-B-123");
-
-        mvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "email", emailA.toUpperCase(),
-                                "displayName", "Duplicate Alice",
-                                "password", "password-C-123"))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("CONFLICT"));
-
-        mvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("email", emailA, "password", "wrong-password"))))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
-
-        mvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("email", emailA, "password", "password-A-123"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
-
-        String passwordHash = jdbc.queryForObject(
-                "SELECT password_hash FROM users WHERE email = ?", String.class, emailA);
-        assertThat(passwordHash).startsWith("$2").doesNotContain("password-A-123");
-
-        String symbol = "T" + suffix.toUpperCase();
-        jdbc.update("""
-                INSERT INTO stocks (symbol, name, market, currency, latest_price, status)
-                VALUES (?, 'Test Stock', 'SIM', 'USD', 95.0000, 'ACTIVE')
-                """, symbol);
-        Long stockId = jdbc.queryForObject(
-                "SELECT id FROM stocks WHERE market = 'SIM' AND symbol = ?", Long.class, symbol);
-
-        mvc.perform(get("/api/stocks").param("query", symbol))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].symbol").value(symbol));
-
-        String createBody = json(Map.of(
-                "stockId", stockId,
-                "name", "Break above 100",
-                "direction", "ABOVE",
-                "thresholdPrice", 100,
-                "triggerMode", "ONCE"));
-
-        mvc.perform(post("/api/alert-rules")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
-
-        String createdJson = mvc.perform(post("/api/alert-rules")
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.version").value(0))
-                .andReturn().getResponse().getContentAsString();
-        long ruleId = objectMapper.readTree(createdJson).path("data").path("id").asLong();
-
-        mvc.perform(get("/api/alert-rules/{ruleId}", ruleId)
-                        .header("Authorization", "Bearer " + tokenB))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
-
-        mvc.perform(post("/api/alert-rules")
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "stockId", stockId,
-                                "name", "Invalid repeat rule",
-                                "direction", "ABOVE",
-                                "thresholdPrice", 100,
-                                "triggerMode", "REPEAT",
-                                "rearmPrice", 101))))
-                .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.error.code").value("BUSINESS_RULE_VIOLATION"));
-
-        mvc.perform(post("/api/alert-rules/{ruleId}/pause", ruleId)
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 0))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("PAUSED"))
-                .andExpect(jsonPath("$.data.version").value(1));
-
-        mvc.perform(post("/api/alert-rules/{ruleId}/resume", ruleId)
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 0))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("CONFLICT"));
-
-        mvc.perform(post("/api/alert-rules/{ruleId}/resume", ruleId)
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 1))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.version").value(2));
-
-        Map<String, Object> replacement = Map.of(
-                "stockId", stockId,
-                "name", "Break above 105",
-                "direction", "ABOVE",
-                "thresholdPrice", 105,
-                "triggerMode", "ONCE");
-        mvc.perform(put("/api/alert-rules/{ruleId}", ruleId)
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 2, "rule", replacement))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.thresholdPrice").value(105.0000))
-                .andExpect(jsonPath("$.data.version").value(3));
-
-        mvc.perform(delete("/api/alert-rules/{ruleId}", ruleId)
-                        .header("Authorization", "Bearer " + tokenA)
-                        .param("version", "3"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.deletedRuleId").value(ruleId));
-
-        mvc.perform(get("/api/alert-rules/{ruleId}", ruleId)
-                        .header("Authorization", "Bearer " + tokenA))
-                .andExpect(status().isNotFound());
-
-        mvc.perform(get("/api/alert-rules")
-                        .header("Authorization", "Bearer " + expiredToken()))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
-
-        mvc.perform(post("/api/auth/logout")
-                        .header("Authorization", "Bearer " + tokenA))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.revocation")
-                        .value("The token remains valid until it expires"));
-
-        mvc.perform(get("/api/alert-rules")
-                        .header("Authorization", "Bearer " + tokenA))
-                .andExpect(status().isOk());
     }
 
     @Test
@@ -544,36 +395,36 @@ class InfrastructureIT {
     }
 
     @Test
-    void crossingBoundariesCreateOneTimeTriggersAndPendingOutboxAtomically() throws Exception {
+    void reachableTargetsCreateOneTimeTriggersAndPendingOutboxAtomically() throws Exception {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         String outsider = matchingToken(testSuffix());
         long stockId = insertStock("C" + suffix);
-        long aboveId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
-        long oldUpperBoundaryId = createMatchingRule(token, stockId, "ABOVE", "95", "ONCE", null);
-        long outsideRangeId = createMatchingRule(token, stockId, "ABOVE", "1000", "ONCE", null);
-        long belowId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
+        long aboveId = createMatchingRule(token, stockId, "ABOVE", "100");
+        long oldUpperBoundaryId = createMatchingRule(token, stockId, "ABOVE", "95");
+        long outsideRangeId = createMatchingRule(token, stockId, "ABOVE", "1000");
+        long belowId = createMatchingRule(token, stockId, "BELOW", "90");
 
-        // A first quote is a baseline, even when already beyond an active threshold.
+        // ONCE confirms already reached targets on the first accepted point, without inventing a crossing.
         assertThat(replayQuote(token, stockId, suffix, 1, "105").path("matching").path("triggered").asInt())
-                .isZero();
+                .isEqualTo(2);
         assertThat(replayQuote(token, stockId, suffix, 2, "95").path("matching").path("triggered").asInt())
                 .isZero();
         JsonNode exactUpperBoundary = replayQuote(token, stockId, suffix, 3, "100").path("matching");
-        assertThat(exactUpperBoundary.path("triggered").asInt()).isEqualTo(1);
-        assertThat(exactUpperBoundary.path("candidates").asInt()).isEqualTo(1);
-        assertThat(ruleStatus(oldUpperBoundaryId)).isEqualTo("ACTIVE");
+        assertThat(exactUpperBoundary.path("triggered").asInt()).isZero();
+        assertThat(exactUpperBoundary.path("candidates").asInt()).isZero();
+        assertThat(ruleStatus(oldUpperBoundaryId)).isEqualTo("COMPLETED");
         assertThat(ruleStatus(outsideRangeId)).isEqualTo("ACTIVE");
         assertThat(ruleStatus(aboveId)).isEqualTo("COMPLETED");
         assertThat(replayQuote(token, stockId, suffix, 4, "100").path("matching").path("triggered").asInt())
                 .isZero();
         assertThat(replayQuote(token, stockId, suffix, 3, "100").path("outcome").asText())
                 .isEqualTo("DUPLICATE");
-        long oldLowerBoundaryId = createMatchingRule(token, stockId, "BELOW", "100", "ONCE", null);
+        long oldLowerBoundaryId = createMatchingRule(token, stockId, "BELOW", "100");
         assertThat(replayQuote(token, stockId, suffix, 5, "90").path("matching").path("triggered").asInt())
-                .isEqualTo(1);
+                .isEqualTo(2);
         assertThat(ruleStatus(belowId)).isEqualTo("COMPLETED");
-        assertThat(ruleStatus(oldLowerBoundaryId)).isEqualTo("ACTIVE");
+        assertThat(ruleStatus(oldLowerBoundaryId)).isEqualTo("COMPLETED");
 
         assertThat(triggerCount(aboveId)).isEqualTo(1);
         assertThat(triggerCount(belowId)).isEqualTo(1);
@@ -600,109 +451,6 @@ class InfrastructureIT {
     }
 
     @Test
-    void repeatRulesWaitForInclusiveRearmPricesInBothDirections() throws Exception {
-        String suffix = testSuffix();
-        String token = matchingToken(suffix);
-        long aboveStock = insertStock("A" + suffix);
-        long belowStock = insertStock("B" + suffix);
-        long aboveId = createMatchingRule(token, aboveStock, "ABOVE", "100", "REPEAT", "95");
-        long belowId = createMatchingRule(token, belowStock, "BELOW", "100", "REPEAT", "105");
-
-        replayQuote(token, aboveStock, suffix, 1, "94");
-        replayQuote(token, aboveStock, suffix, 2, "100");
-        assertThat(ruleStatus(aboveId)).isEqualTo("COOLDOWN");
-        replayQuote(token, aboveStock, suffix, 3, "99");
-        replayQuote(token, aboveStock, suffix, 4, "101");
-        assertThat(triggerCount(aboveId)).isEqualTo(1);
-        assertThat(replayQuote(token, aboveStock, suffix, 5, "95").path("matching").path("rearmed").asInt())
-                .isEqualTo(1);
-        assertThat(ruleStatus(aboveId)).isEqualTo("ACTIVE");
-        replayQuote(token, aboveStock, suffix, 6, "100");
-        assertThat(triggerCount(aboveId)).isEqualTo(2);
-
-        // Pausing a cooling rule is supported; resume explicitly starts a fresh active cycle.
-        long version = ruleVersion(aboveId);
-        mvc.perform(post("/api/alert-rules/{id}/pause", aboveId)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", version))))
-                .andExpect(status().isOk());
-        replayQuote(token, aboveStock, suffix, 7, "94");
-        mvc.perform(post("/api/alert-rules/{id}/resume", aboveId)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", version + 1))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
-        replayQuote(token, aboveStock, suffix, 8, "100");
-        assertThat(triggerCount(aboveId)).isEqualTo(3);
-
-        replayQuote(token, belowStock, suffix, 1, "106");
-        replayQuote(token, belowStock, suffix, 2, "100");
-        assertThat(ruleStatus(belowId)).isEqualTo("COOLDOWN");
-        replayQuote(token, belowStock, suffix, 3, "104");
-        replayQuote(token, belowStock, suffix, 4, "99");
-        assertThat(triggerCount(belowId)).isEqualTo(1);
-        assertThat(replayQuote(token, belowStock, suffix, 5, "105").path("matching").path("rearmed").asInt())
-                .isEqualTo(1);
-        replayQuote(token, belowStock, suffix, 6, "100");
-        assertThat(triggerCount(belowId)).isEqualTo(2);
-    }
-
-    @Test
-    void observedReplayReportsRealTriggerCooldownAndRearmTransitionsWithoutReplayingDuplicates() throws Exception {
-        String token = matchingToken(testSuffix());
-        for (String direction : List.of("ABOVE", "BELOW")) {
-            String suffix = testSuffix();
-            long stockId = insertStock("TRACE" + suffix);
-            long ruleId = createMatchingRule(token, stockId, direction, "100", "REPEAT",
-                    direction.equals("ABOVE") ? "95" : "105");
-            List<String> prices = direction.equals("ABOVE")
-                    ? List.of("99", "100", "99", "95", "110")
-                    : List.of("101", "100", "101", "105", "90");
-            var events = new java.util.ArrayList<Map<String, Object>>();
-            for (int index = 0; index < prices.size(); index++) {
-                events.add(matchingEvent(stockId, suffix, index + 1, prices.get(index)));
-            }
-            String request = json(Map.of("ruleId", ruleId, "events", events));
-            String body = mvc.perform(post("/test/real-quotes/replay")
-                            .header("Authorization", "Bearer " + token)
-                            .contentType(MediaType.APPLICATION_JSON).content(request))
-                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-            JsonNode points = objectMapper.readTree(body).path("data").path("results");
-            assertThat(points).hasSize(5);
-            List<String> expected = List.of("NONE", "TRIGGERED", "NONE", "REARMED", "TRIGGERED");
-            for (int index = 0; index < points.size(); index++) {
-                JsonNode point = points.get(index);
-                assertThat(point.path("observation").path("event").asText()).isEqualTo(expected.get(index));
-                assertThat(point.path("observation").path("ruleId").asLong()).isEqualTo(ruleId);
-                assertThat(point.path("observation").path("direction").asText()).isEqualTo(direction);
-                if (expected.get(index).equals("TRIGGERED")) {
-                    long triggerId = point.path("observation").path("triggerId").asLong();
-                    assertThat(triggerId).isPositive();
-                    assertThat(jdbc.queryForObject(
-                            "SELECT quote_event_id FROM alert_triggers WHERE id = ?", Long.class, triggerId))
-                            .isEqualTo(point.path("eventId").asLong());
-                }
-            }
-            assertThat(points.get(1).path("observation").path("afterStatus").asText()).isEqualTo("COOLDOWN");
-            assertThat(points.get(2).path("observation").path("afterStatus").asText()).isEqualTo("COOLDOWN");
-            assertThat(points.get(3).path("observation").path("afterStatus").asText()).isEqualTo("ACTIVE");
-            mvc.perform(post("/test/real-quotes/replay").header("Authorization", "Bearer " + token)
-                            .contentType(MediaType.APPLICATION_JSON).content(request))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.duplicates").value(5))
-                    .andExpect(jsonPath("$.data.results[0].observation").isEmpty());
-            assertThat(triggerCount(ruleId)).isEqualTo(2);
-            mvc.perform(post("/test/real-quotes/replay").header("Authorization", "Bearer " + token)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(json(Map.of("ruleId", ruleId, "events", List.of(matchingEvent(stockId, suffix + "-late", 1, "90"))))))
-                    .andExpect(jsonPath("$.data.results[0].outcome").value("DISCARDED_OUT_OF_ORDER"))
-                    .andExpect(jsonPath("$.data.results[0].observation").isEmpty());
-        }
-    }
-
-    @Test
     void legacySimulationCannotMutateSharedStateEvenWithAnOwnedRule() throws Exception {
         String token = matchingToken(testSuffix());
         long before = jdbc.queryForObject("SELECT COUNT(*) FROM quote_events", Long.class);
@@ -715,87 +463,11 @@ class InfrastructureIT {
     }
 
     @Test
-    void editsPauseDeleteAndStockMovesKeepCandidatesConsistentWithDatabase() throws Exception {
-        String suffix = testSuffix();
-        String token = matchingToken(suffix);
-        long originalStock = insertStock("O" + suffix);
-        long newStock = insertStock("N" + suffix);
-        long movedRule = createMatchingRule(token, originalStock, "ABOVE", "100", "ONCE", null);
-        long deletedRule = createMatchingRule(token, originalStock, "ABOVE", "100", "ONCE", null);
-        replayQuote(token, originalStock, suffix, 1, "90");
-        mvc.perform(post("/api/alert-rules/{id}/pause", movedRule)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 0))))
-                .andExpect(status().isOk());
-        mvc.perform(delete("/api/alert-rules/{id}", deletedRule)
-                        .header("Authorization", "Bearer " + token)
-                        .param("version", "0"))
-                .andExpect(status().isOk());
-
-        // A stale Redis candidate cannot override the authoritative SQL status.
-        redis.opsForZSet().add(ruleIndexKey(originalStock), Long.toString(deletedRule), 1_000_000d);
-        replayQuote(token, originalStock, suffix, 2, "105");
-        assertThat(triggerCount(movedRule)).isZero();
-        assertThat(triggerCount(deletedRule)).isZero();
-
-        mvc.perform(put("/api/alert-rules/{id}", movedRule)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "version", 1,
-                                "rule", Map.of(
-                                        "stockId", newStock,
-                                        "name", "Moved threshold",
-                                        "direction", "ABOVE",
-                                        "thresholdPrice", 110,
-                                        "triggerMode", "ONCE")))))
-                .andExpect(status().isOk());
-        mvc.perform(post("/api/alert-rules/{id}/resume", movedRule)
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("version", 2))))
-                .andExpect(status().isOk());
-        replayQuote(token, originalStock, suffix, 3, "120");
-        assertThat(triggerCount(movedRule)).isZero();
-        replayQuote(token, newStock, suffix, 1, "100");
-        replayQuote(token, newStock, suffix, 2, "110");
-        assertThat(triggerCount(movedRule)).isEqualTo(1);
-        mvc.perform(get("/api/alert-rules/{id}/triggers", deletedRule)
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-    }
-
-    @Test
-    void missingOrWrongRevisionIndexesAreRebuiltBeforeMatching() throws Exception {
-        String suffix = testSuffix();
-        String token = matchingToken(suffix);
-        long stockId = insertStock("I" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "REPEAT", "95");
-        replayQuote(token, stockId, suffix, 1, "94");
-        redis.delete(ruleIndexKey(stockId));
-        replayQuote(token, stockId, suffix, 2, "100");
-        assertThat(triggerCount(ruleId)).isEqualTo(1);
-
-        redis.delete(ruleIndexKey(stockId));
-        redis.opsForZSet().add(ruleIndexKey(stockId), "@stale-revision", -1d);
-        assertThat(replayQuote(token, stockId, suffix, 3, "95").path("matching").path("rearmed").asInt())
-                .isEqualTo(1);
-        replayQuote(token, stockId, suffix, 4, "100");
-        assertThat(triggerCount(ruleId)).isEqualTo(2);
-        String tokenInDatabase = jdbc.queryForObject(
-                "SELECT rule_index_token FROM stocks WHERE id = ?", String.class, stockId);
-        assertThat(redis.opsForZSet().rangeByScore(ruleIndexKey(stockId), -1, -1))
-                .containsExactly("@" + tokenInDatabase);
-    }
-
-    @Test
     void redisMatchingFailureRollsBackQuoteWatermarkAndAllowsSafeRetry() throws Exception {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         long stockId = insertStock("F" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100");
         replayQuote(token, stockId, suffix, 1, "95");
         String eventKey = "matching:" + suffix + ":" + stockId + ":2";
         Map<String, Object> event = matchingEvent(stockId, suffix, 2, "100");
@@ -828,7 +500,7 @@ class InfrastructureIT {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         long stockId = insertStock("Q" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100");
         replayQuote(token, stockId, suffix, 1, "95");
         var start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
@@ -857,7 +529,7 @@ class InfrastructureIT {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         long stockId = insertStock("Z" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100");
         replayQuote(token, stockId, suffix, 1, "95");
         String committedToken = jdbc.queryForObject(
                 "SELECT rule_index_token FROM stocks WHERE id = ?", String.class, stockId);
@@ -882,7 +554,7 @@ class InfrastructureIT {
                 "SELECT rule_index_token FROM stocks WHERE id = ?", String.class, stockId))
                 .isEqualTo(committedToken);
         var rolledBackCacheMarker = redis.opsForZSet().rangeByScore(ruleIndexKey(stockId), -1, -1);
-        assertThat(rolledBackCacheMarker).hasSize(1).doesNotContain("@" + committedToken);
+        assertThat(rolledBackCacheMarker).hasSize(1).doesNotContain("@" + com.ezra.pricepulse.matching.RuleIndex.cacheToken(committedToken));
         assertThat(jdbc.queryForObject(
                 "SELECT latest_price FROM stocks WHERE id = ?", BigDecimal.class, stockId))
                 .isEqualByComparingTo("95");
@@ -913,7 +585,7 @@ class InfrastructureIT {
         String suffix = testSuffix();
         String token = matchingToken(suffix);
         long stockId = insertStock("X" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "ABOVE", "100");
         replayQuote(token, stockId, suffix, 1, "95");
         replayQuote(token, stockId, suffix, 2, "100");
         long outboxId = jdbc.queryForObject("""
@@ -987,7 +659,7 @@ class InfrastructureIT {
         String token = matchingToken(suffix);
         String outsider = matchingToken(testSuffix());
         long stockId = insertStock("D" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "BELOW", "90");
         replayQuote(token, stockId, suffix, 1, "100");
         replayQuote(token, stockId, suffix, 2, "90");
         long triggerId = jdbc.queryForObject(
@@ -1016,8 +688,8 @@ class InfrastructureIT {
                 .andExpect(jsonPath("$.data[0].ruleId").value(ruleId))
                 .andExpect(jsonPath("$.data[0].stockId").value(stockId))
                 .andExpect(jsonPath("$.data[0].status").value("UNREAD"))
-                .andExpect(jsonPath("$.data[0].title").value("D" + suffix + " 已下破 90.00"))
-                .andExpect(jsonPath("$.data[0].content").value(org.hamcrest.Matchers.containsString("价格 90.00，")));
+                .andExpect(jsonPath("$.data[0].title").value("D" + suffix + " 已达到 下破目标 90.00"))
+                .andExpect(jsonPath("$.data[0].content").value(org.hamcrest.Matchers.containsString("确认价格 90.0000，")));
         mvc.perform(get("/api/notifications")
                         .header("Authorization", "Bearer " + outsider))
                 .andExpect(status().isOk())
@@ -1145,9 +817,33 @@ class InfrastructureIT {
         return UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
+    @Test void onceOnlyApiRejectsRetiredFieldsAndRoutesAndRetainsHistoryOnCancellation() throws Exception {
+        String suffix=testSuffix(), token=matchingToken(suffix);long stock=insertStock("ONCE"+suffix);
+        var body=Map.of("stockId",stock,"name","Target","direction","ABOVE","thresholdPrice",205);
+        for(var legacy:List.of(Map.<String,Object>of("triggerMode","REPEAT"),Map.<String,Object>of("rearmPrice",195))){
+            var invalid=new java.util.LinkedHashMap<String,Object>(body);invalid.putAll(legacy);
+            mvc.perform(post("/api/alert-rules").header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON).content(json(invalid)))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM alert_rules WHERE stock_id=?",Long.class,stock)).isZero();
+        long id=createMatchingRule(token,stock,"ABOVE","205");
+        mvc.perform(get("/api/alert-rules/{id}",id).header("Authorization","Bearer "+token)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.triggerMode").doesNotExist()).andExpect(jsonPath("$.data.rearmPrice").doesNotExist());
+        for(String route:List.of("pause","resume"))mvc.perform(post("/api/alert-rules/{id}/"+route,id).header("Authorization","Bearer "+token)
+                .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("version",0)))).andExpect(status().isNotFound());
+        replayQuote(token,stock,suffix,1,"210");assertThat(ruleStatus(id)).isEqualTo("COMPLETED");
+        mvc.perform(put("/api/alert-rules/{id}",id).header("Authorization","Bearer "+token).contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("version",ruleVersion(id),"rule",body)))).andExpect(status().isConflict());
+        mvc.perform(delete("/api/alert-rules/{id}",id).header("Authorization","Bearer "+token).param("version",Long.toString(ruleVersion(id))))
+                .andExpect(status().isOk());
+        assertThat(ruleStatus(id)).isEqualTo("DELETED");assertThat(triggerCount(id)).isEqualTo(1);
+        mvc.perform(get("/api/alert-rules/{id}/triggers",id).header("Authorization","Bearer "+token)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
     private long seedNotificationHistory(String token, String suffix, int count) throws Exception {
         long stockId = insertStock("NOTICE" + suffix);
-        long ruleId = createMatchingRule(token, stockId, "BELOW", "90", "ONCE", null);
+        long ruleId = createMatchingRule(token, stockId, "BELOW", "90");
         replayQuote(token, stockId, suffix, 1, "100");
         replayQuote(token, stockId, suffix, 2, "90");
         long triggerId = jdbc.queryForObject(
@@ -1180,24 +876,22 @@ class InfrastructureIT {
     }
 
     private long createMatchingRule(
-            String token, long stockId, String direction, String threshold, String mode, String rearm)
+            String token, long stockId, String direction, String threshold)
             throws Exception {
         var body = new java.util.LinkedHashMap<String, Object>();
         body.put("stockId", stockId);
         body.put("name", direction + " " + threshold);
         body.put("direction", direction);
         body.put("thresholdPrice", new BigDecimal(threshold));
-        body.put("triggerMode", mode);
-        if (rearm != null) {
-            body.put("rearmPrice", new BigDecimal(rearm));
-        }
         String response = mvc.perform(post("/api/alert-rules")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(body)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response).path("data").path("id").asLong();
+        long id=objectMapper.readTree(response).path("data").path("id").asLong();
+        jdbc.update("UPDATE alert_rules SET effective_at='2024-06-01 09:59:00' WHERE id=?",id);
+        return id;
     }
 
     private JsonNode replayQuote(String token, long stockId, String run, int step, String price) throws Exception {

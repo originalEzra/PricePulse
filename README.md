@@ -1,6 +1,8 @@
 # PricePulse
 
-> 美股实时价格提醒与隔离模拟实验平台，关注价格穿越、规则状态与可靠通知。
+> 美股实时目标价提醒与隔离模拟实验平台，关注行情可信度、事务一致性与可靠通知。
+
+当前分支为一次性目标价模型的离线交付，尚未加载正式环境。仅保留 ACTIVE → COMPLETED；取消沿用逻辑删除。已有 V10 环境需先审查 [V11／V12 兼容迁移方案](docs/once-only-model/migration-plan.md)，不得直接用新代码连接旧库。
 
 ![Java 21 · Spring Boot 3.5 · MySQL 8.4 · Redis 7 · RocketMQ 5.3 · Vue 3 · TypeScript](docs/images/tech-stack.svg)
 
@@ -8,7 +10,7 @@
 
 ![真实行情、阈值线与规则管理](docs/images/v21-market-alerts.jpg)
 
-当前 V2.1 实际运行截图，账户侧栏已裁除。股票列表独立滚动，规则紧接图表、约显示 3–4 行并支持表内滚动，两列底部对齐。保留真实休市状态与异常提示。
+以下是原 V2.1 运行截图，账户侧栏已裁除；其中重复提醒等旧选项不代表本分支的新模型。股票列表与规则各自滚动，两列底部对齐。保留真实休市状态与异常提示。
 
 <details>
 <summary>更多实际页面：监控入口、模拟与正式通知</summary>
@@ -37,7 +39,7 @@
 
 - **行情与提醒**：1H／1D／1W／1M 图表，纽约时间、休市断轴、多规则阈值线和历史触发定位。
 - **股票监控**：搜索美股及 ETF，个人列表持久化；多用户共享上游订阅，实际确认后才显示监控中。
-- **规则与通知**：上破／下破、一次性／重复、冷却与重新激活，通知保留触发时规则快照。
+- **规则与通知**：可信价格 ≥ 上方目标或 ≤ 下方目标时提醒一次并完成；创建／编辑时复核新鲜可信现价，通知保留触发时规则快照。
 - **隔离实验**：冻结历史、规则与 seed，模拟交易时钟和开盘跳空，支持保存恢复与幂等推进，结果不进入正式通知。
 
 另有 JWT 账户隔离和经用户确认的 AI 规则草稿；不提供交易下单。
@@ -50,20 +52,20 @@ flowchart LR
     API --> Feed[共享 WebSocket 接入]
     Alpaca[Alpaca IEX] --> Feed
     Feed --> Index[Redis ZSet + Lua]
-    Index --> TX[MySQL 状态机 + Outbox]
+    Index --> TX[MySQL 完成事务 + Outbox]
     TX --> MQ[RocketMQ]
     MQ --> Notify[幂等通知]
-    API --> Sim[隔离模拟 / 同一纯状态机]
+    API --> Sim[隔离模拟 / 同一目标价判定]
 ```
 
 MySQL 保存业务事实，Redis 是可重建的候选索引；真实接入与模拟实验共享判定语义，分别保存运行状态。[详细架构与源码入口](docs/v2.1-final-architecture.md)
 
 ## 后端技术亮点
 
-1. **区间候选匹配**：复用生产 ZSet＋Lua，与 MySQL B+ 树做 1,000–50,000 规则对照，集合零差异。10 万笔固定回放减少 **21.04%** 规则 SELECT；相对同价 SQL 短路仅再减少 **1.31%**，加入回查后选择层耗时更高。[完整数据与取舍](docs/performance/v2.1-rule-selection-2026-10-31/report.md)
+1. **候选索引**：ZSet＋Lua 只维护 ACTIVE 目标，MySQL 版本 Token 与权威回查保证可重建性。旧穿越模型曾完成 1,000–50,000 规则及 10 万行情对照，完整保留[实测数据与负面结果](docs/performance/v2.1-rule-selection-2026-10-31/report.md)；这些性能数字不代表本分支的新语义，未重新宣称吞吐提升。
 2. **可靠通知**：规则、触发与 Outbox 同事务提交；租约、退避与至少一次投递结合消费唯一约束，支持失败恢复。
 3. **共享行情订阅**：按代码去重、全局预算、连接代次及意图版本协调，取消个人监控与本人规则软删除原子提交。
-4. **状态与隔离**：纯状态机复用于真实／模拟；冻结输入、独立存储、请求幂等与进程恢复均有隔离回归。
+4. **一次性与隔离**：ACTIVE 条件更新、触发及 Outbox 同事务；REAL／SIM 共用纯目标价判定，独立运行状态。旧模拟结果保留只读，新实验幂等推进。
 
 ## 快速启动
 
@@ -88,8 +90,10 @@ npm run dev
 
 ## 更多文档
 
+- [一次性目标价模型：迁移影响](docs/once-only-model/migration-plan.md)与[离线验收](docs/once-only-model/acceptance.md)
 - [系统架构与源码](docs/v2.1-final-architecture.md)
 - [MySQL B+ 树／Redis 对照、固定回放与原始数据](docs/performance/v2.1-rule-selection-2026-10-31/report.md)
+- [REAL 队列／事务性能、积压与局部批量优化](docs/performance/realtime-processing/report.md)
 - [V2.1 验收与外部待验边界](docs/v2.1-final-delivery.md)
 - [API 契约](docs/v2-api-contracts.md)
 - [Java 后端简历与面试材料](docs/v2.1-career-summary.md)
