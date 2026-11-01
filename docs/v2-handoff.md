@@ -1,5 +1,7 @@
 # PricePulse V2 新聊天交接
 
+V11／V12 发布准备（2026-11-01，晚于下方离线交付）：用户已授权 GitHub 推送／PR／检查通过后的合并，但正式停机、DDL、进程／前端切换仍须单独批准。候选 `6f852ef` 完整包含 V11；发布分支 `codex/pricepulse-v11-v12-release-20261101` 仅追加测试 CI 与发布文档。144 单元／143 集成／52 前端、15 探针、8 报告工具及类型／构建复验通过。正式仍 V10、37 条兼容 ONCE、21 条触发／SENT Outbox／通知、十五股当前 ACK、15/15。124,164,759 字节实际预备快照已隔离恢复及 V11→V12 验证，另空 schema 的 V10 全部原数据／DDL／Flyway 回滚恢复验证通过；准确旧构建和配置已受保护保全。原服务及源目录保持，未执行正式迁移或停机；预备备份不替代批准停服后的最终截止点备份。见 [本轮发布门槛及回滚边界](release/v11-v12/plan.md)、[安全预检汇总](release/v11-v12/preflight.json)。GitHub 合并与实际运行 SHA 以最终 PR／本机发布清单为准，不沿用旧“禁止推送”的历史任务边界。
+
 一次性目标价模型离线交付（2026-11-01）：用户要求删除 REPEAT／COOLDOWN／重新激活。开发副本为 `/Users/ezra/project-z/price-pulse-once-only`，本地分支 `codex/pricepulse-once-only-20261101`，基于 `c99377c`。原仓库当前工作分支不切换，避免正式 Vite 自动加载；下一轮审查请明确读取该开发分支／副本。没有使用远端覆盖本地。
 
 REAL／SIM 共用 `TargetPriceMatcher`，仅 ACTIVE→COMPLETED，取消沿用 DELETED；股票锁、ACTIVE＋版本条件更新、成交去重／水位、触发＋Outbox 原子性与通知幂等保留。创建／编辑复核可信现价，COMPLETED 不能编辑或恢复。Redis 仅两个 ACTIVE 目标 band，新 marker 格式强制旧索引重建。旧模拟结果只读且原 JSON／状态保留，新实验使用 `splitmix64-once-v2`／`opening-gap-once-v2`，不进入正式通知。
