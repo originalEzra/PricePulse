@@ -23,7 +23,7 @@ class MonitorIncidentMigrationInfrastructureIT {
             s.executeUpdate("INSERT INTO simulation_runs(id,user_id,stock_id,origin_snapshot,history_prefix_snapshot,parameters,seed,generator_version,calendar_snapshot,sim_clock,sim_clock_ns,latest_price,rule_index_token,start_request_key,start_request_hash) VALUES('00000000-0000-4000-8000-000000000001',1,1,'{}','[]','{}',7,'fixture','[]','2026-10-30 15:00:00',1,210,UUID(),'fixture',REPEAT('0',64))");
             facts=facts(s);
         }
-        var latest=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").load();
+        var latest=Flyway.configure().dataSource(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword()).locations("classpath:db/migration").target("11").load();
         assertThat(latest.migrate().migrationsExecuted).isEqualTo(1);assertThat(latest.validateWithResult().validationSuccessful).isTrue();assertThat(latest.migrate().migrationsExecuted).isZero();
         try(var c=connection();var s=c.createStatement()){
             assertThat(facts(s)).isEqualTo(facts);

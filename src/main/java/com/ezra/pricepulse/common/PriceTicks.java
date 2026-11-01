@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 public final class PriceTicks {
-    // Six bands below 2^53 keep every scaled price exact in Redis double scores.
+    // Two ACTIVE target bands below 2^53 keep every scaled price exact in Redis double scores.
     public static final long BAND = 1_000_000_000_000_000L;
     public static final BigDecimal MAX_PRICE = new BigDecimal("99999999999.9999");
 

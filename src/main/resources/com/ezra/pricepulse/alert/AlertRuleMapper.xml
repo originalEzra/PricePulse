@@ -11,8 +11,6 @@
         <result property="note" column="note"/>
         <result property="direction" column="direction"/>
         <result property="thresholdPrice" column="threshold_price"/>
-        <result property="triggerMode" column="trigger_mode"/>
-        <result property="rearmPrice" column="rearm_price"/>
         <result property="status" column="status"/>
         <result property="lastTriggeredAt" column="last_triggered_at"/>
         <result property="version" column="version"/>
@@ -23,7 +21,7 @@
 
     <sql id="selectRule">
         SELECT r.id, r.user_id, r.stock_id, s.symbol AS stock_symbol, s.name AS stock_name,
-               r.name, r.note, r.direction, r.threshold_price, r.trigger_mode, r.rearm_price,
+               r.name, r.note, r.direction, r.threshold_price,
                r.status, r.last_triggered_at, r.version, r.created_at, r.updated_at, r.effective_at
         FROM alert_rules r
         JOIN stocks s ON s.id = r.stock_id
@@ -32,10 +30,10 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="rule.id">
         INSERT INTO alert_rules (
             user_id, stock_id, name, note, direction, threshold_price,
-            trigger_mode, rearm_price, status, version,created_at,effective_at
+            status, version,created_at,effective_at
         ) VALUES (
             #{rule.userId}, #{rule.stockId}, #{rule.name}, #{rule.note}, #{rule.direction},
-            #{rule.thresholdPrice}, #{rule.triggerMode}, #{rule.rearmPrice}, 'ACTIVE', 0,
+            #{rule.thresholdPrice}, 'ACTIVE', 0,
             COALESCE(#{rule.createdAt},CURRENT_TIMESTAMP(6)),COALESCE(#{rule.effectiveAt},CURRENT_TIMESTAMP(6))
         )
     </insert>
@@ -68,31 +66,13 @@
             note = #{rule.note},
             direction = #{rule.direction},
             threshold_price = #{rule.thresholdPrice},
-            trigger_mode = #{rule.triggerMode},
-            rearm_price = #{rule.rearmPrice},
-            effective_at = CURRENT_TIMESTAMP(6),
+            effective_at = #{rule.effectiveAt},
             last_triggered_at = NULL,
             version = version + 1
         WHERE id = #{rule.id}
           AND user_id = #{rule.userId}
           AND version = #{expectedVersion}
-          AND status IN
-          <foreach collection="allowedStatuses" item="status" open="(" separator="," close=")">
-            #{status}
-          </foreach>
-    </update>
-
-    <update id="updateStatus">
-        UPDATE alert_rules
-        SET status = #{targetStatus}, version = version + 1
-        <if test="targetStatus.name() == 'ACTIVE'">, effective_at = CURRENT_TIMESTAMP(6)</if>
-        WHERE id = #{ruleId}
-          AND user_id = #{userId}
-          AND version = #{expectedVersion}
-          AND status IN
-          <foreach collection="allowedStatuses" item="status" open="(" separator="," close=")">
-            #{status}
-          </foreach>
+          AND status = 'ACTIVE'
     </update>
 
     <update id="softDelete">
@@ -106,7 +86,7 @@
 
     <select id="listIndexable" resultMap="alertRuleMap">
         <include refid="selectRule"/>
-        WHERE r.stock_id = #{stockId} AND r.status IN ('ACTIVE', 'COOLDOWN')
+        WHERE r.stock_id = #{stockId} AND r.status = 'ACTIVE'
         ORDER BY r.id
     </select>
 
@@ -118,16 +98,14 @@
 
     <select id="findCandidates" resultMap="alertRuleMap">
         <include refid="selectRule"/>
-        WHERE r.stock_id = #{stockId} AND r.status IN ('ACTIVE', 'COOLDOWN')
+        WHERE r.stock_id = #{stockId} AND r.status = 'ACTIVE'
           AND r.id IN
         <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
         ORDER BY r.id
     </select>
 
-    <update id="transitionByMatcher">
-        UPDATE alert_rules
-        SET status = #{targetStatus}, version = version + 1
-        <if test="triggeredAt != null">, last_triggered_at = #{triggeredAt}</if>
-        WHERE id = #{ruleId} AND version = #{expectedVersion} AND status = #{expectedStatus}
+    <update id="complete">
+        UPDATE alert_rules SET status = 'COMPLETED', version = version + 1, last_triggered_at = #{triggeredAt}
+        WHERE id = #{ruleId} AND version = #{expectedVersion} AND status = 'ACTIVE'
     </update>
 </mapper>

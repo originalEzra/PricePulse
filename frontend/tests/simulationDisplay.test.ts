@@ -9,7 +9,7 @@ const event = (id: number, snapshotRuleId: number, eventType: 'TRIGGERED' | 'REA
   fromState: 'ACTIVE', toState: 'COOLDOWN', ruleSnapshot: {} as SimulationEvent['ruleSnapshot'],
 })
 
-test('rule results include the trigger beyond page one, including a REPEAT rule that has rearmed', async () => {
+test('legacy result paging keeps historical state events but counts only real trigger facts', async () => {
   const first = Array.from({ length: 100 }, (_, i) => event(i + 1, 1, i % 2 ? 'REARMED' : 'TRIGGERED'))
   const result = await collectSimulationEvents({ events: first, eventCursor: 'second', watermark: '102' }, async cursor => {
     assert.equal(cursor, 'second')

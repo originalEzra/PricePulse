@@ -103,8 +103,6 @@ const directionLabel = (value: AlertRuleDraft['direction']) => value === 'ABOVE'
             </div>
             <dl>
               <div><dt>条件</dt><dd>{{ directionLabel(draft.direction) }} {{ formatPrice(draft.thresholdPrice) }}</dd></div>
-              <div><dt>模式</dt><dd>{{ draft.triggerMode === 'ONCE' ? '仅提醒一次' : '可重复提醒' }}</dd></div>
-              <div v-if="draft.rearmPrice != null"><dt>重新激活</dt><dd>{{ formatPrice(draft.rearmPrice) }}</dd></div>
             </dl>
             <p v-if="draft.note">{{ draft.note }}</p>
           </div>

@@ -1,7 +1,6 @@
 package com.ezra.pricepulse.assistant;
 
 import com.ezra.pricepulse.alert.AlertDirection;
-import com.ezra.pricepulse.alert.AlertTriggerMode;
 import com.ezra.pricepulse.common.PriceTicks;
 import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
@@ -59,30 +58,12 @@ public class AssistantService {
 
         BigDecimal threshold = parsePrice(modelDraft.thresholdPrice(), "thresholdPrice");
         AlertDirection direction = require(modelDraft.direction(), "direction");
-        AlertTriggerMode triggerMode = require(modelDraft.triggerMode(), "triggerMode");
-        BigDecimal rearmPrice = null;
-        if (triggerMode == AlertTriggerMode.REPEAT) {
-            if (modelDraft.rearmPrice() == null || modelDraft.rearmPrice().isBlank()) {
-                return AlertDraftResponse.clarification(
-                        "这是重复提醒。价格需要回到多少后，才允许下一次提醒？");
-            }
-            rearmPrice = parsePrice(modelDraft.rearmPrice(), "rearmPrice");
-            boolean valid = direction == AlertDirection.ABOVE
-                    ? rearmPrice.compareTo(threshold) < 0
-                    : rearmPrice.compareTo(threshold) > 0;
-            if (!valid) {
-                String relation = direction == AlertDirection.ABOVE ? "低于" : "高于";
-                return AlertDraftResponse.clarification(
-                        "重新激活价需要" + relation + "触发价，请换一个价格。");
-            }
-        }
-
         String defaultName = stock.symbol() + " 价格提醒";
         String name = optionalText(modelDraft.name(), 100, defaultName);
         String note = optionalText(modelDraft.note(), 500, null);
         return AlertDraftResponse.ready(new AlertRuleDraft(
                 stock.id(), stock.symbol(), stock.name(), name, note, direction,
-                threshold, triggerMode, rearmPrice));
+                threshold));
     }
 
     private List<Stock> resolveNameOrFragment(String reference, String market) {
@@ -142,7 +123,7 @@ public class AssistantService {
     }
 
     private String questionOrDefault(String value) {
-        return optionalText(value, 300, "请补充股票代码、触发方向、价格和提醒次数。");
+        return optionalText(value, 300, "请补充股票代码、方向和目标价。");
     }
 
     private BusinessException invalidModelOutput(String detail) {

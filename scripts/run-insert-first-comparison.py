@@ -25,6 +25,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
+    if not (root / 'src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java').exists():
+        parser.error('Historical harness: use local commit c99377c in a separate checkout; see docs/once-only-model/acceptance.md')
     output = args.output.resolve()
     assert output.is_relative_to(root / 'target') and not output.exists(), 'Use a new directory under target/'
     assert 5 <= args.pairs <= 10 and 4 <= args.seconds <= 60 and 1 <= args.warmup_seconds <= 10

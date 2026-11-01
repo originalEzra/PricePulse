@@ -72,22 +72,6 @@ public class AlertRuleController {
         return ApiResponse.success(alertRuleService.update(userId, ruleId, request));
     }
 
-    @PostMapping("/{ruleId}/pause")
-    public ApiResponse<AlertRuleResponse> pause(
-            @CurrentUserId Long userId,
-            @PathVariable @Positive long ruleId,
-            @Valid @RequestBody RuleVersionRequest request) {
-        return ApiResponse.success(alertRuleService.pause(userId, ruleId, request.version()));
-    }
-
-    @PostMapping("/{ruleId}/resume")
-    public ApiResponse<AlertRuleResponse> resume(
-            @CurrentUserId Long userId,
-            @PathVariable @Positive long ruleId,
-            @Valid @RequestBody RuleVersionRequest request) {
-        return ApiResponse.success(alertRuleService.resume(userId, ruleId, request.version()));
-    }
-
     @DeleteMapping("/{ruleId}")
     public ApiResponse<Map<String, Long>> delete(
             @CurrentUserId Long userId,

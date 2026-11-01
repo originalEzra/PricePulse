@@ -1,7 +1,6 @@
 package com.ezra.pricepulse.assistant;
 
 import com.ezra.pricepulse.alert.AlertDirection;
-import com.ezra.pricepulse.alert.AlertTriggerMode;
 import java.math.BigDecimal;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -23,8 +22,6 @@ class AssistantAiLiveIT {
         assertThat(draft.symbol()).isEqualTo("DEMO001");
         assertThat(draft.direction()).isEqualTo(AlertDirection.ABOVE);
         assertThat(new BigDecimal(draft.thresholdPrice())).isEqualByComparingTo("115");
-        assertThat(draft.triggerMode()).isEqualTo(AlertTriggerMode.ONCE);
-        assertThat(draft.rearmPrice()).isNotNull().isBlank();
         // The name is optional; AssistantService supplies the stock's default alert name when empty.
         assertThat(draft.name()).isNotNull();
     }
@@ -39,8 +36,7 @@ class AssistantAiLiveIT {
         assertThat(draft.symbol()).isEqualToIgnoringCase(reference);
         assertThat(draft.direction()).isEqualTo(AlertDirection.ABOVE);
         assertThat(new BigDecimal(draft.thresholdPrice())).isEqualByComparingTo("115");
-        assertThat(draft.triggerMode()).isEqualTo(AlertTriggerMode.ONCE);
-    }
+            }
 
     private AlertDraftGenerator generator() {
         var properties = new AssistantProperties();

@@ -56,7 +56,7 @@ public interface MarketDataMapper {
         """)
     long eventWatermark(@Param("userId") long userId, @Param("stockId") long stockId);
     // Reachability confirms an existing/late quote now; do not backdate that marker to a gap or before rule creation.
-    String TRIGGER_TIME_NS = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(t.trigger_context,'$.kind'))='TARGET_REACHED' AND (JSON_UNQUOTE(JSON_EXTRACT(t.trigger_context,'$.confirmation')) IN ('RECOVERY','RULE_CREATED','RULE_ACTIVATED') OR t.event_time<>q.event_time) "
+    String TRIGGER_TIME_NS = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(t.trigger_context,'$.kind'))='TARGET_REACHED' AND (JSON_UNQUOTE(JSON_EXTRACT(t.trigger_context,'$.confirmation')) IN ('RECOVERY','RULE_CREATED','RULE_UPDATED','RULE_ACTIVATED') OR t.event_time<>q.event_time) "
             + "THEN TIMESTAMPDIFF(MICROSECOND,'1970-01-01 00:00:00',t.event_time)*1000 ELSE q.event_time_ns END";
     @Select("SELECT t.id AS trigger_id,q.id AS quote_id,"+TRIGGER_TIME_NS+" AS event_time_ns,t.trigger_price AS price,t.rule_snapshot,"+"""
           CASE WHEN n.id IS NOT NULL THEN n.status

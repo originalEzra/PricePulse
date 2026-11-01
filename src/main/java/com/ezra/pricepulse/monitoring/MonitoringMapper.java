@@ -37,7 +37,7 @@ public interface MonitoringMapper {
     void newIntent(@Param("stockId")long stockId,@Param("state")String state);
     @Update("UPDATE market_subscription_targets SET legacy_hold=FALSE,version=version+1 WHERE stock_id=#{stockId} AND legacy_hold=TRUE")
     void adopt(long stockId);
-    @Select("SELECT COUNT(*) FROM alert_rules r WHERE r.stock_id=#{stockId} AND r.status IN ('ACTIVE','COOLDOWN') AND NOT EXISTS(SELECT 1 FROM user_stock_subscriptions u WHERE u.stock_id=r.stock_id AND u.user_id=r.user_id AND u.desired=TRUE)")
+    @Select("SELECT COUNT(*) FROM alert_rules r WHERE r.stock_id=#{stockId} AND r.status = 'ACTIVE' AND NOT EXISTS(SELECT 1 FROM user_stock_subscriptions u WHERE u.stock_id=r.stock_id AND u.user_id=r.user_id AND u.desired=TRUE)")
     long orphanedRules(long stockId);
     @Update("UPDATE market_subscription_targets SET state=#{state},slot_reserved=#{reserved},confirmed_epoch=#{epoch},error_code=#{error},version=version+1 WHERE stock_id=#{stockId} AND version=#{version}")
     int targetState(@Param("stockId")long stockId,@Param("version")long version,@Param("state")String state,

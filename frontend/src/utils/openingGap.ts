@@ -10,7 +10,7 @@ export function openingGapDetail(event: Pick<TimelineEvent, 'triggerContext'>, f
 export function targetReachLabel(event: Pick<TimelineEvent, 'triggerContext'>): string | null {
   const context = event.triggerContext
   if (context?.kind !== 'TARGET_REACHED') return null
-  return { LIVE: '已达到目标价', RECOVERY: '恢复后确认达到', RULE_CREATED: '创建时确认达到', RULE_ACTIVATED: '启用时确认达到' }[context.confirmation]
+  return { LIVE: '已达到目标价', RECOVERY: '恢复后确认达到', RULE_CREATED: '创建时确认达到', RULE_UPDATED: '修改时确认达到', RULE_ACTIVATED: '旧版启用时确认达到' }[context.confirmation]
 }
 
 export function targetReachDetail(event: Pick<TimelineEvent, 'triggerContext'>, formatTime: (value: string) => string): string | null {

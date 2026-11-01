@@ -51,8 +51,8 @@ class ProviderAlertDraftGeneratorTest {
         String userText = "DEMO001 上破 100 提醒一次";
         String content = """
                 {"complete":true,"clarificationQuestion":"","symbol":"DEMO001","market":"",
-                 "direction":"ABOVE","thresholdPrice":"100","triggerMode":"ONCE",
-                 "rearmPrice":"","name":"突破提醒","note":""}
+                 "direction":"ABOVE","thresholdPrice":"100",
+                 "name":"突破提醒","note":""}
                 """;
         server.expect(requestTo("https://model.example.test/v1/chat/completions"))
                 .andExpect(method(HttpMethod.POST))
@@ -77,6 +77,18 @@ class ProviderAlertDraftGeneratorTest {
 
         assertUnavailable();
         server.verify();
+    }
+
+    @Test
+    void rejectsRemovedRepeatConfigurationInsteadOfSilentlyCreatingAOnceRule() throws Exception {
+        String retired = """
+                {"complete":true,"clarificationQuestion":"","symbol":"DEMO001","market":"",
+                 "direction":"ABOVE","thresholdPrice":"100","triggerMode":"REPEAT","rearmPrice":"95",
+                 "name":"Legacy","note":""}
+                """;
+        server.expect(requestTo("https://model.example.test/v1/chat/completions"))
+                .andRespond(withSuccess(response(retired), MediaType.APPLICATION_JSON));
+        assertUnavailable();server.verify();
     }
 
     @Test

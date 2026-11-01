@@ -8,8 +8,6 @@ import type {
   NotificationFeed,
   QuoteHistory,
   SaveAlertRule,
-  SimulationRequest,
-  SimulationResult,
   Stock,
   MarketTimeline, TimelineEventPage, TimelineWindow,
   SimulationRun, StartSimulation, SimulationTimeline, SimulationEventPage, SimulationBatch,
@@ -77,16 +75,6 @@ export const ruleApi = {
       method: 'PUT',
       body: JSON.stringify({ version, rule }),
     }),
-  pause: (rule: AlertRule) =>
-    api<AlertRule>(`/api/alert-rules/${rule.id}/pause`, {
-      method: 'POST',
-      body: JSON.stringify({ version: rule.version }),
-    }),
-  resume: (rule: AlertRule) =>
-    api<AlertRule>(`/api/alert-rules/${rule.id}/resume`, {
-      method: 'POST',
-      body: JSON.stringify({ version: rule.version }),
-    }),
   remove: (rule: AlertRule) =>
     api<{ deletedRuleId: number }>(`/api/alert-rules/${rule.id}?version=${rule.version}`, {
       method: 'DELETE',
@@ -99,8 +87,7 @@ export const marketApi = {
   events: (stockId: number, from: string, to: string, cursor: string, signal?: AbortSignal) =>
     api<TimelineEventPage>(`/api/market/stocks/${stockId}/timeline/events?${new URLSearchParams({ from, to, cursor })}`, { signal, cache: 'no-store' }),
   history: (stockId: number) => api<QuoteHistory[]>(`/api/market/stocks/${stockId}/quotes?limit=100`),
-  simulate: (request: SimulationRequest) =>
-    api<SimulationResult>('/api/market/simulate', { method: 'POST', body: JSON.stringify(request) }),
+
 }
 
 export const notificationApi = {

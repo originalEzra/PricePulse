@@ -149,7 +149,7 @@ SQL 诊断实际执行 3000 次 SELECT、获得 3000 个结果，数据库摘要
 
 - 队列边界与可选观测：[MarketQuoteLane](../../../src/main/java/com/ezra/pricepulse/market/MarketQuoteLane.java)、[QuoteTiming](../../../src/main/java/com/ezra/pricepulse/market/QuoteTiming.java)、[MarketLaneTelemetry](../../../src/main/java/com/ezra/pricepulse/market/MarketLaneTelemetry.java)、[RealMarketRuntime](../../../src/main/java/com/ezra/pricepulse/market/RealMarketRuntime.java)。
 - 局部批量：[AlertEvaluationService](../../../src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java)、[OutboxWriter](../../../src/main/java/com/ezra/pricepulse/outbox/OutboxWriter.java)、[Mapper 接口](../../../src/main/java/com/ezra/pricepulse/outbox/OutboxMapper.java)与 [SQL](../../../src/main/resources/com/ezra/pricepulse/outbox/OutboxMapper.xml)。没有改 QuoteIngestionService、纯状态机、Lua、迁移 SQL 或正式消息语义。
-- 测量与故障夹具：[RealPipelineExperiment](../../../src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java)、[PipelineProbe](../../../src/test/java/com/ezra/pricepulse/market/PipelineProbe.java)、[PipelineCorrectness](../../../src/test/java/com/ezra/pricepulse/market/PipelineCorrectness.java)；仅测试 classpath，无行情注入 HTTP 接口。
+- 测量与故障夹具：[RealPipelineExperiment](../../once-only-model/acceptance.md#历史实验与源码)、[PipelineProbe](../../once-only-model/acceptance.md#历史实验与源码)、[PipelineCorrectness](../../once-only-model/acceptance.md#历史实验与源码)；仅测试 classpath，无行情注入 HTTP 接口。
 - 回归补充：[OpeningGapInfrastructureIT](../../../src/test/java/com/ezra/pricepulse/market/OpeningGapInfrastructureIT.java)、[DynamicMonitoringInfrastructureIT](../../../src/test/java/com/ezra/pricepulse/market/DynamicMonitoringInfrastructureIT.java)及队列／指标／Outbox 单元；脚本与安全汇总见 [目录入口](README.md)。
 
 ## 积压治理决策与尚未实施项

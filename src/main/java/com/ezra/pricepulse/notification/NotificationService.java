@@ -151,7 +151,8 @@ public class NotificationService {
                     String label=switch(reach.confirmation()){
                         case "RECOVERY" -> "恢复后确认达到";
                         case "RULE_CREATED" -> "创建时确认达到";
-                        case "RULE_ACTIVATED" -> "启用时确认达到";
+                        case "RULE_UPDATED" -> "修改时确认达到";
+                        case "RULE_ACTIVATED" -> "旧版启用时确认达到";
                         default -> "已达到";
                     };
                     title=delivery.getStockSymbol()+" "+label+" "+verb+"目标 "+displayThreshold;

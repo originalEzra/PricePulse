@@ -13,8 +13,6 @@ public class AlertRule {
     private String note;
     private AlertDirection direction;
     private BigDecimal thresholdPrice;
-    private AlertTriggerMode triggerMode;
-    private BigDecimal rearmPrice;
     private AlertRuleStatus status;
     private LocalDateTime lastTriggeredAt;
     private Long version;
@@ -43,10 +41,6 @@ public class AlertRule {
     public void setDirection(AlertDirection direction) { this.direction = direction; }
     public BigDecimal getThresholdPrice() { return thresholdPrice; }
     public void setThresholdPrice(BigDecimal thresholdPrice) { this.thresholdPrice = thresholdPrice; }
-    public AlertTriggerMode getTriggerMode() { return triggerMode; }
-    public void setTriggerMode(AlertTriggerMode triggerMode) { this.triggerMode = triggerMode; }
-    public BigDecimal getRearmPrice() { return rearmPrice; }
-    public void setRearmPrice(BigDecimal rearmPrice) { this.rearmPrice = rearmPrice; }
     public AlertRuleStatus getStatus() { return status; }
     public void setStatus(AlertRuleStatus status) { this.status = status; }
     public LocalDateTime getLastTriggeredAt() { return lastTriggeredAt; }

@@ -32,7 +32,7 @@ public class MarketTimelineService {
     }
     public record TimelineStock(long id,String symbol,String name,String market,String currency,
             String latestPrice,Instant latestQuoteAt,String priceKind) {}
-    public record Threshold(long id,String name,AlertDirection direction,String thresholdPrice,String rearmPrice,
+    public record Threshold(long id,String name,AlertDirection direction,String thresholdPrice,
             AlertRuleStatus status,long version) {}
     public Timeline timeline(long userId,long stockId,String window,Instant anchor) {
         Stock stock=requireStock(stockId);
@@ -93,7 +93,7 @@ public class MarketTimelineService {
                 false,points.size()-bars.size());
         var chartSessions=TradingSession.forRange(sessions.stream().map(s->new TradingSession(s.sessionDate().toString(),s.open(),s.close())).toList(),range.from(),range.to());
         var thresholds=rules.listSnapshotSource(userId,stockId).stream().map(r->new Threshold(r.getId(),r.getName(),r.getDirection(),
-                r.getThresholdPrice().toPlainString(),r.getRearmPrice()==null?null:r.getRearmPrice().toPlainString(),r.getStatus(),r.getVersion())).toList();
+                r.getThresholdPrice().toPlainString(),r.getStatus(),r.getVersion())).toList();
         return new Timeline("REAL",view,"ALPACA","iex","raw","1Min + sampled trade tail",range,coverageView,
                 health.snapshot(stock.symbol(),sessions.stream().anyMatch(s->s.contains(now)),now,validState?state:null,properties.isBusinessWritesEnabled()),
                 gaps,chartSessions,quality,List.copyOf(points),thresholds,"CURRENT_CONFIGURATION",events.events(),events.eventCursor(),events.watermark());

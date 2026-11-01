@@ -1,5 +1,15 @@
 # PricePulse V2 新聊天交接
 
+一次性目标价模型离线交付（2026-11-01）：用户要求删除 REPEAT／COOLDOWN／重新激活。开发副本为 `/Users/ezra/project-z/price-pulse-once-only`，本地分支 `codex/pricepulse-once-only-20261101`，基于 `c99377c`。原仓库当前工作分支不切换，避免正式 Vite 自动加载；下一轮审查请明确读取该开发分支／副本。没有使用远端覆盖本地。
+
+REAL／SIM 共用 `TargetPriceMatcher`，仅 ACTIVE→COMPLETED，取消沿用 DELETED；股票锁、ACTIVE＋版本条件更新、成交去重／水位、触发＋Outbox 原子性与通知幂等保留。创建／编辑复核可信现价，COMPLETED 不能编辑或恢复。Redis 仅两个 ACTIVE 目标 band，新 marker 格式强制旧索引重建。旧模拟结果只读且原 JSON／状态保留，新实验使用 `splitmix64-once-v2`／`opening-gap-once-v2`，不进入正式通知。
+
+既有 V11 为故障告警迁移，checksum 不改；规则精简新增 **V12**。未来发布顺序 V10→V11→V12。只读盘点正式 37 条均 ONCE（16 ACTIVE／21 COMPLETED），当前没有 REPEAT／COOLDOWN／PAUSED；V12 包含全部行的拒绝门禁，未来只要出现不兼容规则即停止发布，不静默转换或删除。历史触发／通知／模拟不改写，细节见 [迁移影响](once-only-model/migration-plan.md)。
+
+144 项单元、143 项集成（完整矩阵 142＋独立联合 Broker 1）、52 项前端全部通过；类型／构建、15 项探针、8 项 Python 工具测试通过。原始失败及修正后全量证据均保留于忽略的 target；旧穿越模型容量／性能工具归档至不可变 `c99377c`，不把旧性能数字套用于新语义。见 [离线验收](once-only-model/acceptance.md)、[安全汇总](once-only-model/verification.json)。
+
+**正式仍 V10；后端 770 与 Vite 21134 的启动时间、原工作区和 target/classes 均保持。本轮未正式迁移、改正式数据、重启、增加 IEX 连接、推送或合并。** 受控加载及自然市场需后续单独批准。30 秒／队列／恢复告警已回归，但自然市场与 IEX 1006 未标为通过。离线交付完成后停止。下文为历史记录。
+
 目标价确认与监控故障闭环（2026-11-01）：本地分支 `codex/pricepulse-reachable-and-monitor-alerts-20261101` 已离线实现。REAL ACTIVE ONCE 按当前可信价格达到目标确认，含恢复基线和创建事务；REPEAT 与已保存模拟实验保留原穿越语义。Redis 新 ONCE band、旧 marker 兼容重建、恢复/创建确认时间及 quote 原始时间均有回归。恢复首笔不再一概禁止 ONCE，此处为用户新授权语义；旧阶段记录保留为历史。
 
 断线故障首次时间跨重试保留，达到 30 秒才为受影响用户合并生成中断意图；当前连接/intent ACK/已知处理故障恢复后生成一次恢复意图。原 1024 队列实际舍弃立即单独告警，新 continuity 成功提交后才确认队列恢复。V11 新增最小故障/投递表与通知来源约束，沿用原 Outbox / MQ，不伪造价格 trigger。154 单元、127 项选定集成、51 前端测试及类型/构建通过，另 1 项既有 opt-in 长容量实验未运行；新增静态配置夹具先有 2 项错误，保持生产校验修正夹具后专项 10 项全通过，报告保留此计数口径。报告：[目标价语义](target-reach-and-monitor-alerts/phase1-reachability.md)、[故障闭环与迁移边界](target-reach-and-monitor-alerts/phase2-monitor-incidents.md)、[安全结果汇总](target-reach-and-monitor-alerts/verification.json)。

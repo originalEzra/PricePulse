@@ -48,7 +48,7 @@ class SimulationRestartIT {
             jdbc.batchUpdate("INSERT INTO market_price_bars(stock_id,provider,feed,resolution,adjustment,interval_start,interval_end,open_price,high_price,low_price,close_price,fetched_at) VALUES(?,'ALPACA','iex','1Min','raw',?,?,100,100,100,100,NOW(6))",rows);
             jdbc.update("INSERT INTO market_history_coverage(stock_id,provider,feed,requested_from,requested_to,synced_at) VALUES(?,'ALPACA','iex',?,?,NOW(6))",stock,utc(previous),utc(origin.plusSeconds(3600)));
             long bar=jdbc.queryForObject("SELECT id FROM market_price_bars WHERE stock_id=? AND interval_end=?",Long.class,stock,utc(origin));
-            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'Restart snapshot','ABOVE',100.0001,'ONCE','ACTIVE')",owner,stock);
+            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'Restart snapshot','ABOVE',100.0001,'ACTIVE')",owner,stock);
             var body=json.createObjectNode();body.put("stockId",stock);body.putObject("origin").put("kind","HISTORICAL_POINT").put("pointRef","bar:"+bar).put("revision","1");
             body.put("mode","RISE").put("stepRatio","0.003").put("seed",42).putNull("expectedCurrentRunId");
             var run=call("POST","/api/simulations/start",body,UUID.randomUUID().toString());String id=run.path("runId").asText();

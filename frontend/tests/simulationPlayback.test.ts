@@ -15,7 +15,7 @@ const origin = '2026-10-28T13:30:00Z'
 const point = (seq: number) => ({ pointSeq: seq, eventTime: new Date(Date.parse(origin) + seq * 60000).toISOString(), price: (100 + seq / 1000).toFixed(4) })
 const run = (id = 'run-a', version = 0): SimulationRun => ({ runId: id, stockId: 1, version, lastBatchNo: version,
   simClock: point(version * 60).eventTime, latestPrice: point(version * 60).price, nextPointSeq: version * 60 + 1,
-  seed: '42', generatorVersion: 'synthetic', generatorSupported: true, ruleSnapshots: [], stats: { triggered: 0, rearmed: 0 },
+  seed: '42', generatorVersion: 'synthetic', generatorSupported: true, ruleSnapshots: [], stats: { triggered: 0, legacyRearmed: 0 },
   origin: { kind: 'HISTORICAL_POINT', stockSymbol: 'SYNTHETIC', provider: 'ALPACA', feed: 'iex', calendarVersion: 'synthetic',
     prefixFrom: origin, point: { pointRef: 'bar:1', eventTime: origin, epochNanos: '0', price: '100.0000', kind: 'BAR_CLOSE',
       intervalStart: origin, intervalEnd: origin, availableAt: origin, revision: '1', session: '2026-10-28' } },
@@ -44,7 +44,7 @@ function fixture(initial = run()) {
       const previous = current; current = run(id, current.version + 1)
       const batch = { runId: id, versionAfter: current.version, batchNo: current.lastBatchNo, fromClock: previous.simClock,
         toClock: current.simClock, firstPointSeq: previous.nextPointSeq, lastPointSeq: current.nextPointSeq - 1,
-        triggered: 0, rearmed: 0, points: Array.from({ length: 60 }, (_, i) => point(previous.nextPointSeq + i)) }
+        triggered: 0, points: Array.from({ length: 60 }, (_, i) => point(previous.nextPointSeq + i)) }
       batches.set(key, batch); return structuredClone(batch)
     },
     start: async (body: StartSimulation, key: string) => {
@@ -75,6 +75,16 @@ test('playback is serial, and pause while in flight accepts exactly that hour wi
   f.session.pause(); gate.resolve(await advance('run-a', { expectedVersion: 0, expectedBatchNo: 0 }, 'commit'))
   await flush()
   assert.equal(f.session.run!.version, 1); assert.equal(f.session.playing, false); assert.equal(f.tasks.size, 0)
+})
+
+test('legacy generator results stay readable and cannot dispatch playback or advance requests', async () => {
+  const saved = { ...run('legacy-run', 1), generatorVersion: 'splitmix64-price-v1', generatorSupported: false }
+  const f = fixture(saved); await f.session.enter()
+  assert.equal(f.session.run!.runId, saved.runId)
+  assert.equal(f.session.timeline!.simulation.length, 60)
+  assert.equal(f.session.ready, false); assert.equal(f.session.canPlay, false)
+  f.session.play(); assert.equal(await f.session.advance(), false)
+  assert.equal(f.calls.length, 0); assert.equal(f.tasks.size, 0)
 })
 
 test('changing speed reschedules only the wait; stale callbacks after pause cannot dispatch a batch', async () => {

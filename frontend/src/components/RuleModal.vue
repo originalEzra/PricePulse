@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { errorMessage } from '../api/client'
 import { ruleApi } from '../api'
 import type { AlertRule, SaveAlertRule, Stock } from '../api/types'
@@ -19,8 +19,6 @@ const form = reactive<SaveAlertRule>({
   note: '',
   direction: 'ABOVE',
   thresholdPrice: 100,
-  triggerMode: 'ONCE',
-  rearmPrice: null,
 })
 
 watch(
@@ -34,37 +32,17 @@ watch(
       note: source?.note ?? '',
       direction: source?.direction ?? 'ABOVE',
       thresholdPrice: source?.thresholdPrice ?? Number(Number(props.stock.latestPrice ?? 100).toFixed(2)),
-      triggerMode: source?.triggerMode ?? 'ONCE',
-      rearmPrice: source?.rearmPrice ?? null,
     })
     error.value = ''
   },
   { immediate: true },
 )
 
-const rearmHint = computed(() =>
-  form.direction === 'ABOVE' ? '重新激活价必须低于触发价' : '重新激活价必须高于触发价',
-)
-
 async function submit() {
   error.value = ''
-  if (form.triggerMode === 'REPEAT') {
-    if (!form.rearmPrice) {
-      error.value = '重复提醒需要填写重新激活价'
-      return
-    }
-    if (form.direction === 'ABOVE' && form.rearmPrice >= form.thresholdPrice) {
-      error.value = rearmHint.value
-      return
-    }
-    if (form.direction === 'BELOW' && form.rearmPrice <= form.thresholdPrice) {
-      error.value = rearmHint.value
-      return
-    }
-  }
   submitting.value = true
   try {
-    const payload = { ...form, rearmPrice: form.triggerMode === 'REPEAT' ? form.rearmPrice : null }
+    const payload = { ...form }
     const saved = props.rule
       ? await ruleApi.update(props.rule.id, props.rule.version, payload)
       : await ruleApi.create(payload)
@@ -99,16 +77,7 @@ async function submit() {
             </label>
             <label>触发价格<input v-model.number="form.thresholdPrice" min="0.0001" step="0.0001" type="number" required /></label>
           </div>
-          <label>提醒方式
-            <select v-model="form.triggerMode">
-              <option value="ONCE">仅提醒一次</option><option value="REPEAT">离开区间后可再次提醒</option>
-            </select>
-          </label>
-          <p v-if="form.triggerMode === 'ONCE'" class="muted">一次性规则：可信价格上破方向 ≥ 目标、下破方向 ≤ 目标即完成。创建时已达到会立即确认；行情未确认或不新鲜时等待下一笔合格成交。</p>
-          <label v-if="form.triggerMode === 'REPEAT'">重新激活价
-            <input v-model.number="form.rearmPrice" min="0.0001" step="0.0001" type="number" required />
-            <small>{{ rearmHint }}</small>
-          </label>
+          <p class="muted">仅提醒一次：可信现价 ≥ 上方目标或 ≤ 下方目标时完成。创建或修改时已达标会确认；行情不新鲜时等待下一笔合格成交。</p>
           <label>备注（可选）<textarea v-model.trim="form.note" maxlength="500" rows="3" /></label>
           <p v-if="error" class="form-error">{{ error }}</p>
           <div class="modal-actions">

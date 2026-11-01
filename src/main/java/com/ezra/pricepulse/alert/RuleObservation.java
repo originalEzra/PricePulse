@@ -8,8 +8,6 @@ public record RuleObservation(
         String ruleName,
         AlertDirection direction,
         BigDecimal thresholdPrice,
-        BigDecimal rearmPrice,
-        AlertTriggerMode triggerMode,
         AlertRuleStatus beforeStatus,
         AlertRuleStatus afterStatus,
         String event,

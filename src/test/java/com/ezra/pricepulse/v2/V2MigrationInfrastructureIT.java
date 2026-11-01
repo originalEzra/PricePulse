@@ -42,7 +42,7 @@ class V2MigrationInfrastructureIT {
             s.executeUpdate("INSERT INTO notifications(user_id,trigger_id,title,content) VALUES(1,1,'Old notification','Retained')");
         }
         Flyway flyway = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
-                .locations("classpath:db/migration").load();
+                .locations("classpath:db/migration").target("11").load();
         flyway.migrate();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");

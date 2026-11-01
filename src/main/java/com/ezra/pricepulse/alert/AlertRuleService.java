@@ -19,9 +19,6 @@ import org.springframework.transaction.annotation.Isolation;
 @Service
 @Profile("!standalone & !mq-it")
 public class AlertRuleService {
-    private static final List<AlertRuleStatus> EDITABLE_STATUSES =
-            List.of(AlertRuleStatus.ACTIVE, AlertRuleStatus.PAUSED);
-
     private final AlertRuleMapper alertRuleMapper;
     private final StockMapper stockMapper;
     private final UserMapper userMapper;
@@ -45,14 +42,14 @@ public class AlertRuleService {
     public AlertRuleResponse create(long userId, SaveAlertRuleRequest request) {
         requireActiveUser(userId);
         Stock stock = lockStock(request.stockId());
-        requireMonitoring(userId,stock,request.triggerMode());
+        monitoring.requireDesired(userId,stock);
         AlertRule rule = buildRule(userId, null, request);
         rule.setCreatedAt(com.ezra.pricepulse.market.MarketTime.utc(clock.instant()));rule.setEffectiveAt(rule.getCreatedAt());
         alertRuleMapper.insert(rule);
         AlertRule saved = requireOwnedRule(userId, rule.getId());
         if(activation!=null)activation.confirm(stock,saved,true);
         index.changed(stock, List.of(saved));
-        return AlertRuleResponse.from(saved);
+        return currentResponse(userId,saved);
     }
 
     @Transactional(readOnly = true)
@@ -79,34 +76,18 @@ public class AlertRuleService {
         requireActiveUser(userId);
         LockedRule locked = lockOwnedRule(userId, ruleId, request.version(), request.rule().stockId());
         AlertRule current = locked.rule();
-        if (!EDITABLE_STATUSES.contains(current.getStatus())) {
-            throw stateConflict("Only active or paused rules can be edited");
+        if (current.getStatus()!=AlertRuleStatus.ACTIVE) {
+            throw stateConflict("Only active rules can be edited");
         }
-        if (current.getStatus() == AlertRuleStatus.ACTIVE)
-            requireMonitoring(userId, locked.stocks().stream().filter(s -> s.id() == request.rule().stockId()).findFirst().orElseThrow(),request.rule().triggerMode());
+        monitoring.requireDesired(userId, locked.stocks().stream().filter(s -> s.id() == request.rule().stockId()).findFirst().orElseThrow());
         AlertRule replacement = buildRule(userId, ruleId, request.rule());
-        int updated = alertRuleMapper.updateDetails(
-                replacement, request.version(), EDITABLE_STATUSES);
+        replacement.setEffectiveAt(com.ezra.pricepulse.market.MarketTime.utc(clock.instant()));
+        int updated = alertRuleMapper.updateDetails(replacement, request.version());
         requireUpdated(updated);
         AlertRule saved = requireOwnedRule(userId, ruleId);
         if(activation!=null)activation.confirm(locked.stocks().stream().filter(s->s.id()==saved.getStockId()).findFirst().orElseThrow(),saved,false);
         locked.stocks().forEach(stock -> index.changed(stock, List.of(saved)));
-        return AlertRuleResponse.from(saved);
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public AlertRuleResponse pause(long userId, long ruleId, long version) {
-        return transition(
-                userId, ruleId, version, AlertRuleStatus.PAUSED,
-                List.of(AlertRuleStatus.ACTIVE, AlertRuleStatus.COOLDOWN),
-                "Only an active or cooldown rule can be paused");
-    }
-
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public AlertRuleResponse resume(long userId, long ruleId, long version) {
-        return transition(
-                userId, ruleId, version, AlertRuleStatus.ACTIVE, List.of(AlertRuleStatus.PAUSED),
-                "Only a paused rule can be resumed");
+        return currentResponse(userId,saved);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -118,35 +99,8 @@ public class AlertRuleService {
         index.changed(locked.stocks().getFirst(), List.of(locked.rule()));
     }
 
-    private AlertRuleResponse transition(
-            long userId,
-            long ruleId,
-            long version,
-            AlertRuleStatus target,
-            List<AlertRuleStatus> allowed,
-            String invalidStateMessage) {
-        requireActiveUser(userId);
-        LockedRule locked = lockOwnedRule(userId, ruleId, version, null);
-        AlertRule current = locked.rule();
-        if (target == AlertRuleStatus.ACTIVE) requireMonitoring(userId, locked.stocks().getFirst(),current.getTriggerMode());
-        if (!allowed.contains(current.getStatus())) {
-            throw stateConflict(invalidStateMessage);
-        }
-        int updated = alertRuleMapper.updateStatus(ruleId, userId, version, target, allowed);
-        requireUpdated(updated);
-        AlertRule saved = requireOwnedRule(userId, ruleId);
-        if(target==AlertRuleStatus.ACTIVE&&activation!=null)activation.confirm(locked.stocks().getFirst(),saved,false);
-        index.changed(locked.stocks().getFirst(), List.of(saved));
-        return AlertRuleResponse.from(saved);
-    }
-
     private AlertRule buildRule(long userId, Long ruleId, SaveAlertRuleRequest request) {
         BigDecimal threshold = PriceTicks.normalize(request.thresholdPrice(), "thresholdPrice");
-        BigDecimal rearm = request.rearmPrice() == null
-                ? null
-                : PriceTicks.normalize(request.rearmPrice(), "rearmPrice");
-        validateRearm(request.direction(), request.triggerMode(), threshold, rearm);
-
         var rule = new AlertRule();
         rule.setId(ruleId);
         rule.setUserId(userId);
@@ -155,42 +109,12 @@ public class AlertRuleService {
         rule.setNote(normalizeNote(request.note()));
         rule.setDirection(request.direction());
         rule.setThresholdPrice(threshold);
-        rule.setTriggerMode(request.triggerMode());
-        rule.setRearmPrice(rearm);
         return rule;
     }
 
-    private void requireMonitoring(long user,Stock stock,AlertTriggerMode mode){
-        if(mode==AlertTriggerMode.ONCE)monitoring.requireDesired(user,stock);else monitoring.requireConfirmed(user,stock);
-    }
-
-    private void validateRearm(
-            AlertDirection direction,
-            AlertTriggerMode mode,
-            BigDecimal threshold,
-            BigDecimal rearm) {
-        if (mode == AlertTriggerMode.ONCE) {
-            if (rearm != null) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_RULE_VIOLATION,
-                        "A one-time rule must not define rearmPrice");
-            }
-            return;
-        }
-        if (rearm == null) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "A repeat rule requires rearmPrice");
-        }
-        boolean valid = direction == AlertDirection.ABOVE
-                ? rearm.compareTo(threshold) < 0
-                : rearm.compareTo(threshold) > 0;
-        if (!valid) {
-            String relation = direction == AlertDirection.ABOVE ? "below" : "above";
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_RULE_VIOLATION,
-                    "rearmPrice must be " + relation + " thresholdPrice for this direction");
-        }
+    private AlertRuleResponse currentResponse(long userId,AlertRule saved) {
+        // Completion also updates MySQL's updated_at; return the final persisted row, not the pre-confirmation timestamp.
+        return AlertRuleResponse.from(saved.getStatus()==AlertRuleStatus.COMPLETED?requireOwnedRule(userId,saved.getId()):saved);
     }
 
     private String normalizeNote(String note) {

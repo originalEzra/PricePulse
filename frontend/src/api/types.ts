@@ -50,8 +50,7 @@ export interface AssetSearchResult {
 export interface CancellationPreview { stockId: number; symbol: string; version: number; ruleCount: number; rulesDigest: string }
 
 export type AlertDirection = 'ABOVE' | 'BELOW'
-export type TriggerMode = 'ONCE' | 'REPEAT'
-export type RuleStatus = 'ACTIVE' | 'COOLDOWN' | 'PAUSED' | 'COMPLETED' | 'DELETED'
+export type RuleStatus = 'ACTIVE' | 'COMPLETED' | 'DELETED'
 
 export interface SaveAlertRule {
   stockId: number
@@ -59,8 +58,6 @@ export interface SaveAlertRule {
   note?: string
   direction: AlertDirection
   thresholdPrice: number
-  triggerMode: TriggerMode
-  rearmPrice?: number | null
 }
 
 export interface AlertRuleDraft extends Omit<SaveAlertRule, 'note'> {
@@ -86,6 +83,12 @@ export interface AlertRule extends SaveAlertRule {
   updatedAt: string
 }
 
+/** Immutable historical JSON may contain retired fields; never submitted as a new rule. */
+export interface HistoricalRuleSnapshot extends Omit<AlertRule, 'status'> {
+  status: string
+  [legacyField: string]: unknown
+}
+
 export interface QuoteHistory {
   id: number
   eventKey: string
@@ -105,36 +108,9 @@ export interface AlertTrigger {
   quoteEventId: number
   triggerPrice: number
   eventTime: string
-  ruleSnapshot: AlertRule
+  ruleSnapshot: HistoricalRuleSnapshot
   triggerContext?: OpeningGapContext | TargetReachContext | null
   createdAt: string
-}
-
-export interface RuleObservation {
-  ruleId: number
-  ruleName: string
-  direction: AlertDirection
-  thresholdPrice: number
-  rearmPrice: number | null
-  triggerMode: TriggerMode
-  beforeStatus: RuleStatus
-  afterStatus: RuleStatus
-  event: 'TRIGGERED' | 'REARMED' | 'NONE'
-  triggerId: number | null
-  version: number
-}
-
-export interface QuoteResult {
-  eventId: number
-  eventKey: string
-  stockId: number
-  previousPrice: number | null
-  price: number
-  eventTime: string
-  outcome: 'PROCESSED' | 'DUPLICATE' | 'DISCARDED_STALE' | 'DISCARDED_FUTURE' | 'DISCARDED_OUT_OF_ORDER'
-  reason: string | null
-  matching: { candidates: number; triggered: number; rearmed: number } | null
-  observation: RuleObservation | null
 }
 
 export interface NotificationItem {
@@ -160,26 +136,6 @@ export interface NotificationFeed {
   latest: NotificationItem[]
 }
 
-export interface SimulationRequest {
-  stockId: number
-  runKey: string
-  steps: number
-  mode: 'NORMAL' | 'RISE' | 'FALL' | 'OSCILLATE'
-  seed: number
-  stepRatio: number
-  initialPrice: number
-  startTime: string
-  ruleId?: number | null
-}
-
-export interface SimulationResult {
-  requested: number
-  processed: number
-  duplicates: number
-  discarded: number
-  results: QuoteResult[]
-}
-
 export type TimelineWindow = '1H' | '1D' | '1W' | '1M'
 export interface TradingSession { date: string; open: string; close: string }
 export interface TimelinePoint {
@@ -189,11 +145,11 @@ export interface TimelinePoint {
 }
 export interface TimelineEvent {
   triggerId: number; quoteId: number; eventTime: string; epochNanos: string; price: string
-  ruleSnapshot: AlertRule; notificationStatus: 'PENDING' | 'UNREAD' | 'READ' | 'FAILED'
+  ruleSnapshot: HistoricalRuleSnapshot; notificationStatus: 'PENDING' | 'UNREAD' | 'READ' | 'FAILED'
   triggerContext?: OpeningGapContext | TargetReachContext | null
 }
 export interface TargetReachContext {
-  kind: 'TARGET_REACHED'; confirmation: 'LIVE' | 'RECOVERY' | 'RULE_CREATED' | 'RULE_ACTIVATED'
+  kind: 'TARGET_REACHED'; confirmation: 'LIVE' | 'RECOVERY' | 'RULE_CREATED' | 'RULE_UPDATED' | 'RULE_ACTIVATED'
   confirmedAt: string; quoteEventTime: string; baselineReason: string | null
 }
 export interface OpeningGapContext {
@@ -221,7 +177,7 @@ export interface MarketTimeline extends TimelineEventPage {
     historyCoverageComplete: boolean; calendarCoverageComplete: boolean; barSamplingApplied: boolean; tradeTailPoints: number }
   points: TimelinePoint[]
   thresholds: Array<{ id: number; name: string; direction: AlertDirection; thresholdPrice: string
-    rearmPrice: string | null; status: RuleStatus; version: number }>
+    status: RuleStatus; version: number }>
   thresholdSemantics: 'CURRENT_CONFIGURATION'
 }
 
@@ -234,15 +190,15 @@ export interface StartSimulation {
   openingGap?: SimulationGapInput
 }
 export interface SimulationSnapshot {
-  snapshotRuleId: number; sourceRuleId: number; sourceVersion: number; config: AlertRule
-  sourceStatus: RuleStatus; initialState: RuleStatus; currentState: RuleStatus; stateVersion: number
+  snapshotRuleId: number; sourceRuleId: number; sourceVersion: number; config: HistoricalRuleSnapshot
+  sourceStatus: string; initialState: string; currentState: string; stateVersion: number
 }
 export interface SimulationRun {
   runId: string; stockId: number; version: number; lastBatchNo: number; simClock: string
   latestPrice: string; nextPointSeq: number; seed: string; generatorVersion: string; generatorSupported: boolean
   origin: { kind: 'LATEST' | 'HISTORICAL_POINT' | 'SIMULATION_REFERENCE'; stockSymbol: string; provider: 'ALPACA' | 'SIMULATION'; feed: 'iex' | 'SIMULATION'; point: Omit<TimelinePoint,'kind'> & { kind: TimelinePoint['kind'] | 'SIMULATION_REFERENCE' }; prefixFrom: string; calendarVersion: string }
   parameters: { mode: SimulationMode; stepRatio: string; openingGap?: SimulationGapContext }; ruleSnapshots: SimulationSnapshot[]
-  stats: { triggered: number; rearmed: number }
+  stats: { triggered: number; legacyRearmed: number }
 }
 export interface SimulationPoint { pointSeq: number; eventTime: string; price: string }
 export interface SimulationTimeline {
@@ -251,12 +207,12 @@ export interface SimulationTimeline {
   thresholds: SimulationSnapshot[]; stats: SimulationRun['stats']; pointCursor: string | null; watermark: string
 }
 export interface SimulationEvent {
-  id: number; snapshotRuleId: number; pointSeq: number; eventType: 'TRIGGERED' | 'REARMED'
-  eventTime: string; epochNanos: string; price: string; fromState: RuleStatus; toState: RuleStatus; ruleSnapshot: AlertRule
+  id: number; snapshotRuleId: number; pointSeq: number; eventType: string
+  eventTime: string; epochNanos: string; price: string; fromState: string; toState: string; ruleSnapshot: HistoricalRuleSnapshot
   triggerContext?: SimulationGapContext | null
 }
 export interface SimulationEventPage { events: SimulationEvent[]; eventCursor: string | null; watermark: string }
 export interface SimulationBatch {
   runId: string; batchNo: number; versionAfter: number; fromClock: string; toClock: string
-  firstPointSeq: number; lastPointSeq: number; triggered: number; rearmed: number; points: SimulationPoint[]
+  firstPointSeq: number; lastPointSeq: number; triggered: number; points: SimulationPoint[]
 }

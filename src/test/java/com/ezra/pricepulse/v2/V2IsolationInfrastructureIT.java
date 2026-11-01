@@ -39,7 +39,8 @@ import org.testcontainers.junit.jupiter.*;
 @Import(RealQuoteTestSupport.class)
 @Testcontainers
 class V2IsolationInfrastructureIT {
-    @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4.7").withDatabaseName("v2_isolation");
+    @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4.7").withDatabaseName("v2_isolation")
+            .withCommand("--log-bin-trust-function-creators=1");
     @Container static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.4.6-alpine").withExposedPorts(6379);
     private static final Instant T = Instant.parse("2024-06-01T10:00:00.123456789Z");
 
@@ -64,7 +65,7 @@ class V2IsolationInfrastructureIT {
 
     @Test void sameStockRealAndTwoUsersSimulationsRunConcurrentlyWithoutCrossWrites() throws Exception {
         long a = user(), b = user(), stock = stock();
-        long ra = rule(a, stock, "ONCE", "ACTIVE"), rb = rule(b, stock, "ONCE", "ACTIVE");
+        long ra = rule(a, stock, "ACTIVE"), rb = rule(b, stock, "ACTIVE");
         trusted(stock, 1, "99");
         Run sa = start(a, stock, null), sb = start(b, stock, null);
         CyclicBarrier barrier = new CyclicBarrier(3);
@@ -105,34 +106,51 @@ class V2IsolationInfrastructureIT {
         assertThat(simulations.current(a).simClockNs()).isEqualTo(ns(T.plusSeconds(120)));
     }
 
-    @Test void snapshotIsOwnedFrozenAndInitializesCompletedAndCooldownButNotPausedOrDeleted() {
+    @Test void snapshotIsOwnedFrozenAndInitializesNewIndependentTargetsWithoutDeletedRules() {
         long owner = user(), outsider = user(), stock = stock();
-        long repeat = rule(owner, stock, "REPEAT", "COOLDOWN");
-        rule(owner, stock, "ONCE", "COMPLETED");
-        rule(owner, stock, "ONCE", "PAUSED");
-        rule(owner, stock, "ONCE", "DELETED");
-        rule(outsider, stock, "ONCE", "ACTIVE");
+        long once = rule(owner, stock, "ACTIVE");
+        rule(owner, stock, "COMPLETED");
+        rule(owner, stock, "DELETED");
+        rule(outsider, stock, "ACTIVE");
         Run run = start(owner, stock, null);
         var before = simulations.snapshots(owner, run.id());
-        assertThat(before).hasSize(3);
+        assertThat(before).hasSize(2);
         assertThat(before).extracting(Snapshot::currentState).containsExactly(
-                AlertRuleStatus.ACTIVE, AlertRuleStatus.ACTIVE, AlertRuleStatus.PAUSED);
+                "ACTIVE", "ACTIVE");
         jdbc.update("UPDATE alert_rules SET name='changed',threshold_price=999,status='DELETED',version=version+1 WHERE user_id=?", owner);
         var result = simulations.advance(owner, run.id(), 0, 0, "frozen", hash("frozen"), ignored -> List.of(
                 new Point(T.plusSeconds(60), new BigDecimal("100")),
                 new Point(T.plusSeconds(120), new BigDecimal("95")),
                 new Point(T.plusSeconds(180), new BigDecimal("100"))));
-        assertThat(result.triggered()).isEqualTo(3);
-        assertThat(result.rearmed()).isEqualTo(1);
+        assertThat(result.triggered()).isEqualTo(2);
         assertThat(simulations.snapshots(owner, run.id()).stream().map(Snapshot::configJson).toList())
                 .isEqualTo(before.stream().map(Snapshot::configJson).toList());
-        assertThat(jdbc.queryForObject("SELECT status FROM alert_rules WHERE id=?", String.class, repeat)).isEqualTo("DELETED");
+        assertThat(jdbc.queryForObject("SELECT status FROM alert_rules WHERE id=?", String.class, once)).isEqualTo("DELETED");
         assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id IN (SELECT id FROM alert_rules WHERE user_id=?)", owner)).isZero();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"ABOVE,90","BELOW,110"})
+    void simulationReachesTargetsEvenWithAnUnchangedPriceAndNeverReactivates(String direction,String threshold) {
+        long owner=user(),stock=stock(),rule=rule(owner,stock,"ACTIVE");
+        jdbc.update("UPDATE alert_rules SET direction=?,threshold_price=? WHERE id=?",direction,new BigDecimal(threshold),rule);
+        Run run=start(owner,stock,null);
+        var realBefore=jdbc.queryForMap("SELECT status,version FROM alert_rules WHERE id=?",rule);
+        long outboxBefore=count("SELECT COUNT(*) FROM outbox_events");
+        assertThat(batch(owner,run,"same-price","99").triggered()).isEqualTo(1);
+        var event=simulations.events(owner,run.id()).getFirst();assertThat(event.pointSeq()).isEqualTo(1);
+        assertThat(event.toState()).isEqualTo("COMPLETED");
+        simulations.advance(owner,run.id(),1,1,"more",hash("more"),ignored->List.of(new Point(T.plusSeconds(120),new BigDecimal("99"))));
+        assertThat(simulations.events(owner,run.id())).hasSize(1);
+        assertThat(jdbc.queryForMap("SELECT status,version FROM alert_rules WHERE id=?",rule)).isEqualTo(realBefore);
+        assertThat(count("SELECT COUNT(*) FROM quote_events WHERE stock_id=?",stock)).isZero();
+        assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id=?",rule)).isZero();
+        assertThat(count("SELECT COUNT(*) FROM outbox_events")).isEqualTo(outboxBefore);
     }
 
     @Test void retriesAndCompetingAdvancesCommitOneBatchAndNeverRegenerateAnOldRequest() throws Exception {
         long owner = user(), stock = stock();
-        rule(owner, stock, "ONCE", "ACTIVE");
+        rule(owner, stock, "ACTIVE");
         Run run = start(owner, stock, null);
         CyclicBarrier barrier = new CyclicBarrier(2);
         try (var pool = Executors.newFixedThreadPool(2)) {
@@ -172,7 +190,7 @@ class V2IsolationInfrastructureIT {
 
     @Test void rollbackRepairsSimulationIndexAndCacheLossNeverLoadsRealRules() {
         long owner = user(), stock = stock();
-        rule(owner, stock, "REPEAT", "ACTIVE");
+        rule(owner, stock, "ACTIVE");
         Run run = start(owner, stock, null);
         var tx = new TransactionTemplate(transactionManager);
         assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
@@ -181,26 +199,26 @@ class V2IsolationInfrastructureIT {
         })).hasMessageContaining("crash");
         assertThat(simulations.current(owner).version()).isZero();
         assertThat(simulations.events(owner, run.id())).isEmpty();
-        assertThat(simulations.snapshots(owner, run.id()).getFirst().currentState()).isEqualTo(AlertRuleStatus.ACTIVE);
+        assertThat(simulations.snapshots(owner, run.id()).getFirst().currentState()).isEqualTo("ACTIVE");
         var retry = batch(owner, run, "rollback", "100");
         assertThat(retry.triggered()).isEqualTo(1);
         redis.delete(SimulationIsolationService.key(run.id()));
         simulations.advance(owner, run.id(), 1, 1, "repair", hash("repair"), ignored -> List.of(
                 new Point(T.plusSeconds(120), new BigDecimal("95")),
                 new Point(T.plusSeconds(180), new BigDecimal("100"))));
-        assertThat(simulations.events(owner, run.id())).hasSize(3);
+        assertThat(simulations.events(owner, run.id())).hasSize(1);
         assertThat(count("SELECT COUNT(*) FROM alert_triggers WHERE rule_id IN (SELECT id FROM alert_rules WHERE user_id=?)", owner)).isZero();
         Run current = simulations.current(owner);
-        assertThat(redis.opsForZSet().score(SimulationIsolationService.key(run.id()), "@" + current.ruleIndexToken()))
+        assertThat(redis.opsForZSet().score(SimulationIsolationService.key(run.id()), "@" + ThresholdIndex.token(current.ruleIndexToken())))
                 .isEqualTo(-1d);
     }
 
     @Test void redisFailureRollsBackPreparedBatchWithoutMovingClockOrState() {
         long owner = user(), stock = stock();
-        rule(owner, stock, "ONCE", "ACTIVE");
+        rule(owner, stock, "ACTIVE");
         Run run = start(owner, stock, null);
         doThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "injected cache failure"))
-                .when(index).candidates(eq(SimulationIsolationService.key(run.id())), anyString(), any(), any(), any());
+                .when(index).candidates(eq(SimulationIsolationService.key(run.id())), anyString(), any(), any());
         try { assertThatThrownBy(() -> batch(owner, run, "failure", "100")).isInstanceOf(BusinessException.class); }
         finally { reset(index); }
         assertThat(simulations.current(owner).simClockNs()).isEqualTo(run.simClockNs());
@@ -211,7 +229,7 @@ class V2IsolationInfrastructureIT {
 
     @Test void replacementIsExplicitAtomicAndOwnedAndRetiresOnlyOldCacheAfterCommit() {
         long owner = user(), other = user(), stock = stock();
-        rule(owner, stock, "ONCE", "ACTIVE"); rule(other, stock, "ONCE", "ACTIVE");
+        rule(owner, stock, "ACTIVE"); rule(other, stock, "ACTIVE");
         Run old = start(owner, stock, null), theirs = start(other, stock, null);
         batch(owner, old, "old-step", "100"); batch(other, theirs, "their-step", "100");
         assertThatThrownBy(() -> simulations.events(owner, theirs.id())).isInstanceOf(BusinessException.class);
@@ -226,15 +244,20 @@ class V2IsolationInfrastructureIT {
         assertThatThrownBy(() -> simulations.events(owner, old.id())).isInstanceOf(BusinessException.class);
         assertThat(simulations.current(other).id()).isEqualTo(theirs.id());
         Seed invalid = new Seed(new BigDecimal("-1"), T, json.createObjectNode(), json.createArrayNode(),
-                json.createObjectNode(), 42, "fixture-v1", json.createArrayNode());
+                json.createObjectNode(), 42, SimulationGenerator.VERSION, json.createArrayNode());
         assertThatThrownBy(() -> simulations.begin(owner, stock, next.id(), "invalid", hash("invalid"), invalid))
                 .isInstanceOf(BusinessException.class);
         assertThat(simulations.current(owner).id()).isEqualTo(next.id());
         batch(owner, next, "preserve-child", "100");
-        Seed failsAfterDelete = new Seed(new BigDecimal("99"), T, json.createObjectNode(), json.createArrayNode(),
-                json.createObjectNode(), 42, "x".repeat(100), json.createArrayNode());
-        assertThatThrownBy(() -> simulations.begin(owner, stock, next.id(), "sql-failure", hash("sql-failure"), failsAfterDelete))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        Seed unsupported = new Seed(new BigDecimal("99"), T, json.createObjectNode(), json.createArrayNode(),
+                json.createObjectNode(), 42, "splitmix64-price-v1", json.createArrayNode());
+        assertThatThrownBy(() -> simulations.begin(owner, stock, next.id(), "unsupported", hash("unsupported"), unsupported))
+                .isInstanceOf(BusinessException.class);
+        jdbc.execute("CREATE TRIGGER simulation_replace_fail BEFORE INSERT ON simulation_runs FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated replacement failure'");
+        try {
+            assertThatThrownBy(() -> simulations.begin(owner, stock, next.id(), "sql-failure", hash("sql-failure"), seed()))
+                    .isInstanceOf(RuntimeException.class);
+        } finally { jdbc.execute("DROP TRIGGER simulation_replace_fail"); }
         assertThat(simulations.current(owner).id()).isEqualTo(next.id());
         assertThat(simulations.events(owner, next.id())).hasSize(1);
         assertThat(redis.hasKey(SimulationIsolationService.key(next.id()))).isTrue();
@@ -271,7 +294,7 @@ class V2IsolationInfrastructureIT {
     }
 
     @Test void legacyFactsArePreservedButInvisibleAndCannotCreateOrPublishFormalNotifications() {
-        long owner = user(), stock = stock(), rule = rule(owner, stock, "ONCE", "ACTIVE");
+        long owner = user(), stock = stock(), rule = rule(owner, stock, "ACTIVE");
         trusted(stock, 1, "99"); trusted(stock, 2, "100");
         long trigger = jdbc.queryForObject("SELECT id FROM alert_triggers WHERE rule_id=?", Long.class, rule);
         String payload = jdbc.queryForObject("SELECT payload FROM outbox_events WHERE aggregate_id=?", String.class, trigger);
@@ -292,7 +315,7 @@ class V2IsolationInfrastructureIT {
 
     @Test void databaseRejectsCrossRunEventReferences() {
         long owner = user(), other = user(), stock = stock();
-        rule(owner, stock, "ONCE", "ACTIVE"); rule(other, stock, "ONCE", "ACTIVE");
+        rule(owner, stock, "ACTIVE"); rule(other, stock, "ACTIVE");
         Run a = start(owner, stock, null), b = start(other, stock, null);
         batch(owner, a, "step-a", "100"); batch(other, b, "step-b", "100");
         long snapshot = simulations.snapshots(owner, a.id()).getFirst().id();
@@ -306,7 +329,7 @@ class V2IsolationInfrastructureIT {
 
     @Test void initializationDoesNotWaitForTheRealStockRowLockOrAcquireAForeignKeyLock() throws Exception {
         long owner = user(), stock = stock();
-        rule(owner, stock, "ONCE", "ACTIVE");
+        rule(owner, stock, "ACTIVE");
         CountDownLatch held = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
             var realLock = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
@@ -331,7 +354,7 @@ class V2IsolationInfrastructureIT {
     }
     private Seed seed() {
         return new Seed(new BigDecimal("99"), T, json.valueToTree(Map.of("type", "CONTROLLED_TEST", "time", T.toString())),
-                json.createArrayNode(), json.valueToTree(Map.of("mode", "RISE")), 42, "fixture-v1", json.createArrayNode());
+                json.createArrayNode(), json.valueToTree(Map.of("mode", "RISE")), 42, SimulationGenerator.VERSION, json.createArrayNode());
     }
     private BatchResult batch(long owner, Run run, String key, String price) {
         return simulations.advance(owner, run.id(), 0, 0, key, hash(key),
@@ -352,11 +375,11 @@ class V2IsolationInfrastructureIT {
         jdbc.update("INSERT INTO stocks(symbol,name,market,currency) VALUES(?,'V2 test','SIM','USD')", symbol);
         return jdbc.queryForObject("SELECT id FROM stocks WHERE symbol=?", Long.class, symbol);
     }
-    private long rule(long owner, long stock, String mode, String status) {
+    private long rule(long owner, long stock, String status) {
         jdbc.update("""
-                INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status,effective_at)
-                VALUES(?,?,'original','ABOVE',100,?,?,?,?)
-                """, owner, stock, mode, mode.equals("REPEAT") ? new BigDecimal("95") : null, status,LocalDateTime.ofInstant(T.minusSeconds(1),ZoneOffset.UTC));
+                INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status,effective_at)
+                VALUES(?,?,'original','ABOVE',100,?,?)
+                """, owner, stock, status,LocalDateTime.ofInstant(T.minusSeconds(1),ZoneOffset.UTC));
         return jdbc.queryForObject("SELECT MAX(id) FROM alert_rules WHERE user_id=? AND stock_id=?", Long.class, owner, stock);
     }
     private long count(String sql, Object... args) { return jdbc.queryForObject(sql, Long.class, args); }

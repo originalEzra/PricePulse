@@ -49,34 +49,17 @@ public class ThresholdIndex {
     private final StringRedisTemplate redis;
     public ThresholdIndex(StringRedisTemplate redis) { this.redis = redis; }
 
-    public List<Long> candidates(String key, String token, BigDecimal previous, BigDecimal current,
+    public List<Long> candidates(String key, String token, BigDecimal current,
             Supplier<List<RuleIndexEntry>> load) {
-        return candidates(key, token, previous, current, load, null);
+        return candidates(key, token, current, load, null);
     }
 
-    public List<Long> candidates(String key, String token, BigDecimal previous, BigDecimal current,
+    public List<Long> candidates(String key, String token, BigDecimal current,
             Supplier<List<RuleIndexEntry>> load, Timer rebuildTimer) {
-        return candidates(key,token,previous,current,load,rebuildTimer,false);
-    }
-
-    public List<Long> candidates(String key, String token, BigDecimal previous, BigDecimal current,
-            Supplier<List<RuleIndexEntry>> load, Timer rebuildTimer, boolean reachableOnce) {
         List<String> args = new ArrayList<>(List.of(token));
-        if(reachableOnce){
-            long tick=PriceTicks.ticks(current);
-            range(args,4,0,true,tick,true);
-            range(args,5,tick,true,PriceTicks.BAND-1,true);
-        }
-        if (previous != null && current.compareTo(previous) != 0) {
-            long oldTick = PriceTicks.ticks(previous), newTick = PriceTicks.ticks(current);
-            if (newTick > oldTick) {
-                range(args, 0, oldTick, false, newTick, true);
-                range(args, 3, oldTick, false, newTick, true);
-            } else {
-                range(args, 1, newTick, true, oldTick, false);
-                range(args, 2, newTick, true, oldTick, false);
-            }
-        }
+        long tick=PriceTicks.ticks(current);
+        range(args,0,0,true,tick,true);
+        range(args,1,tick,true,PriceTicks.BAND-1,true);
         try {
             for (int attempt = 0; attempt < 2; attempt++) {
                 List<?> result = redis.execute(QUERY, List.of(key), args.toArray());
@@ -124,4 +107,5 @@ public class ThresholdIndex {
         try { redis.delete(key); }
         catch (DataAccessException ignored) { /* Obsolete UUID keys also have a TTL. */ }
     }
+    public static String token(String databaseToken){return "once-target-v1:"+databaseToken;}
 }

@@ -54,7 +54,7 @@ public class SimulationService {
         });
         Step step=store.byRequest(id,requestKey);
         return new Batch(id,result.batchNo(),result.versionAfter(),MarketTime.instant(step.fromClockNs()),MarketTime.instant(step.toClockNs()),
-                step.firstPointSeq(),step.lastPointSeq(),result.triggered(),result.rearmed(),result.points());
+                step.firstPointSeq(),step.lastPointSeq(),result.triggered(),result.points());
     }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public Current current(long user){Run run=store.current(user);return run==null?null:current(run);}

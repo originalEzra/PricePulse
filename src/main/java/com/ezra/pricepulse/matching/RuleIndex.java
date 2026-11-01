@@ -36,11 +36,11 @@ public class RuleIndex {
         candidateCounts = DistributionSummary.builder("pricepulse.rules.candidates").register(metrics);
     }
 
-    public List<Long> candidates(Stock stock, BigDecimal previous, BigDecimal current) {
+    public List<Long> candidates(Stock stock, BigDecimal current) {
         Timer.Sample sample = Timer.start();
         try {
-            List<Long> ids = cache.candidates(key(stock.id()), cacheToken(stock.ruleIndexToken()), previous, current,
-                    () -> rules.listIndexable(stock.id()).stream().map(RuleIndexEntry::from).toList(), rebuildTimer,true);
+            List<Long> ids = cache.candidates(key(stock.id()), cacheToken(stock.ruleIndexToken()), current,
+                    () -> rules.listIndexable(stock.id()).stream().map(RuleIndexEntry::from).toList(), rebuildTimer);
             candidateCounts.record(ids.size());
             return ids;
         } finally { sample.stop(lookupTimer); }
@@ -58,5 +58,5 @@ public class RuleIndex {
     }
 
     public static String key(long stockId) { return "pricepulse:v2:real:rules:{stock:" + stockId + "}"; }
-    public static String cacheToken(String token) { return "reachable-once-v1:"+token; }
+    public static String cacheToken(String token) { return ThresholdIndex.token(token); }
 }

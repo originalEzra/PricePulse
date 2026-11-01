@@ -34,7 +34,7 @@ Redis marker 采用 `reachable-once-v1:<MySQL token>`；旧 marker 自动 MISS �
 
 | 职责 | 源码 |
 | --- | --- |
-| REAL ONCE 判定与原 REPEAT / SIM 判定分离 | [RuleTransitionEngine](../../src/main/java/com/ezra/pricepulse/alert/RuleTransitionEngine.java)、[AlertEvaluationService](../../src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java) |
+| REAL ONCE 判定与原 REPEAT / SIM 判定分离 | [RuleTransitionEngine](../once-only-model/acceptance.md#历史实验与源码)、[AlertEvaluationService](../../src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java) |
 | 创建事务与可信报价门槛 | [AlertRuleService](../../src/main/java/com/ezra/pricepulse/alert/AlertRuleService.java)、[OnceRuleActivation](../../src/main/java/com/ezra/pricepulse/alert/OnceRuleActivation.java)、[RealMarketRuntime](../../src/main/java/com/ezra/pricepulse/market/RealMarketRuntime.java) |
 | 派生索引与版本 | [RuleIndex](../../src/main/java/com/ezra/pricepulse/matching/RuleIndex.java)、[RuleIndexEntry](../../src/main/java/com/ezra/pricepulse/matching/RuleIndexEntry.java)、[ThresholdIndex](../../src/main/java/com/ezra/pricepulse/matching/ThresholdIndex.java) |
 | 事件时间与展示 | [TargetReachContext](../../src/main/java/com/ezra/pricepulse/alert/TargetReachContext.java)、[MarketDataMapper](../../src/main/java/com/ezra/pricepulse/market/MarketDataMapper.java)、[DashboardView](../../frontend/src/views/DashboardView.vue) |

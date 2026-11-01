@@ -85,7 +85,7 @@ const priceMove = computed(() => {
   const last = prices.value.at(-1)!
   return ((last - first) / first) * 100
 })
-const activeRuleCount = computed(() => rules.value.filter((r) => r.status === 'ACTIVE' || r.status === 'COOLDOWN').length)
+const activeRuleCount = computed(() => rules.value.filter((r) => r.status === 'ACTIVE').length)
 
 async function load() {
   const generation = ++loadGeneration, owner = auth.session?.accessToken
@@ -247,8 +247,6 @@ async function useAiDraft(draft: AlertRuleDraft) {
     note: draft.note ?? undefined,
     direction: draft.direction,
     thresholdPrice: draft.thresholdPrice,
-    triggerMode: draft.triggerMode,
-    rearmPrice: draft.rearmPrice,
   }
   aiModalOpen.value = false
   modalOpen.value = true
@@ -261,12 +259,6 @@ function replaceRule(updated: AlertRule) {
   void loadQuotes()
 }
 
-async function toggleRule(rule: AlertRule) {
-  error.value = ''
-  try { replaceRule(rule.status === 'PAUSED' ? await ruleApi.resume(rule) : await ruleApi.pause(rule)) }
-  catch (cause) { error.value = errorMessage(cause) }
-}
-
 async function removeRule(rule: AlertRule) {
   if (!confirm(`确认删除规则“${rule.name}”？触发历史会保留。`)) return
   error.value = ''
@@ -276,7 +268,7 @@ async function removeRule(rule: AlertRule) {
   } catch (cause) { error.value = errorMessage(cause) }
 }
 
-const statusLabel: Record<string, string> = { ACTIVE: '已启用', COOLDOWN: '冷却中', PAUSED: '已暂停', COMPLETED: '已完成' }
+const statusLabel: Record<string, string> = { ACTIVE: '等待目标价', COMPLETED: '已完成', DELETED: '已取消' }
 async function prepareHistory() {
   if (!selectedId.value) return
   try { const result = await monitoringApi.prepareHistory(selectedId.value); watchlistError.value = result.state === 'FAILED' ? '历史准备失败，请稍后重试' : '历史行情已请求准备，将自动刷新' }
@@ -350,19 +342,18 @@ onMounted(() => {
         <div v-if="selectedRules.length" class="rule-table-scroll" role="region" aria-label="该股票的全部提醒规则" tabindex="0">
           <table class="rule-table">
             <caption>显示 {{ chartThresholds.length }} 条阈值线 · 勾选不改变监控状态，历史触发始终保留。</caption>
-            <thead><tr><th scope="col">显示</th><th scope="col">规则名称</th><th scope="col">方向</th><th scope="col">阈值价格</th><th scope="col">规则状态</th><th scope="col">触发方式</th><th scope="col">操作</th></tr></thead>
+            <thead><tr><th scope="col">显示</th><th scope="col">规则名称</th><th scope="col">方向</th><th scope="col">阈值价格</th><th scope="col">规则状态</th><th scope="col">操作</th></tr></thead>
             <tbody><tr v-for="rule in selectedRules" :key="rule.id">
               <td><input type="checkbox" :checked="shownRuleIds.has(rule.id)" :style="{ accentColor: ruleLineColor(rule.id) }" :aria-label="`显示规则“${rule.name}”的阈值线`" @change="showRule(rule, $event)" /></td>
               <td><span class="rule-name"><i :style="{ background: ruleLineColor(rule.id) }" aria-hidden="true"></i><strong>{{ rule.name }}</strong></span></td>
               <td class="rule-direction">{{ rule.direction === 'ABOVE' ? '↑' : '↓' }} {{ directionLabel[rule.direction] }}</td>
-              <td class="rule-price">{{ money(rule.thresholdPrice) }}<small v-if="rule.rearmPrice != null">再激活 {{ money(rule.rearmPrice) }}</small></td>
+              <td class="rule-price">{{ money(rule.thresholdPrice) }}</td>
               <td><span class="status-pill" :class="rule.status.toLowerCase()"><b>{{ rule.status }}</b><small>{{ statusLabel[rule.status] ?? rule.status }}</small></span></td>
-              <td>{{ rule.triggerMode === 'ONCE' ? '一次性' : '重复' }}</td>
-              <td><div class="row-actions"><button @click="openEdit(rule)">编辑</button><button v-if="rule.status !== 'COMPLETED'" @click="toggleRule(rule)">{{ rule.status === 'PAUSED' ? '启用' : '暂停' }}</button><button class="danger" @click="removeRule(rule)">删除</button></div></td>
+              <td><div class="row-actions"><button v-if="rule.status === 'ACTIVE'" @click="openEdit(rule)">编辑</button><button class="danger" @click="removeRule(rule)">删除</button></div></td>
             </tr></tbody>
           </table>
         </div>
-        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '一次性规则在可信价格达到目标时触发；重复规则保留穿越与重新激活。' : '请先申请该股票监控。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
+        <div v-else-if="!rulesLoading && !loading && !rulesError && !chartError" class="empty-state roomy"><strong>还没有提醒规则</strong><span>{{ canCreateRule ? '可信现价达到目标后结束；再次提醒请新建规则。' : '请先申请该股票监控。' }}</span><button class="button secondary" :disabled="!selectedStock || !canCreateRule" @click="openCreate">创建第一条规则</button></div>
       </section>
     </div>
     <AiDraftModal :open="aiModalOpen" @close="aiModalOpen = false" @use-draft="useAiDraft" />

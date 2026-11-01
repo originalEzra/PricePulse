@@ -51,18 +51,18 @@ class SimulationOpeningGapInfrastructureIT {
     }
     @Test void upwardGapTriggersOnceAtActualOpeningAndHasSimulationContext(){
         jdbc.update("DELETE FROM market_price_bars");jdbc.update("DELETE FROM market_history_coverage"); // A custom simulation needs calendar, not real price history.
-        long u=user();rule(u,"ABOVE","350","ONCE",null,"COMPLETED");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.NORMAL,null));
+        long u=user();rule(u,"ABOVE","350","COMPLETED");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.NORMAL,null));
         assertThat(run.stats().triggered()).isZero();assertThat(run.origin().path("provider").asText()).isEqualTo("SIMULATION");assertThat(service.timeline(u,run.runId(),null,null,null).realPrefix()).isEmpty();
         var batch=service.advance(u,run.runId(),new Advance(0L,0L),key());assertThat(batch.points()).hasSize(1);assertThat(batch.points().getFirst().price()).isEqualTo("355.0000");assertThat(batch.toClock()).isEqualTo(OPEN);assertThat(batch.triggered()).isEqualTo(1);
         var event=service.events(u,run.runId(),CLOSE,OPEN,null).events().getFirst();assertThat(event.eventTime()).isEqualTo(OPEN);assertThat(event.triggerContext().path("referencePrice").asText()).isEqualTo("345.0000");assertThat(event.triggerContext().path("kind").asText()).isEqualTo("SIMULATED_OPENING_GAP");
-        assertThat(service.current(u).ruleSnapshots().getFirst().currentState().name()).isEqualTo("COMPLETED");assertThat(facts()).isEqualTo(before);
+        assertThat(service.current(u).ruleSnapshots().getFirst().currentState()).isEqualTo("COMPLETED");assertThat(facts()).isEqualTo(before);
     }
     @Test void downwardGapAndNonCrossingGapUseTheSameDirectionalBoundaries(){
-        long down=user();rule(down,"BELOW","340","ONCE",null,"ACTIVE");var run=start(down,custom("345","335",SimulationGenerator.Mode.NORMAL,null));
+        long down=user();rule(down,"BELOW","340","ACTIVE");var run=start(down,custom("345","335",SimulationGenerator.Mode.NORMAL,null));
         assertThat(service.advance(down,run.runId(),new Advance(0L,0L),key()).triggered()).isEqualTo(1);
-        long no=user();rule(no,"ABOVE","350","ONCE",null,"ACTIVE");var quiet=start(no,custom("345","348",SimulationGenerator.Mode.NORMAL,null));
+        long no=user();rule(no,"ABOVE","350","ACTIVE");var quiet=start(no,custom("345","348",SimulationGenerator.Mode.NORMAL,null));
         assertThat(service.advance(no,quiet.runId(),new Advance(0L,0L),key()).triggered()).isZero();
-        long flat=user();rule(flat,"ABOVE","350","ONCE",null,"ACTIVE");var equal=start(flat,custom("345","345",SimulationGenerator.Mode.NORMAL,null));assertThat(service.advance(flat,equal.runId(),new Advance(0L,0L),key()).triggered()).isZero();
+        long flat=user();rule(flat,"ABOVE","350","ACTIVE");var equal=start(flat,custom("345","345",SimulationGenerator.Mode.NORMAL,null));assertThat(service.advance(flat,equal.runId(),new Advance(0L,0L),key()).triggered()).isZero();
     }
     @Test void historicalReferenceMustBeActualClosingMinuteAndCannotBeOverridden(){
         long u=user();var request=new Start(stock,new Origin(OriginKind.HISTORICAL_POINT,"bar:"+closeBar,"1"),SimulationGenerator.Mode.OPENING_GAP,new BigDecimal("0.003"),42L,null,new OpeningGap(ReferenceSource.REAL_HISTORY,null,new BigDecimal("355"),SimulationGenerator.Mode.NORMAL));
@@ -73,7 +73,7 @@ class SimulationOpeningGapInfrastructureIT {
         assertThat(service.current(u).runId()).isEqualTo(run.runId());
     }
     @Test void openingBatchIsIdempotentAndConcurrentRequestsCannotDuplicateThePoint()throws Exception{
-        long u=user();rule(u,"ABOVE","350","ONCE",null,"ACTIVE");var run=start(u,custom("345","355",SimulationGenerator.Mode.NORMAL,null));String id=key();var first=service.advance(u,run.runId(),new Advance(0L,0L),id);
+        long u=user();rule(u,"ABOVE","350","ACTIVE");var run=start(u,custom("345","355",SimulationGenerator.Mode.NORMAL,null));String id=key();var first=service.advance(u,run.runId(),new Advance(0L,0L),id);
         assertThat(service.advance(u,run.runId(),new Advance(0L,0L),id)).isEqualTo(first);assertThat(count("SELECT COUNT(*) FROM simulation_steps WHERE run_id=?",run.runId())).isEqualTo(1);
         long other=user();var racing=start(other,custom("345","355",SimulationGenerator.Mode.NORMAL,null));var gate=new CountDownLatch(1);
         try(var pool=Executors.newFixedThreadPool(2)){
@@ -82,15 +82,15 @@ class SimulationOpeningGapInfrastructureIT {
         }
         assertThat(count("SELECT COUNT(*) FROM simulation_steps WHERE run_id=?",racing.runId())).isEqualTo(1);assertThat(service.current(other).nextPointSeq()).isEqualTo(2);
     }
-    @Test void repeatRuleCoolsDownThenRearmsWithoutSamePointDoubleTrigger(){
-        long u=user();rule(u,"ABOVE","350","REPEAT","349","COOLDOWN");rule(u,"ABOVE","350","ONCE",null,"PAUSED");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.FALL,null));
+    @Test void completedTargetCannotReactivateDuringFollowingPrices(){
+        long u=user();rule(u,"ABOVE","350","ACTIVE");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.FALL,null));
         var opening=service.advance(u,run.runId(),new Advance(0L,0L),key());assertThat(opening.triggered()).isEqualTo(1);
-        assertThat(service.current(u).ruleSnapshots().getFirst().currentState().name()).isEqualTo("COOLDOWN");
-        var hour=service.advance(u,run.runId(),new Advance(1L,1L),key());assertThat(hour.points()).hasSize(60);assertThat(hour.fromClock()).isEqualTo(OPEN);assertThat(hour.toClock()).isEqualTo(OPEN.plusSeconds(3600));assertThat(hour.triggered()).isZero();assertThat(hour.rearmed()).isEqualTo(1);
-        assertThat(service.current(u).ruleSnapshots().getFirst().currentState().name()).isEqualTo("ACTIVE");assertThat(count("SELECT COUNT(*) FROM (SELECT snapshot_rule_id,point_seq FROM simulation_rule_events WHERE run_id=? GROUP BY snapshot_rule_id,point_seq HAVING COUNT(*)>1) x",run.runId())).isZero();assertThat(facts()).isEqualTo(before);
+        assertThat(service.current(u).ruleSnapshots().getFirst().currentState()).isEqualTo("COMPLETED");
+        var hour=service.advance(u,run.runId(),new Advance(1L,1L),key());assertThat(hour.points()).hasSize(60);assertThat(hour.fromClock()).isEqualTo(OPEN);assertThat(hour.toClock()).isEqualTo(OPEN.plusSeconds(3600));assertThat(hour.triggered()).isZero();
+        assertThat(service.current(u).ruleSnapshots().getFirst().currentState()).isEqualTo("COMPLETED");assertThat(count("SELECT COUNT(*) FROM (SELECT snapshot_rule_id,point_seq FROM simulation_rule_events WHERE run_id=? GROUP BY snapshot_rule_id,point_seq HAVING COUNT(*)>1) x",run.runId())).isZero();assertThat(facts()).isEqualTo(before);
     }
     @Test void openingPlusTenHoursPagesWithoutLosingPointsAndOldOpeningRetryStaysIdempotent(){
-        long u=user();rule(u,"ABOVE","350","ONCE",null,"ACTIVE");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.FALL,null));String id=key();
+        long u=user();rule(u,"ABOVE","350","ACTIVE");var before=facts();var run=start(u,custom("345","355",SimulationGenerator.Mode.FALL,null));String id=key();
         var opening=service.advance(u,run.runId(),new Advance(0L,0L),id);
         for(long batch=1;batch<=10;batch++)service.advance(u,run.runId(),new Advance(batch,batch),key());
         var first=service.timeline(u,run.runId(),null,null,null);assertThat(first.simulation()).hasSize(541);assertThat(first.pointCursor()).isNotNull();
@@ -126,7 +126,7 @@ class SimulationOpeningGapInfrastructureIT {
     <T>T at(Supplier<T> task){return clock.at(MarketTime.utc(CLOSE.plusSeconds(3600)),task);}
     String key(){return UUID.randomUUID().toString();}
     long user(){String email=key()+"@gap.fixture";jdbc.update("INSERT INTO users(email,password_hash,display_name) VALUES(?,'test','Gap')",email);return jdbc.queryForObject("SELECT id FROM users WHERE email=?",Long.class,email);}
-    void rule(long user,String direction,String threshold,String mode,String rearm,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'Gap snapshot',?,?,?,?,?)",user,stock,direction,new BigDecimal(threshold),mode,rearm==null?null:new BigDecimal(rearm),status);}
+    void rule(long user,String direction,String threshold,String status){jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'Gap snapshot',?,?,?)",user,stock,direction,new BigDecimal(threshold),status);}
     long count(String sql,Object...args){return jdbc.queryForObject(sql,Long.class,args);}
     List<?> facts(){return List.of(jdbc.queryForList("SELECT id,latest_price,latest_quote_at,rule_index_token FROM stocks ORDER BY id"),jdbc.queryForList("SELECT id,status,version,effective_at FROM alert_rules ORDER BY id"),count("SELECT COUNT(*) FROM quote_events"),count("SELECT COUNT(*) FROM alert_triggers"),count("SELECT COUNT(*) FROM outbox_events"),count("SELECT COUNT(*) FROM notifications"));}
 }

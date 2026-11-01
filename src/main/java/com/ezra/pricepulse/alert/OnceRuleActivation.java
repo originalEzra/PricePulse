@@ -21,7 +21,7 @@ public class OnceRuleActivation {
     }
     @Transactional(propagation=Propagation.MANDATORY)
     public void confirm(Stock stock,AlertRule rule,boolean created){
-        if(rule.getStatus()!=AlertRuleStatus.ACTIVE||rule.getTriggerMode()!=AlertTriggerMode.ONCE)return;
+        if(rule.getStatus()!=AlertRuleStatus.ACTIVE)return;
         var state=data.streamState(stock.id());
         if(state==null||!"ALPACA".equals(state.provider())||!"iex".equals(state.feed())||!readiness.canConfirmLatest(stock,state))return;
         var quote=quotes.latestAcceptedReal(stock.id());var now=clock.instant();
@@ -33,6 +33,6 @@ public class OnceRuleActivation {
                 ||MarketTime.instant(quote.getProcessedAt()).isBefore(oldest)||MarketTime.instant(quote.getReceivedAt()).isAfter(now)
                 ||MarketTime.instant(quote.getProcessedAt()).isAfter(now))return;
         evaluation.confirmOnceRule(stock,rule,quote.getId(),quote.getPrice(),MarketTime.utc(now),
-                new TargetReachContext("TARGET_REACHED",created?"RULE_CREATED":"RULE_ACTIVATED",now,time,null));
+                new TargetReachContext("TARGET_REACHED",created?"RULE_CREATED":"RULE_UPDATED",now,time,null));
     }
 }

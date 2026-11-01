@@ -36,7 +36,7 @@ class SimulationGapRestartIT {
                         stock,date+" 20:59:00",date+" 21:00:00");
             jdbc.update("INSERT INTO market_history_coverage(stock_id,provider,feed,requested_from,requested_to,synced_at) VALUES(?,'ALPACA','iex','2024-11-26 14:30:00','2024-11-27 21:00:00',NOW(6))",stock);
             long bar=jdbc.queryForObject("SELECT id FROM market_price_bars WHERE stock_id=? AND interval_end='2024-11-27 21:00:00'",Long.class,stock);
-            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,status) VALUES(?,?,'Gap restart snapshot','ABOVE',350,'ONCE','ACTIVE')",owner,stock);
+            jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'Gap restart snapshot','ABOVE',350,'ACTIVE')",owner,stock);
             var realRules=jdbc.queryForList("SELECT id,status,version,effective_at FROM alert_rules ORDER BY id");
             var realPrices=jdbc.queryForList("SELECT id,latest_price,latest_quote_at,rule_index_token FROM stocks ORDER BY id");
             var body=backend.json.createObjectNode();body.put("stockId",stock);

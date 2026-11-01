@@ -15,10 +15,10 @@ final class ProviderAlertDraftGenerator implements AlertDraftGenerator {
     private static final Logger log = LoggerFactory.getLogger(ProviderAlertDraftGenerator.class);
     private static final String INSTRUCTIONS = """
             You convert a user's stock price alert request into structured data.
-            This is data extraction, not investment advice. Never invent a stock, price, or repeat policy.
-            ABOVE means the user wants an alert when price rises to or crosses a value.
-            BELOW means the user wants an alert when price falls to or crosses a value.
-            ONCE means one alert. REPEAT means it can alert again after rearming.
+            This is data extraction, not investment advice. Never invent a stock or price. All supported alerts are one-time target alerts.
+            ABOVE means the current trusted price is greater than or equal to the target.
+            BELOW means the current trusted price is less than or equal to the target.
+            Repeated reminders are unsupported; ask the user to specify a one-time target instead.
 
             In the symbol field, copy the stock name, code, or name/code fragment supplied by the user.
             The business server resolves it against the stock catalog. A partial reference is valid:
@@ -26,11 +26,10 @@ final class ProviderAlertDraftGenerator implements AlertDraftGenerator {
             Never expand a fragment into a guessed full symbol. Do not mark a request incomplete merely
             because the supplied stock name or code is partial. If no stock reference is supplied, ask for one.
 
-            Set complete=false when the stock reference, direction, threshold price, or repeat policy is unclear.
-            For a REPEAT request, rearmPrice is also required; ask where the price must move before rearming.
+            Set complete=false when the stock reference, direction, or target price is unclear.
             When complete=false, put one concise Chinese question in clarificationQuestion and use harmless
             placeholders for the other required schema fields. When complete=true, clarificationQuestion is empty.
-            Prices must be decimal strings without currency symbols. For ONCE, rearmPrice is an empty string.
+            Prices must be decimal strings without currency symbols.
             Set market to the market code only when explicitly supplied by the user; otherwise use an empty string.
             Keep name within 100 characters and note within 500 characters.
 

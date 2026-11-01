@@ -119,7 +119,7 @@ class MonitorIncidentInfrastructureIT {
     }
     @Test void realLaneOverflowReportsExactLossImmediatelyAndItsRecoveryCanReachAnOnceTarget()throws Exception{
         quotes.ingest(candidate("base","200","initial","STARTUP"),QuoteIngestionPolicy.LIVE);
-        var rule=rules.create(user,new SaveAlertRuleRequest(stock,"Target",null,AlertDirection.ABOVE,new BigDecimal("205"),AlertTriggerMode.ONCE,null));
+        var rule=rules.create(user,new SaveAlertRuleRequest(stock,"Target",null,AlertDirection.ABOVE,new BigDecimal("205")));
         var entered=new CountDownLatch(1);var release=new CountDownLatch(1);var done=new CountDownLatch(2);
         var observer=new MarketQuoteLane.Observer(){public void invalidated(String cause,long lost,String continuity){health.queueGap(stock,cause,lost,continuity,clock.now);}};
         try(var lane=new MarketQuoteLane(stock,1024,w->{
@@ -157,7 +157,7 @@ class MonitorIncidentInfrastructureIT {
     @Test void disconnectAlarmAuthWithoutAckThenRealTargetAndConfirmedRecoveryAreIndependent()throws Exception{
         var wire=bootRuntime(true);wire.ack();
         assertThat(health.confirms(symbol)).as("subscription ACK; commands=%s",wire.commands).isTrue();wire.trade(200);
-        await(()->data.streamState(stock)!=null);var rule=rules.create(user,new SaveAlertRuleRequest(stock,"Recovered target",null,AlertDirection.ABOVE,new BigDecimal("205"),AlertTriggerMode.ONCE,null));
+        await(()->data.streamState(stock)!=null);var rule=rules.create(user,new SaveAlertRuleRequest(stock,"Recovered target",null,AlertDirection.ABOVE,new BigDecimal("205")));
         wire.listener.onClose(wire.socket,1006,"");String id=health.connectionFaultId();assertThat(id).isNotNull();clock.now=NOW.plusSeconds(30);persist();assertThat(payloads()).hasSize(1);
         await(()->wire.connections.get()==2);wire.auth();service.confirmRecovery(runtime,health,clock.now);assertThat(health.connectionFaultId()).isEqualTo(id);
         wire.ack();

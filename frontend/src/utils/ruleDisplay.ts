@@ -1,13 +1,13 @@
 import type { AlertRule, SimulationSnapshot } from '../api/types'
 import type { ChartThreshold } from './chart'
 
-type RuleSummary = Pick<AlertRule, 'id' | 'stockId' | 'status'>
+type RuleSummary = Pick<AlertRule, 'id' | 'stockId'> & { status: string }
 
 /** Defaults run once per stock. Refreshes prune deleted/moved rules without resetting explicit choices. */
 export function reconcileShownRules(previous: ReadonlySet<number> | undefined, rules: RuleSummary[]): Set<number> {
   const available = rules.filter(rule => rule.status !== 'DELETED')
   return previous === undefined
-    ? new Set(available.filter(rule => rule.status === 'ACTIVE' || rule.status === 'COOLDOWN').slice(0, 3).map(rule => rule.id))
+    ? new Set(available.filter(rule => rule.status === 'ACTIVE').slice(0, 3).map(rule => rule.id))
     : new Set(available.filter(rule => previous.has(rule.id)).map(rule => rule.id))
 }
 

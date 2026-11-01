@@ -1,7 +1,6 @@
 package com.ezra.pricepulse.assistant;
 
 import com.ezra.pricepulse.alert.AlertDirection;
-import com.ezra.pricepulse.alert.AlertTriggerMode;
 import com.ezra.pricepulse.common.error.BusinessException;
 import com.ezra.pricepulse.common.error.ErrorCode;
 import com.ezra.pricepulse.stock.Stock;
@@ -26,8 +25,7 @@ class AssistantServiceTest {
     @Test
     void resolvesACompleteModelDraftToAnExistingStockWithoutCreatingARule() {
         AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "demo001", "", AlertDirection.ABOVE, "100", AlertTriggerMode.ONCE,
-                "", "突破 100", "用户自然语言生成");
+                true, "", "demo001", "", AlertDirection.ABOVE, "100", "突破 100", "用户自然语言生成");
         StockMapper stockMapper = mock(StockMapper.class);
         when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock()));
         var service = new AssistantService(generator, stockMapper);
@@ -39,7 +37,6 @@ class AssistantServiceTest {
         assertThat(response.draft().stockId()).isEqualTo(1L);
         assertThat(response.draft().stockSymbol()).isEqualTo("DEMO001");
         assertThat(response.draft().thresholdPrice()).isEqualByComparingTo("100.0000");
-        assertThat(response.draft().triggerMode()).isEqualTo(AlertTriggerMode.ONCE);
         verify(stockMapper, never()).findActiveByName(any(), any());
         verify(stockMapper, never()).findActiveByFragment(any(), any());
     }
@@ -152,7 +149,7 @@ class AssistantServiceTest {
     void returnsClarificationWithoutLookingUpAStockWhenTheModelMarksInputIncomplete() {
         AlertDraftGenerator generator = text -> new ModelAlertDraft(
                 false, "你希望价格上涨到多少时提醒？", "DEMO001", "", AlertDirection.ABOVE,
-                "0", AlertTriggerMode.ONCE, "", "", "");
+                "0", "", "");
         StockMapper stockMapper = mock(StockMapper.class);
         var service = new AssistantService(generator, stockMapper);
 
@@ -165,25 +162,9 @@ class AssistantServiceTest {
     }
 
     @Test
-    void asksForARearmPriceInsteadOfInventingOneForRepeatAlerts() {
-        AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "DEMO001", "", AlertDirection.ABOVE, "100", AlertTriggerMode.REPEAT,
-                "", "重复提醒", "");
-        StockMapper stockMapper = mock(StockMapper.class);
-        when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock()));
-        var service = new AssistantService(generator, stockMapper);
-
-        AlertDraftResponse response = service.draft(new AlertDraftRequest("DEMO001 每次涨到 100 都提醒"));
-
-        assertThat(response.ready()).isFalse();
-        assertThat(response.clarificationQuestion()).contains("回到多少");
-    }
-
-    @Test
     void rejectsASymbolThatDoesNotExistInTheBusinessDatabase() {
         AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "FAKE", "", AlertDirection.BELOW, "10", AlertTriggerMode.ONCE,
-                "", "", "");
+                true, "", "FAKE", "", AlertDirection.BELOW, "10", "", "");
         StockMapper stockMapper = mock(StockMapper.class);
         var service = new AssistantService(generator, stockMapper);
 
@@ -195,8 +176,7 @@ class AssistantServiceTest {
     @Test
     void asksForAMarketWhenTheSymbolIsAmbiguous() {
         AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "DEMO001", "", AlertDirection.ABOVE, "100", AlertTriggerMode.ONCE,
-                "", "", "");
+                true, "", "DEMO001", "", AlertDirection.ABOVE, "100", "", "");
         StockMapper stockMapper = mock(StockMapper.class);
         when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock(), stock()));
 
@@ -209,26 +189,9 @@ class AssistantServiceTest {
     }
 
     @Test
-    void resolvesAnExplicitMarketAndChecksRepeatRearming() {
-        AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "DEMO001", "sim", AlertDirection.BELOW, "90", AlertTriggerMode.REPEAT,
-                "95", "", "");
-        StockMapper stockMapper = mock(StockMapper.class);
-        when(stockMapper.findActiveBySymbol("DEMO001", "SIM")).thenReturn(List.of(stock()));
-
-        var response = new AssistantService(generator, stockMapper)
-                .draft(new AlertDraftRequest("SIM 市场 DEMO001 跌到 90 提醒，回到 95 后可再提醒"));
-
-        assertThat(response.ready()).isTrue();
-        assertThat(response.draft().rearmPrice()).isEqualByComparingTo("95");
-        assertThat(response.draft().name()).isEqualTo("DEMO001 价格提醒");
-    }
-
-    @Test
     void rejectsExcessPricePrecisionInsteadOfRoundingTheModelOutput() {
         AlertDraftGenerator generator = text -> new ModelAlertDraft(
-                true, "", "DEMO001", "", AlertDirection.ABOVE, "100.12345", AlertTriggerMode.ONCE,
-                "", "", "");
+                true, "", "DEMO001", "", AlertDirection.ABOVE, "100.12345", "", "");
         StockMapper stockMapper = mock(StockMapper.class);
         when(stockMapper.findActiveBySymbol("DEMO001", null)).thenReturn(List.of(stock()));
 
@@ -250,6 +213,6 @@ class AssistantServiceTest {
 
     private ModelAlertDraft draftFor(String reference, String market) {
         return new ModelAlertDraft(true, "", reference, market, AlertDirection.ABOVE, "100",
-                AlertTriggerMode.ONCE, "", "", "");
+                "", "");
     }
 }

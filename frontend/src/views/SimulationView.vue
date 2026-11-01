@@ -52,8 +52,8 @@ const thresholds = computed(() => simulationThresholds(run.value?.ruleSnapshots 
 const triggerCounts = computed(() => simulationTriggerCounts(events.value))
 const visibleEvents = computed(() => events.value.slice(0, visibleEventCount.value))
 function eventAnnotation(e: SimulationEvent): TimedChartAnnotation { return {
-  id: e.id, eventTime: e.eventTime, price: Number(e.price), kind: e.ruleSnapshot.direction, label: e.triggerContext ? '模拟开盘跳空' : e.eventType === 'TRIGGERED' ? '模拟触发' : '模拟重新激活',
-  ruleName: e.ruleSnapshot.name, threshold: e.ruleSnapshot.thresholdPrice, result: `${e.eventType === 'TRIGGERED' ? '已触发' : '已重新激活'} · ${ruleStatusLabel[e.toState]}`,
+  id: e.id, eventTime: e.eventTime, price: Number(e.price), kind: e.ruleSnapshot.direction, label: e.triggerContext ? '模拟开盘跳空' : e.eventType === 'TRIGGERED' ? '模拟触发' : '历史事件',
+  ruleName: e.ruleSnapshot.name, threshold: e.ruleSnapshot.thresholdPrice, result: `${e.eventType === 'TRIGGERED' ? '已触发' : '历史状态变化'} · ${ruleStatusLabel[e.toState] ?? e.toState}`,
   pointSeq: e.pointSeq, rawPrice: e.price,
   ruleSnapshot: e.ruleSnapshot,
   detail: `${e.ruleSnapshot.name} · 快照阈值 ${formatPrice(Number(e.ruleSnapshot.thresholdPrice))} · 模拟点 #${e.pointSeq}${e.triggerContext ? ' · ' + gapDescription(e.triggerContext) : ''}`,
@@ -186,10 +186,10 @@ onBeforeUnmount(() => {
           <div class="panel-head"><h2>最近一次实验</h2><span class="live-chip">已保存 · {{ session.playing ? '播放中' : '已暂停' }}</span></div>
           <strong class="saved-symbol">{{ run.origin.stockSymbol }} · {{ modes[run.parameters.mode] }}</strong>
           <dl class="saved-summary"><div><dt>{{ savedGap ? '参考收盘' : '起点' }}</dt><dd>{{ compactNewYorkTime(run.origin.point.eventTime) }}<strong>${{ run.origin.point.price }}</strong></dd></div><div><dt>当前模拟</dt><dd>{{ compactNewYorkTime(run.simClock) }}<strong>${{ run.latestPrice }}</strong></dd></div><div><dt>已推进</dt><dd>{{ Math.max(0, run.lastBatchNo - (savedGap ? 1 : 0)) }} 交易小时<span v-if="savedGap && run.lastBatchNo"> · 1 次开盘</span></dd></div></dl>
-          <div class="experiment-totals"><span>规则快照 <b>{{ run.ruleSnapshots.length }}</b></span><span>已触发规则 <b>{{ eventsReady ? triggerCounts.size : '—' }}</b></span><span>{{ run.stats.triggered }} 次触发 · {{ run.stats.rearmed }} 次重新激活</span></div>
+          <div class="experiment-totals"><span>规则快照 <b>{{ run.ruleSnapshots.length }}</b></span><span>已触发规则 <b>{{ eventsReady ? triggerCounts.size : '—' }}</b></span><span>{{ run.stats.triggered }} 次触发</span><span v-if="!run.generatorSupported && run.stats.legacyRearmed">旧版状态事件 {{ run.stats.legacyRearmed }} 次</span></div>
           <div class="playback-controls"><button class="button primary" :disabled="!session.playing && !session.canPlay" @click="session.playing ? session.pause() : session.play()">{{ session.playing ? '暂停播放' : '自动播放' }}</button><label>播放速度<select :value="session.delayMs" @change="session.setDelay(Number(($event.target as HTMLSelectElement).value))"><option :value="5000">慢速 · 5 秒/小时</option><option :value="2000">标准 · 2 秒/小时</option><option :value="1000">快速 · 1 秒/小时</option></select></label><button class="button secondary" :disabled="busy || session.playing || !!startCommands.pending || (!advanceCommands.pending && !session.ready)" @click="advance">{{ advanceCommands.pending ? '重试上次推进' : openingPending ? '执行模拟开盘' : '下一交易小时' }}</button></div>
           <p class="playback-status" role="status">{{ session.notice }}<span v-if="busy"> · 正在处理本次请求</span></p>
-          <p v-if="!run.generatorSupported" class="form-error">当前版本仅可查看保存结果，请新建实验后推进。</p>
+          <p v-if="!run.generatorSupported" class="form-error">旧版规则实验：结果保留且只读，请明确开始新实验后使用一次性目标价规则。</p>
           <details class="experiment-details"><summary>实验详情</summary><p>Seed {{ run.seed }} · 每分钟幅度 {{ Number(run.parameters.stepRatio) * 100 }}%。每小时累计 60 个交易分钟，跳过休市。播放速度仅调整两批之间的等待；暂停或离页不再请求新批次，已受理的一小时仍可完成。结果独立保存，不进入通知中心。</p></details>
         </template>
         <template v-else><p class="eyebrow">SAVED EXPERIMENT</p><h2>尚未开始实验</h2><p class="muted">选择一个真实历史点，开始后会冻结本人该股的规则配置。每个用户只保留最近一次实验。</p></template>
@@ -219,19 +219,19 @@ onBeforeUnmount(() => {
               <td><span class="rule-name"><i :style="{ background: ruleLineColor(rule.sourceRuleId) }" aria-hidden="true"></i><strong>{{ rule.config.name }}</strong></span></td>
               <td class="rule-direction">{{ rule.config.direction === 'ABOVE' ? '↑ 上破' : '↓ 下破' }}</td>
               <td class="rule-price">{{ formatPrice(Number(rule.config.thresholdPrice)) }}</td>
-              <td><span class="status-pill" :class="rule.currentState.toLowerCase()"><b>{{ rule.currentState }}</b><small>{{ ruleStatusLabel[rule.currentState] }}</small></span></td>
+              <td><span class="status-pill" :class="rule.currentState.toLowerCase()"><b>{{ rule.currentState }}</b><small>{{ ruleStatusLabel[rule.currentState] ?? rule.currentState }}</small></span></td>
               <td class="rule-result" :class="{ triggered: (triggerCounts.get(rule.snapshotRuleId) ?? 0) > 0 }">{{ !eventsReady ? busy || loading ? '结果读取中' : '结果未完整' : triggerCounts.get(rule.snapshotRuleId) ? `已触发 · ${triggerCounts.get(rule.snapshotRuleId)} 次` : '未触发' }}</td>
             </tr></tbody>
           </table>
         </div>
         <p v-else class="rule-display-hint">本次实验没有规则快照。</p>
-        <details class="snapshot-metadata"><summary>快照来源与详情</summary><p v-for="rule in run.ruleSnapshots" :key="rule.snapshotRuleId">{{ rule.config.name }} · 真实规则 #{{ rule.sourceRuleId }} v{{ rule.sourceVersion }} · 起始 {{ rule.initialState }} · {{ rule.config.triggerMode === 'ONCE' ? '一次性' : '重复' }}<template v-if="rule.config.rearmPrice != null"> · 再激活 {{ rule.config.rearmPrice }}</template></p></details>
+        <details class="snapshot-metadata"><summary>快照来源与详情</summary><div v-for="rule in run.ruleSnapshots" :key="rule.snapshotRuleId"><p>{{ rule.config.name }} · 真实规则 #{{ rule.sourceRuleId }} v{{ rule.sourceVersion }} · 起始 {{ rule.initialState }}</p><pre>{{ JSON.stringify(rule.config, null, 2) }}</pre></div></details>
       </section>
       <section class="panel simulation-events-panel"><div class="rule-section-head"><h2>本实验事件 <small>（{{ events.length }}）</small></h2></div>
         <p v-if="!events.length" class="rule-display-hint">尚无触发或重新激活事件。</p>
         <div v-else ref="eventTable" class="event-table-scroll" role="region" aria-label="本实验事件表" tabindex="0"><table class="event-table"><thead><tr><th scope="col">时间（纽约）</th><th scope="col">规则</th><th scope="col">方向</th><th scope="col">价格</th><th scope="col">模拟点</th></tr></thead><tbody>
           <tr v-for="event in visibleEvents" :key="event.id" :data-event-id="event.id" :class="{ 'is-selected': selectedEvents.has(event.id) }" :aria-selected="selectedEvents.has(event.id)" tabindex="0" @click="locateEvent(event)" @keydown.enter.prevent="locateEvent(event)">
-            <td><time :datetime="event.eventTime">{{ compactNewYorkTime(event.eventTime).replace(' ET', '') }}</time></td><td class="event-rule-name">{{ event.ruleSnapshot.name }}</td><td :class="event.eventType === 'REARMED' ? 'event-rearmed' : event.ruleSnapshot.direction === 'ABOVE' ? 'positive' : 'negative'">{{ event.ruleSnapshot.direction === 'ABOVE' ? '▲ 上破' : '▼ 下破' }}<small v-if="event.triggerContext">开盘跳空</small><small v-if="event.eventType === 'REARMED'">重新激活</small></td><td class="event-price">{{ event.price }}</td><td>#{{ event.pointSeq }}</td>
+            <td><time :datetime="event.eventTime">{{ compactNewYorkTime(event.eventTime).replace(' ET', '') }}</time></td><td class="event-rule-name">{{ event.ruleSnapshot.name }}</td><td :class="event.eventType !== 'TRIGGERED' ? 'event-history' : event.ruleSnapshot.direction === 'ABOVE' ? 'positive' : 'negative'">{{ event.ruleSnapshot.direction === 'ABOVE' ? '▲ 上破' : '▼ 下破' }}<small v-if="event.triggerContext">开盘跳空</small><small v-if="event.eventType !== 'TRIGGERED'">旧版状态事件</small></td><td class="event-price">{{ event.price }}</td><td>#{{ event.pointSeq }}</td>
           </tr>
         </tbody></table></div>
         <p class="event-table-hint">点击事件定位图表 · 点击图中触发点高亮事件</p>
@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
 .event-table time, .event-price { white-space: nowrap; } .event-rule-name { min-width: 90px; overflow-wrap: anywhere; }
 .event-table td small { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
 .event-table-hint { margin: 10px 16px; color: var(--muted); font-size: 10px; } .event-more { margin: 0 16px 12px; font-size: 11px; }
-.event-rearmed { color: #537dad; } .positive { color: #20815d; } .negative { color: #c45a53; }
+.event-history { color: #537dad; } .positive { color: #20815d; } .negative { color: #c45a53; }
 @media (max-width: 1250px) { .simulation-bottom-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 660px) { .experiment-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .saved-summary { grid-template-columns: 1fr 1fr; } }
 </style>

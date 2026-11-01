@@ -99,7 +99,7 @@ class MonitoringInfrastructureIT {
         assertThat(second.state()).isEqualTo("CONFIRMED");assertThat(store.reserved()).isEqualTo(15);assertThat(store.demand(stock)).isEqualTo(2);
         assertThatThrownBy(()->add(a,"AAPL")).isInstanceOf(BusinessException.class);
         var other=rule(b,stock,"Other",new BigDecimal("110"));
-        for(int n=0;n<130;n++)jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,trigger_mode,rearm_price,status) VALUES(?,?,'Many','ABOVE',100,'REPEAT',95,?)",a,stock,List.of("ACTIVE","COOLDOWN","PAUSED","COMPLETED").get(n%4));
+        for(int n=0;n<130;n++)jdbc.update("INSERT INTO alert_rules(user_id,stock_id,name,direction,threshold_price,status) VALUES(?,?,'Many','ABOVE',100,?)",a,stock,List.of("ACTIVE","COMPLETED").get(n%2));
         var preview=service.cancellation(a,stock);assertThat(preview.ruleCount()).isEqualTo(130);
         var outcome=service.cancel(a,stock,new Cancel(preview.version(),preview.rulesDigest(),true));
         assertThat(outcome.deletedRules()).isEqualTo(130);assertThat(outcome.globalDemandRemaining()).isTrue();assertThat(outcome.legacyHeld()).isTrue();
@@ -113,6 +113,7 @@ class MonitoringInfrastructureIT {
     @Test void cancelRetainsActualTriggerQuoteOutboxAndNotificationFacts() {
         long owner=user();long stock=add(owner,"AAPL").stock().id();var rule=rule(owner,stock,"Once",new BigDecimal("100"));
         Instant at=Instant.parse("2026-10-28T14:00:00Z");
+        jdbc.update("UPDATE alert_rules SET effective_at=? WHERE id=?",MarketTime.utc(at.minusSeconds(1)),rule.id());
         clock.at(LocalDateTime.ofInstant(at,ZoneOffset.UTC),()->{
             ingestion.ingest(candidate(stock,"99",at),QuoteIngestionPolicy.LIVE);
             ingestion.ingest(candidate(stock,"101",at.plusSeconds(1)),QuoteIngestionPolicy.LIVE);return null;
@@ -129,14 +130,14 @@ class MonitoringInfrastructureIT {
         var current=service.cancellation(u,stock);
         assertThatThrownBy(()->new TransactionTemplate(transactions).execute(status->{service.cancel(u,stock,new Cancel(current.version(),current.rulesDigest(),true));throw new IllegalStateException("fixture rollback");})).isInstanceOf(IllegalStateException.class);
         assertThat(store.subscription(u,stock).desired()).isTrue();assertThat(ruleService.get(u,rule.id()).status()).isEqualTo(AlertRuleStatus.ACTIVE);
-        var ids=new TransactionTemplate(transactions).execute(status->{var locked=stocks.findActiveByIdForUpdate(stock);return index.candidates(locked,new BigDecimal("99"),new BigDecimal("101"));});
+        var ids=new TransactionTemplate(transactions).execute(status->{var locked=stocks.findActiveByIdForUpdate(stock);return index.candidates(locked,new BigDecimal("101"));});
         assertThat(ids).contains(rule.id());
     }
-    @Test void oldConfirmedRowsCannotSurviveLostConnectionAndCannotEnableRulesUntilConfirmed() {
+    @Test void oldConfirmedRowsCannotSurviveLostConnectionAndNewTargetsWaitWhileSubscriptionIsPending() {
         long u=user();var entry=add(u,"AAPL");long stock=entry.stock().id();assertThat(store.getTarget(stock).confirmedEpoch()).isEqualTo("connection-one");
         upstream.state="PENDING";upstream.epoch="connection-two";
         assertThat(service.list(u).subscriptions().getFirst().state()).isEqualTo("PENDING");
-        assertThatThrownBy(()->rule(u,stock,"No fake monitoring",new BigDecimal("100"))).isInstanceOf(BusinessException.class);
+        assertThat(rule(u,stock,"Waiting for trusted price",new BigDecimal("100")).status()).isEqualTo(AlertRuleStatus.ACTIVE);
         service.reconcile();assertThat(store.getTarget(stock).confirmedEpoch()).isNull();
         upstream.state="CONFIRMED";service.reconcile();assertThat(store.getTarget(stock).confirmedEpoch()).isEqualTo("connection-two");
         assertThat(rule(u,stock,"Recovered",new BigDecimal("100")).status()).isEqualTo(AlertRuleStatus.ACTIVE);
@@ -174,7 +175,7 @@ class MonitoringInfrastructureIT {
     String tryAdd(long user,String symbol){try{return add(user,symbol).state();}catch(BusinessException e){return e.errorCode().name();}}
     void freeLegacyBudget(){jdbc.update("UPDATE market_subscription_targets SET legacy_hold=FALSE,slot_reserved=FALSE,state='CANCELLED'");}
     long user(){String email=UUID.randomUUID()+"@monitor.test";jdbc.update("INSERT INTO users(email,password_hash,display_name) VALUES(?,'test','Fixture')",email);return jdbc.queryForObject("SELECT id FROM users WHERE email=?",Long.class,email);}
-    AlertRuleResponse rule(long user,long stock,String name,BigDecimal threshold){return ruleService.create(user,new SaveAlertRuleRequest(stock,name,null,AlertDirection.ABOVE,threshold,AlertTriggerMode.ONCE,null));}
+    AlertRuleResponse rule(long user,long stock,String name,BigDecimal threshold){return ruleService.create(user,new SaveAlertRuleRequest(stock,name,null,AlertDirection.ABOVE,threshold));}
     long count(String sql,Object...args){return jdbc.queryForObject(sql,Long.class,args);}
     List<Long> facts(long stock){return List.of(count("SELECT COUNT(*) FROM quote_events WHERE stock_id=?",stock),count("SELECT COUNT(*) FROM alert_triggers t JOIN quote_events q ON q.id=t.quote_event_id WHERE q.stock_id=?",stock),count("SELECT COUNT(*) FROM outbox_events"),count("SELECT COUNT(*) FROM notifications"));}
     QuoteCandidate candidate(long stock,String price,Instant at){return new QuoteCandidate("monitor-fixture:"+UUID.randomUUID(),stock,new BigDecimal(price),LocalDateTime.ofInstant(at,ZoneOffset.UTC),"ALPACA_IEX",null,at,"ALPACA","iex","monitor-fixture:2026-10-28",null);}

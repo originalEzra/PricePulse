@@ -136,7 +136,7 @@
 
 - B 实现和 11 个候选专用单元保留在 `2e3112a`；可用 `git show 2e3112a:src/main/java/com/ezra/pricepulse/market/QuoteIngestionService.java` 查看。候选专用单元不留在 A 的默认测试目录，避免对原方案提出 INSERT 优先断言；隔离包装器按显式候选引用恢复它。
 - [测量入口](../../../../scripts/run-insert-first-comparison.py)及[原队列驱动包装](../../../../scripts/run-real-pipeline-experiment.sh)：只在隔离源码镜像替换 QuoteIngestionService，不 checkout 当前工作区。
-- [真实事务专项](../../../../src/test/java/com/ezra/pricepulse/market/InsertFirstCorrectness.java)、[直接异常路径](../../../../src/test/java/com/ezra/pricepulse/market/DedupExceptionPerformance.java)、[驱动](../../../../src/test/java/com/ezra/pricepulse/market/RealPipelineExperiment.java)、[JDBC 探针](../../../../src/test/java/com/ezra/pricepulse/market/PipelineProbe.java)。
+- [真实事务专项](../../../once-only-model/acceptance.md#历史实验与源码)、[直接异常路径](../../../once-only-model/acceptance.md#历史实验与源码)、[驱动](../../../once-only-model/acceptance.md#历史实验与源码)、[JDBC 探针](../../../once-only-model/acceptance.md#历史实验与源码)。
 - [汇总验证脚本](../../../../scripts/performance/report-insert-first.py)逐个校验全部原始分布、执行次数及配对结果；[四项新增脚本测试](../../../../scripts/tests/test_insert_first_report.py)防止重复吞吐混淆、合并运行统计、忽略溢出和漏检候选差异。与已有四项报告脚本测试合计 8 项通过。
 - [完整命令](README.md#复现入口)。所有源版本与参数在 comparison.json 的 manifest 中；先行工具试跑另列，不计入五组样本。
 
