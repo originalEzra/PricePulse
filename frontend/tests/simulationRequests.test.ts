@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { reactive, ref } from 'vue'
 import { acceptsRunVersion, RetriableSimulationRequest, simulationSeed } from '../src/utils/simulationRequests.ts'
 
 test('full-width server seeds survive copy and retry without JavaScript rounding', () => {
@@ -25,6 +26,25 @@ test('lost responses retry the frozen original command until acknowledgement', (
   assert.equal(request.prepare({ runId: 'first', expectedVersion: 1 }).key, 'key-2')
   request.fail(409)
   assert.equal(request.pending, null)
+})
+
+test('reactive replacement parameters freeze a JSON command, including nested proxies and exact seeds', () => {
+  const nested = reactive({ kind: 'SIMULATION_REFERENCE', label: 'synthetic' })
+  const replacement = ref({ input: { stockId: 9, origin: nested, seed: '9223372036854775807',
+    expectedCurrentRunId: 'legacy-run', openingGap: { source: 'CUSTOM', referencePrice: '345.0000', openingPrice: '355.0000' } } })
+  const request = reactive(new RetriableSimulationRequest<typeof replacement.value.input>(() => 'replacement-key'))
+  const pending = request.prepare(replacement.value.input)
+  replacement.value.input.stockId = 10
+  nested.label = 'edited'
+  replacement.value.input.openingGap.openingPrice = '999.0000'
+  assert.equal(pending.body.stockId, 9)
+  assert.equal(pending.body.origin.label, 'synthetic')
+  assert.equal(pending.body.openingGap.openingPrice, '355.0000')
+  assert.equal(pending.body.seed, '9223372036854775807')
+  assert.equal(pending.body.expectedCurrentRunId, 'legacy-run')
+  request.fail(503)
+  assert.equal(request.prepare(replacement.value.input).key, 'replacement-key')
+  assert.equal(request.pending!.body.stockId, 9)
 })
 
 test('late reads cannot restore an old experiment or lower the current version', async () => {

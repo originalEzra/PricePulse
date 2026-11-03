@@ -17,7 +17,8 @@ export class RetriableSimulationRequest<T> {
   private newKey: () => string
   constructor(newKey: () => string = () => crypto.randomUUID()) { this.newKey = newKey }
   prepare(body: T): Pending<T> {
-    this.pending ??= { key: this.newKey(), body: structuredClone(body) }
+    // Commands are JSON API payloads; freeze their wire representation, including Vue proxies.
+    this.pending ??= { key: this.newKey(), body: JSON.parse(JSON.stringify(body)) as T }
     return this.pending
   }
   acknowledge() { this.pending = null }
@@ -192,10 +193,10 @@ export class SimulationSession {
   async start(input?: StartSimulation) {
     if (this.busy || !this.active || this.advanceCommands.pending || this.needsRefresh || this.playing) return false
     if (!this.startCommands.pending && !input) return false
-    const pending = this.startCommands.pending ?? this.startCommands.prepare(input!)
     this.pause()
     return this.work(async valid => {
       try {
+        const pending = this.startCommands.pending ?? this.startCommands.prepare(input!)
         const result = await this.api.start(pending.body, pending.key)
         if (!valid()) return
         this.startCommands.acknowledge(); this.floor = { runId: result.runId, version: result.version }; this.needsRefresh = true
