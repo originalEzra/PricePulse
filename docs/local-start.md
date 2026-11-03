@@ -16,7 +16,7 @@ export JWT_SECRET="$(openssl rand -hex 32)"
 
 模板使用 Compose 公开的本地开发数据库默认账号／密码；若自定义 `DB_PASSWORD`，同步设置 `SPRING_DATASOURCE_PASSWORD`。JWT 至少 32 字节，保存在自己的环境。私人 `application-local.yml`、`.local/`、`.run/`、`.env.local` 均忽略 Git。
 
-新库应用 V1–V10 和本地演示数据。已有库必须先备份、核对迁移并停止旧接入，不能并开同账户实例。默认 `standalone` 仅用于独立启动检查，完整业务使用 `local`。后端默认 18080；本机既有实例为 18081。
+新库应用 V1–V12 和本地参考数据。V12 只支持 ACTIVE／COMPLETED／DELETED 的一次性目标价规则；已有 V10／V11 库先按[兼容迁移方案](once-only-model/migration-plan.md)核对全部旧规则并验证备份恢复，不兼容时迁移会拒绝，不能静默转换。默认 `standalone` 仅用于独立启动检查，完整业务使用 `local`。后端默认 18080；其他端口需同步前端代理。已有行情实例的停服与切换应沿用[受控发布计划](release/v11-v12/plan.md)，不能并开同账户实例。
 
 另开终端启动前端：
 
@@ -26,7 +26,7 @@ npm ci
 npm run dev
 ```
 
-访问 <http://127.0.0.1:5173>。若后端为 18081，在私人 `frontend/.env.local` 设置 `PRICEPULSE_BACKEND_URL=http://127.0.0.1:18081`。Vite 代理 `/api`，前后端进程均须保持运行，Compose 只管理中间件。
+访问 <http://127.0.0.1:5173>。若后端为 18081，在私人 `frontend/.env.local` 设置 `PRICEPULSE_BACKEND_URL=http://127.0.0.1:18081`。Vite 代理 `/api`，前后端进程均须保持运行，Compose 只管理中间件；真实行情、正式写入、动态监控、MQ 和 AI 在公开模板中默认关闭。
 
 没有供应商数据时明确显示无数据；真实起点与模拟时钟依赖缓存的历史／交易日历，不自动生成替代价格。IDEA Application 主类为 `com.ezra.pricepulse.PricePulseApplication`、模块 `price-pulse`、工作目录为仓库根目录，参数 `--spring.profiles.active=local --server.port=18081`。最终本机的实际启动方式和 PID 见交付记录，不能假定旧工具窗口仍管理当前进程。
 
@@ -46,6 +46,6 @@ PRICEPULSE_ADOPT_LEGACY_HOLDS=true
 PRICEPULSE_MESSAGING_ENABLED=true
 ```
 
-这些开关会启用真实订阅、规则处理与通知，须在 V10、预算和原规则已核对后使用，Key 不放前端。兼容持有仅在当前连接实际确认且不存在孤立有效规则时接管；不要用第二条 IEX 验证额度。
+这些开关会启用真实订阅、规则处理与通知，须在 V12 迁移、账户权限、订阅预算和原规则已核对后使用，Key 不放前端。当前默认预算为全局 15 个去重股票代码，不能据此推断账户支持更高上限。兼容持有仅在当前连接实际确认且不存在孤立有效规则时接管；不要用第二条 IEX 验证额度。
 
 AI 可选且默认关闭，通过 `PRICEPULSE_AI_ENABLED`、`PRICEPULSE_AI_API_KEY`、`PRICEPULSE_AI_BASE_URL`、`PRICEPULSE_AI_MODEL` 配置支持结构化输出的兼容供应商。模型仅产出草稿，手动规则不依赖模型；未评估自然语言准确率。
