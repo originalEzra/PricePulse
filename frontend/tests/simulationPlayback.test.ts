@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { reactive, ref } from 'vue'
 import { SimulationSession } from '../src/utils/simulationRequests.ts'
 import { simulationPointBreaks } from '../src/utils/simulationDisplay.ts'
 import type { SimulationBatch, SimulationRun, SimulationTimeline, StartSimulation } from '../src/api/types.ts'
@@ -30,7 +31,7 @@ function fixture(initial = run()) {
     timeline: async (id: string, _from?: string, _to?: string, cursor?: string, _signal?: AbortSignal): Promise<SimulationTimeline> => {
       if (!current || current.runId !== id) throw failure(404)
       const row = structuredClone(current), first = cursor ? Number(cursor) : 1, last = Math.min(row.nextPointSeq - 1, first + 599)
-      return { scope: 'SIMULATION', runId: id, stockId: 1, version: row.version, simClock: row.simClock, origin: row.origin,
+      return { scope: 'SIMULATION', runId: id, stockId: row.stockId, version: row.version, simClock: row.simClock, origin: row.origin,
         range: { from: origin, to: row.simClock, marketTimeZone: 'America/New_York' }, sessions: [], realPrefix: [],
         simulation: Array.from({ length: Math.max(0, last - first + 1) }, (_, i) => point(first + i)),
         thresholds: [], stats: row.stats, pointCursor: row.nextPointSeq - 1 > last ? String(last + 1) : null, watermark: String(row.version) }
@@ -53,7 +54,7 @@ function fixture(initial = run()) {
         return structuredClone(starts.get(key)!)
       }
       if (body.expectedCurrentRunId !== (current?.runId ?? null)) throw failure(409)
-      current = run('replacement'); starts.set(key, current); return structuredClone(current)
+      current = { ...run('replacement'), stockId: body.stockId }; starts.set(key, current); return structuredClone(current)
     },
   }
   const tasks = new Map<number, () => void>(), delays: number[] = []; let timer = 0
@@ -85,6 +86,65 @@ test('legacy generator results stay readable and cannot dispatch playback or adv
   assert.equal(f.session.ready, false); assert.equal(f.session.canPlay, false)
   f.session.play(); assert.equal(await f.session.advance(), false)
   assert.equal(f.calls.length, 0); assert.equal(f.tasks.size, 0)
+})
+
+test('confirming a reactive replacement sends one start and replaces the legacy card and timeline', async () => {
+  const saved = { ...run('legacy-run', 1), generatorVersion: 'splitmix64-price-v1', generatorSupported: false }
+  const f = fixture(saved), session = reactive(f.session)
+  await session.enter()
+  assert.equal(session.canPlay, false)
+  const input: StartSimulation = { stockId: 9, origin: { kind: 'HISTORICAL_POINT', pointRef: 'bar:9', revision: '1' },
+    mode: 'NORMAL', stepRatio: '0.003000', seed: '9223372036854775807', expectedCurrentRunId: 'legacy-run' }
+  const dialog = ref<{ input: StartSimulation } | null>({ input })
+  const command = dialog.value!.input; dialog.value = null
+  const start = f.api.start; let sent = 0
+  f.api.start = async (body, key) => {
+    ++sent
+    assert.equal(body.stockId, 9); assert.equal(body.seed, '9223372036854775807')
+    assert.equal(body.expectedCurrentRunId, 'legacy-run')
+    return start(body, key)
+  }
+  assert.equal(await session.start(command), true)
+  assert.equal(dialog.value, null); assert.equal(sent, 1)
+  assert.equal(session.run!.runId, 'replacement'); assert.equal(session.run!.stockId, 9)
+  assert.equal(session.timeline!.runId, 'replacement'); assert.equal(session.timeline!.stockId, 9)
+  assert.equal(session.canPlay, true); assert.equal(session.error, '')
+  assert.equal(session.startCommands.pending, null); assert.equal(f.calls.length, 0)
+})
+
+test('a reactive replacement with a lost response retries the original frozen command and key', async () => {
+  const f = fixture({ ...run('legacy-run'), generatorSupported: false }), session = reactive(f.session)
+  await session.enter()
+  const command = ref<StartSimulation>({ stockId: 9, origin: { kind: 'HISTORICAL_POINT', pointRef: 'bar:9', revision: '1' },
+    mode: 'NORMAL', stepRatio: '0.003000', seed: null, expectedCurrentRunId: 'legacy-run' })
+  const calls: Array<{ body: StartSimulation; key: string }> = [], start = f.api.start
+  f.api.start = async (body, key) => {
+    calls.push({ body: JSON.parse(JSON.stringify(body)), key })
+    const result = await start(body, key)
+    if (calls.length === 1) throw failure(0)
+    return result
+  }
+  assert.equal(await session.start(command.value), false)
+  assert.equal(session.run!.runId, 'legacy-run'); assert.ok(session.error)
+  command.value.stockId = 10; command.value.origin.pointRef = 'bar:edited'
+  assert.equal(await session.start(), true)
+  assert.equal(calls.length, 2); assert.deepEqual(calls[0], calls[1])
+  assert.equal(calls[1]!.body.stockId, 9); assert.equal(calls[1]!.body.seed, null)
+  assert.equal(session.run!.runId, 'replacement'); assert.equal(session.startCommands.pending, null)
+})
+
+test('preparing an invalid replacement fails visibly and preserves the saved legacy experiment', async () => {
+  const f = fixture({ ...run('legacy-run'), generatorSupported: false }), session = reactive(f.session)
+  await session.enter()
+  const input: StartSimulation & { cycle?: unknown } = { stockId: 9, origin: { kind: 'HISTORICAL_POINT', pointRef: 'bar:9', revision: '1' },
+    mode: 'NORMAL', stepRatio: '0.003000', seed: null, expectedCurrentRunId: 'legacy-run' }
+  input.cycle = input
+  let sent = 0
+  f.api.start = async () => { ++sent; throw new Error('Must not send an invalid command') }
+  assert.equal(await session.start(reactive(input)), false)
+  assert.ok(session.error); assert.equal(session.busy, false); assert.equal(sent, 0)
+  assert.equal(session.run!.runId, 'legacy-run'); assert.equal(f.current!.runId, 'legacy-run')
+  assert.equal(session.startCommands.pending, null)
 })
 
 test('changing speed reschedules only the wait; stale callbacks after pause cannot dispatch a batch', async () => {

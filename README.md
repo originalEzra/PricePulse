@@ -1,84 +1,95 @@
-# PricePulse
+<div align="center">
 
-> 美股实时目标价提醒与隔离模拟实验平台，关注行情可信度、事务一致性与可靠通知。
+<h1>PricePulse</h1>
 
-当前分支为一次性目标价模型的离线交付，尚未加载正式环境。仅保留 ACTIVE → COMPLETED；取消沿用逻辑删除。已有 V10 环境需先审查 [V11／V12 兼容迁移方案](docs/once-only-model/migration-plan.md)，不得直接用新代码连接旧库。
+<p>美股实时行情、目标价提醒与模拟实验平台</p>
 
-![Java 21 · Spring Boot 3.5 · MySQL 8.4 · Redis 7 · RocketMQ 5.3 · Vue 3 · TypeScript](docs/images/tech-stack.svg)
+<img src="docs/images/tech-stack.svg" alt="Java 21 · Spring Boot 3.5 · MySQL 8.4 · Redis 7 · RocketMQ 5.3 · Vue 3 · TypeScript" />
 
-## 实际界面
+<p>
+  <a href="#功能">功能</a> ·
+  <a href="#系统架构">系统架构</a> ·
+  <a href="#后端技术亮点">后端技术亮点</a> ·
+  <a href="#快速启动">快速启动</a>
+</p>
 
-![真实行情、阈值线与规则管理](docs/images/v21-market-alerts.jpg)
+</div>
 
-以下是原 V2.1 运行截图，账户侧栏已裁除；其中重复提醒等旧选项不代表本分支的新模型。股票列表与规则各自滚动，两列底部对齐。保留真实休市状态与异常提示。
+## 产品界面
+
+![行情走势图、目标价线与提醒规则管理](docs/images/v21-market-alerts.jpg)
 
 <details>
-<summary>更多实际页面：监控入口、模拟与正式通知</summary>
+<summary>查看通知中心</summary>
 
-**股票监控与搜索入口**（15/15 名额；未提交搜索或添加请求）
-
-![股票监控列表与搜索入口](docs/images/v21-stock-monitoring.jpg)
-
-**开盘跳空参数**（仅填写、未创建实验；不冒充触发结果）
-
-![未提交的开盘跳空配置](docs/images/v21-opening-gap-setup.jpg)
-
-**已保存的普通模拟**（真实前缀、模拟走势及既有触发；非跳空实验）
-
-![已保存的普通模拟结果](docs/images/v21-simulation-saved.jpg)
-
-**正式通知中心**（既有真实提醒，未操作已读）
-
-![既有正式通知](docs/images/v21-notifications.jpg)
+![价格提醒与通知记录](docs/images/v21-notifications.jpg)
 
 </details>
 
-[截图来源与未取得场景](docs/v2.1-presentation.md)：本轮不新增订阅或覆盖保存实验，搜索结果／添加成功和跳空触发结果图仍缺，未使用合成图替代。
+## 功能
 
-## 核心功能
-
-- **行情与提醒**：1H／1D／1W／1M 图表，纽约时间、休市断轴、多规则阈值线和历史触发定位。
-- **股票监控**：搜索美股及 ETF，个人列表持久化；多用户共享上游订阅，实际确认后才显示监控中。
-- **规则与通知**：可信价格 ≥ 上方目标或 ≤ 下方目标时提醒一次并完成；创建／编辑时复核新鲜可信现价，通知保留触发时规则快照。
-- **隔离实验**：冻结历史、规则与 seed，模拟交易时钟和开盘跳空，支持保存恢复与幂等推进，结果不进入正式通知。
-
-另有 JWT 账户隔离和经用户确认的 AI 规则草稿；不提供交易下单。
+| 功能 | 说明 |
+| --- | --- |
+| 股票监控 | 搜索美股及 ETF，添加个人监控；多用户共享行情订阅，展示订阅确认状态。 |
+| 行情图表 | 1H／1D／1W／1M 视图，纽约时间、休市断轴、多条目标价线与触发点定位。 |
+| 目标价提醒 | 可信现价达到或高于上方目标、达到或低于下方目标时提醒一次，保留成交价格和规则快照。 |
+| 模拟实验 | 基于真实历史模拟上涨、下跌与震荡，支持自定义开盘跳空、自动播放、暂停和保存恢复。 |
+| 通知中心 | 查看价格提醒、监控中断与恢复通知，管理已读状态。 |
+| AI 规则草稿 | 用自然语言描述提醒需求，生成结构化草稿，经用户确认后创建规则。 |
 
 ## 系统架构
 
 ```mermaid
 flowchart LR
-    UI[Vue 3] --> API[REST / JWT]
-    API --> Feed[共享 WebSocket 接入]
-    Alpaca[Alpaca IEX] --> Feed
-    Feed --> Index[Redis ZSet + Lua]
-    Index --> TX[MySQL 完成事务 + Outbox]
-    TX --> MQ[RocketMQ]
-    MQ --> Notify[幂等通知]
-    API --> Sim[隔离模拟 / 同一目标价判定]
+    Alpaca["Alpaca IEX"] --> Feed["共享 WebSocket<br/>单股串行处理"]
+    Feed --> DB["MySQL 事务<br/>规则 · 触发 · Outbox"]
+    DB <--> Redis["Redis ZSet + Lua<br/>目标价候选索引"]
+    DB -- "Outbox 异步发布" --> MQ["RocketMQ"]
+    MQ --> Notice["幂等通知"]
+    Web["Vue 3 / REST / JWT"] --> DB
+    Web --> Sim["独立模拟实验"]
 ```
 
-MySQL 保存业务事实，Redis 是可重建的候选索引；真实接入与模拟实验共享判定语义，分别保存运行状态。[详细架构与源码入口](docs/v2.1-final-architecture.md)
+MySQL 保存业务事实，Redis 提供可重建的规则候选索引。真实行情与模拟实验共用目标价判定，分别保存运行状态与事件。
 
 ## 后端技术亮点
 
-1. **候选索引**：ZSet＋Lua 只维护 ACTIVE 目标，MySQL 版本 Token 与权威回查保证可重建性。旧穿越模型曾完成 1,000–50,000 规则及 10 万行情对照，完整保留[实测数据与负面结果](docs/performance/v2.1-rule-selection-2026-10-31/report.md)；这些性能数字不代表本分支的新语义，未重新宣称吞吐提升。
-2. **可靠通知**：规则、触发与 Outbox 同事务提交；租约、退避与至少一次投递结合消费唯一约束，支持失败恢复。
-3. **共享行情订阅**：按代码去重、全局预算、连接代次及意图版本协调，取消个人监控与本人规则软删除原子提交。
-4. **一次性与隔离**：ACTIVE 条件更新、触发及 Outbox 同事务；REAL／SIM 共用纯目标价判定，独立运行状态。旧模拟结果保留只读，新实验幂等推进。
+1. **Redis ZSet + Lua 候选匹配**
+
+   将 ACTIVE 规则按方向与目标价组织为有序索引，Lua 原子校验版本并筛选候选 ID，再由 MySQL 权威回查。索引缺失或 Token 不一致时自动重建。[源码](src/main/java/com/ezra/pricepulse/matching/RuleIndex.java)
+
+2. **MySQL 事务与 Outbox 可靠通知**
+
+   股票级行锁协调行情处理与规则变更，条件更新保证规则只完成一次；规则、触发记录与 Outbox 同事务提交。发布端租约与退避重试、RocketMQ 至少一次投递和消费端唯一约束共同避免重复通知。[源码](src/main/java/com/ezra/pricepulse/alert/AlertEvaluationService.java)
+
+3. **共享订阅与行情顺序处理**
+
+   多用户按股票代码共享一条上游连接，通过持久化需求、意图版本和 ACK 协调订阅名额。每股使用单线程有界队列，不同股票并行；成交唯一键、纳秒水位和连续性标记处理重复、乱序与重连恢复。[源码](src/main/java/com/ezra/pricepulse/market/RealMarketRuntime.java)
+
+4. **真实／模拟隔离与幂等推进**
+
+   实验冻结历史、规则快照、交易日历与 Seed，使用独立存储和索引。推进请求以幂等键与版本校验保护，重试保留原参数，模拟事件独立于正式通知链路。[源码](src/main/java/com/ezra/pricepulse/simulation/SimulationIsolationService.java)
 
 ## 快速启动
 
-需要 JDK 21+、Node.js 22.12+、Docker Compose。以下用于新的本地环境；已有实例按[配置与运行说明](docs/local-start.md)操作。
+**环境要求：** JDK 21+、Node.js 22.12+、Docker Compose。
+
+### 1. 启动后端
 
 ```bash
+git clone https://github.com/originalEzra/PricePulse.git
+cd PricePulse
+
 docker compose up -d
 cp -n docs/examples/application-local.example.yml src/main/resources/application-local.yml
 export JWT_SECRET="$(openssl rand -hex 32)"
+
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-另一个终端：
+### 2. 启动前端
+
+在项目根目录另开一个终端：
 
 ```bash
 cd frontend
@@ -86,14 +97,15 @@ npm ci
 npm run dev
 ```
 
-访问 <http://127.0.0.1:5173>。真实行情和 AI 默认关闭，私人配置方式见[启动文档](docs/local-start.md)。
+浏览器访问 [http://127.0.0.1:5173](http://127.0.0.1:5173)，后端默认端口为 `18080`。
 
-## 更多文档
+真实行情、消息通知和 AI 按需配置，详见[本地启动与配置](docs/local-start.md)。
 
-- [一次性目标价模型：迁移影响](docs/once-only-model/migration-plan.md)与[离线验收](docs/once-only-model/acceptance.md)
-- [系统架构与源码](docs/v2.1-final-architecture.md)
-- [MySQL B+ 树／Redis 对照、固定回放与原始数据](docs/performance/v2.1-rule-selection-2026-10-31/report.md)
-- [REAL 队列／事务性能、积压与局部批量优化](docs/performance/realtime-processing/report.md)
-- [V2.1 验收与外部待验边界](docs/v2.1-final-delivery.md)
-- [API 契约](docs/v2-api-contracts.md)
-- [Java 后端简历与面试材料](docs/v2.1-career-summary.md)
+## 文档
+
+- [本地配置](docs/local-start.md)
+- [核心设计与源码导航](docs/release/v11-v12/status.md#当前架构与源码)
+- [回归测试](scripts/run-real-pipeline-checks.sh)
+- [Redis／MySQL 性能实验](docs/performance/v2.1-rule-selection-2026-10-31/report.md)
+- [容量与时间边界](docs/capacity-and-time-boundaries.md)
+- [数据库迁移说明](docs/once-only-model/migration-plan.md)
